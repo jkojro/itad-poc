@@ -1,0 +1,2082 @@
+{
+  "version": 1,
+  "generator": "open-mercato-agentic@0.8.0",
+  "files": [
+    {
+      "path": ".ai/agentic.config.json",
+      "sha256": "3fe7ca818356d969bb0b456b8b72de236136e4df55cc1f82bcf6b9678cae57fc",
+      "source": "generated",
+      "userEditable": true
+    },
+    {
+      "path": ".ai/guides/ai-workflows.md",
+      "sha256": "92236a9312a2dab93af579036e186ef166757687f88abcc34dd9ad14f84b48bf",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/architecture.md",
+      "sha256": "3ad095df31a03ea410610e82f96fa6c4c42a73f8d41e0d070d2928f05669b9ce",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/backend-ui.md",
+      "sha256": "2c63c5a956135cd2b58b6f77ea7b8574ad8e00e55981dde1ab7aecdb9d8921c9",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/contracts.md",
+      "sha256": "7764012b27a5e154c1814591578e6266f55d03f711809db26fb7014a8f6189d6",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/extensions.md",
+      "sha256": "c27bb8f396486c179445a07224b6b39bb0b018d5c912fe34e60c9bc22f3b74b5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/framework-contracts.md",
+      "sha256": "4a64bf9c354d8c91f0128d0b3edb42f9e29fa4efc9856eb625fa0e38d71db1d5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/framework-extension-points.md",
+      "sha256": "af07438fd7c3f01f79f9cb0db4c674de184a08d5cbd73ef2c45c2f7af37d177f",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/integrations.md",
+      "sha256": "5147d0fc75fa5e57353a8ce827eef162fc547667814550bb53adf9b73af0d5fd",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/module-facts.json",
+      "sha256": "c7f685c4a6c36224ff971a0bd825528acd0c6e4a6fb2a8a2d9200bd268637641",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/module-facts.v2.json",
+      "sha256": "c426ec6f56fab569201740f2a4e7eb72cbbad9ec513a7809ea1d1f5f08831660",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/module-system.md",
+      "sha256": "e18d6ba5c8fb7ffc8d991fe85b0db28ff014ddc8842f33203b31ffff3db61b8a",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/api_docs/backend-pages.md",
+      "sha256": "e9d9c611319993222728a3714737b083bcce8ad473eaf690a913fbf742093647",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/api_docs/exact-override-targets.md",
+      "sha256": "81602817f0570ccc5e35018ec1dff602b78424a7a01193229358f61273408916",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/api_docs/frontend-pages.md",
+      "sha256": "6d1f2e5f65ba68a0a26c463abef76fb588e31cb556ab876894b59ba55e573a82",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/api_docs/index.md",
+      "sha256": "48945a98f29fce23b215c8e2eca100e085b8bd53982fdcf73e10449630c77981",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/api_docs/owned-contract-module-metadata.md",
+      "sha256": "94762be45f91ed1b64c343c97c2b1210d026be76088887618c0b954082787bc8",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/acl-features.md",
+      "sha256": "7d2434272325a5fd4a7a4e4ab1b215cae63269a8d2b01e727efb98f9073c6072",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/backend-pages.md",
+      "sha256": "03ec1f02d15660d45259b10f399c9e009608ea2fa6097bc7a121c4bcd9e3eccd",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/cli-commands.md",
+      "sha256": "11518346da680dda72180344dab683c1b0f4f9578ef96869f6212a7b71a96c6e",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/custom-entities.md",
+      "sha256": "ae75e05a65ca33c85b79011cfd67da1afdfa6d7eed3251140f1b2eb87e25ee7b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/di-registrations-rich.md",
+      "sha256": "2a9ca016f3bbea49e9c9e7f17269b9af25ca1674b15b7714d56e684a23e152fd",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/di-service-tokens.md",
+      "sha256": "2c955731ae39cf69a6cd1c02e785908b31a09fdbe6f5d37121a21950af11a891",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/entities.md",
+      "sha256": "bf29dc8ec19780c59749fe3172ccd7b5d97991d182d733716fb2e6e20adaf11d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/events.md",
+      "sha256": "4caaf7e1a8d0a4b9ccacd55a18935006f30a0eb2eeedc049e5f008e424f47a12",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/exact-override-targets.md",
+      "sha256": "6257438ee6e11e76f2d1c628d72936ccadecb7f301f1ae38d5f51e93fcd01773",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/incoming-installed-contributions.md",
+      "sha256": "14078e870a58de1984819acc779213f0f5b56a6bc6e2e49d00490e9e4e99f166",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/index.md",
+      "sha256": "4c3843b3cb27135740741989a6022f090068e25aff3e3666a50049c3457a7ac4",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/owned-contract-module-metadata.md",
+      "sha256": "0498fc883b98a034fc616dd9af44d79da1588c0e88511de5a5f4c0b5c1910472",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/setup.md",
+      "sha256": "cdb67f1ffe1fe90fe2640b10e8598a1bb2fce191c7af6d07b9b3627831569f6f",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/umes-hosts.md",
+      "sha256": "0c48af6094085e52e46e0fbf0c9112f7074c78108bf2fc0b47d6ff4be9b16d38",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/attachments/workers.md",
+      "sha256": "19e5654eaa9bc5e042410c06dd583c90b89e02d6d4a56a34ef07570beaa17d90",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/acl-features.md",
+      "sha256": "50ab8a2f39c1469db687074b62a11ff3243284373d4451a6e7da8e480654f1ae",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/backend-pages.md",
+      "sha256": "723b3418b3bbd8043eac4b3270bc13822153fd394c42ce2f2365173c57a88b44",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/cli-commands.md",
+      "sha256": "09f25d339fdb266d3a6cc1eb8f16e07aa0e653411d25d124032061a683bd3d3b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/di-registrations-rich.md",
+      "sha256": "70acfb51a8dc4d7b2525fe29778db51c27008dbbf2df4eec165530a5bd6bebdf",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/di-service-tokens.md",
+      "sha256": "525a10be3595646136e08b551eb9cf9c390b7ba8fcbe25ec48aa2e05a841b636",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/encryption.md",
+      "sha256": "25ceb032519dfcd3dfbddac88ba43d1694657eccea528d8f6c75af6572549522",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/entities.md",
+      "sha256": "1014532afe6590c563c07dbaa8e55ba14744facb5f37b7eff9a5a52babf1c6e5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/exact-override-targets.md",
+      "sha256": "739042067a5dd790d170d7791d30b7a474de565097fd1edd631600ce4943b1c3",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/host-extension-points.md",
+      "sha256": "2fca33e44982ae63d94be6eece4b06b87c6513ae034e07eec6a72f1244b6461d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/index.md",
+      "sha256": "5c09c419f1ed448e76313b2a263e4679872c778146f2619399f5285a717f9537",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/owned-contract-module-metadata.md",
+      "sha256": "b022d45b18e3daba58291dd1f7b8c29ff826e97b6b386b39a0381c28ede41b97",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/setup.md",
+      "sha256": "aa1165e81a0c78467c12db95621921df195ae02b77de3e115bc228fa21bc79c4",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/umes-diagnostics.md",
+      "sha256": "5298576af9f109f74cca734638b5d1b8ed4fb32186a0b8bdbd34a482895b7183",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/audit_logs/umes-hosts.md",
+      "sha256": "aca556a393ffbdcd78dd9f3b94544bf4bbcf79bd6c3b4c720b8317564f1bbb8d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/acl-features.md",
+      "sha256": "4d4051d78dcc647d196bc33cd17aad2c5ac48fccc17cd29c919757abbee6fe30",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/active-extension-bindings.md",
+      "sha256": "ac93d589379e570149231820fbb40abaf02d7c1adfb776064b48173e784f23ef",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/backend-pages.md",
+      "sha256": "9e62f50ba9745346723b9c77ba519e453ca9da5603d8bd9e02a40584f402eab4",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/cli-commands.md",
+      "sha256": "0c8f7da5bbcc8ff15a35ce7b198afb2f6771dc07b72e86642624e780da151efa",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/contribution-resolutions.md",
+      "sha256": "60c39b5aa6d70fcab6bfb87a6c1e0d5ddcd34f0af08f20c22671825009d80601",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/di-registrations-rich.md",
+      "sha256": "455a757e48707264a4930cbf0d9061f7b91275df3162cea3a78bc69ec828f6b6",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/di-service-tokens.md",
+      "sha256": "facad1c337fac968b5ee5291223e06113096dc926814395c06205d4bc9e709c1",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/domain-commands.md",
+      "sha256": "891bf37c627db7389329aa5e57cd1f579c06b2af8c46025272eebb2584e46b7b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/encryption.md",
+      "sha256": "8fe45e84bdf9a6f2b2c634e6efccfb656c019c32dc87e462a4aa3c2a1584548c",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/entities.md",
+      "sha256": "c99d3086ea2048ac11e27ddcf4aaaf54769390770d65d81902bcb6071766eb99",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/events.md",
+      "sha256": "17a9a490430f282c48ea2a9b5ad46153e44870679150bbae747d42cf608b5831",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/exact-override-targets.md",
+      "sha256": "19ce43d28dcbf82d7bec4ee8efd93c752e8cbb781330db552bde54f5e98743e3",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/frontend-pages.md",
+      "sha256": "50bb1c9d72541329a482deea32db8dceb3526770e79182898370856189987755",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/host-extension-points.md",
+      "sha256": "793639f049a4578d10c01ca03728fa285ee219b3c1fdaa27f16a0b4a40656cb3",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/incoming-installed-contributions.md",
+      "sha256": "5ab58bc4c05cb843c955635f42b3185f90585a2f732990f962ec10704ef54001",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/index.md",
+      "sha256": "2784eb1f1ad2098d6c2f88e85d2386b57e58b7231f8008a82ef18eef8cdb14cc",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/notifications.md",
+      "sha256": "54bd818414af21b9223d54776e7382dd18584bbea39d396149bec55414416250",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/owned-contract-module-metadata.md",
+      "sha256": "36dbb77022e2e564b27f218e7cb71e8cf1d0a75c885f06c889ec92e9d903ca48",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/setup.md",
+      "sha256": "56aad851ee81a94c0a3a1d6630647526ee32a494e9d85b976b9f99c8450b8690",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/umes-contributions.md",
+      "sha256": "7615aebbd5992cd7df18ea34429b6b65269c1cee19098b952a10a5193859efcb",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/umes-diagnostics.md",
+      "sha256": "895bad8e36faac9dae40bf52dae55de1a76f1e878e603333bffa07be3dfc5979",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/auth/umes-hosts.md",
+      "sha256": "6a636dbe3431b89e48c1f23313d3877c84045f5ebb040991b4e765cba2f519d5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/configs/acl-features.md",
+      "sha256": "56d6da03a87ad7064f113ffdac8781a7ea9da0997ee09a778ff0582b283d86a1",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/configs/active-extension-bindings.md",
+      "sha256": "3f562ba893e211a0ecb081e141481ce3a07268faeb95696d35a1fbe6f557af25",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/configs/backend-pages.md",
+      "sha256": "17238accdc80e1a583c3a77f95de2770713f781ff4074ab791cc614fdefd5eb4",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/configs/cli-commands.md",
+      "sha256": "3f2c7177fc8a0b5530ba0f3699bb22450344cabef27fb8e103dbfd5ba2471b0b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/configs/di-registrations-rich.md",
+      "sha256": "bbf02d90642bc6a468143ea46d93af49e8bc0fcb219c6e9332bcb4d341043805",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/configs/entities.md",
+      "sha256": "90871a698f03675c30c438b41931f1e10891ba55c73a1dc666a80ca5fb77be7f",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/configs/exact-override-targets.md",
+      "sha256": "cf07392667ebd701605f39ae3fa7c3eebda22d454067bb1ae07ea50e8604e0ff",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/configs/incoming-installed-contributions.md",
+      "sha256": "8c2b203ae2643ec16e82b3106fb78c8e98c533b0c853bdf80bb6ffca873e71ff",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/configs/index.md",
+      "sha256": "0dbe09dfb1c65250518169249093e979513cc75cd30a259066740fa665cbc8c9",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/configs/owned-contract-module-metadata.md",
+      "sha256": "bbbe88d9ac5c8813f102f73f36868b48cefe16eda0782b8c9e6ce9faf2f1770f",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/configs/setup.md",
+      "sha256": "6e92a0cfad6cb9776179e97d0301de34794128689fc913734c56dbeeeec04054",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/configs/umes-hosts.md",
+      "sha256": "90093b11d74db89ca76a104336ab67321beebbe4a1299ac0da0e570f99db915c",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/acl-features.md",
+      "sha256": "525725f7cd93b48062b15c8587b0795ea6be1f51fe34c7a8091ed40364ed6977",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/active-extension-bindings.md",
+      "sha256": "72a8c780721c45e97b92fb83b263ca5a5590a753dce1808b8016c6db226e3f22",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/cli-commands.md",
+      "sha256": "6475538582b6feb59aab902d3d903fdff58e194bf948cc97b9b4757a0fb7ba26",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/contribution-resolutions.md",
+      "sha256": "66238d17f3cb0251c91449f4d91e9afbff2f736759ed1f8218202fc5ca7f1c33",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/di-registrations-rich.md",
+      "sha256": "299b9a1ae04ab71e4ecd38b3507fecc276f123246b0765c6f7c0b0ef25761414",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/di-service-tokens.md",
+      "sha256": "eb997033a22e0dcf147b5cb5437cb8849ffcf9012c2cc483e1039f5e0581b538",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/entities.md",
+      "sha256": "e8ca7b8c5c4f89f2dd33e5edb2a52ac88e09bf7bd0d73f293913e2413dbeb1c2",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/exact-override-targets.md",
+      "sha256": "29665f7e4b143d1d59a2195d68e77c9825046cd106e83b0996080750492b08b7",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/incoming-installed-contributions.md",
+      "sha256": "f6e58f970316419b5d486287bd79fffc051fe89573bc68f69c879fd65e7aec5e",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/index.md",
+      "sha256": "5fc988d5e4b04aae56b89c10d9b99970ebefbb9ec7415aea4cbf4a6f2707ded8",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/owned-contract-module-metadata.md",
+      "sha256": "7c6b115a18ce64431e2f092e2e5e746baba170c3d3ab3575a7868ecafa1c77ff",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/setup.md",
+      "sha256": "69c79368260830e7d28940ab45103ffc749a4b317c9794eacd51b0480295e852",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/umes-contributions.md",
+      "sha256": "6793a7b59f1a19b69271c03878ccd75687ba957c813cff83277d35df0a8cfac9",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/dashboards/umes-hosts.md",
+      "sha256": "5f30e415dad636d484d275067bfcd56836f24ac1ba7d6ecc03c90eafd694f621",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/acl-features.md",
+      "sha256": "282c4d212df96b757d69dc15107250a2c074c1a9762fcfbeb37d0f7952360a14",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/active-extension-bindings.md",
+      "sha256": "823496a8fa3831a9d2e7e7054e64cdded8f506f7922f01e1fea06d71485719a6",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/backend-pages.md",
+      "sha256": "98990948f885d6836c8ba6d7252f83faadb035a2338bbd27b61db3a2f1588ace",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/contribution-resolutions.md",
+      "sha256": "49d7525cdb904f4a9e4feecd72e2b324c164c1b41aeb300d8285574ff7d8b7b2",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/di-registrations-rich.md",
+      "sha256": "250e37ed243f194e59aee3caa4d360a313a616d0118e8b425ae35f60a7b415f4",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/di-service-tokens.md",
+      "sha256": "60c06095ca46243ac356155fa2c3784a82ca1fa2aef8e5521c58ba9bd92ba66c",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/domain-commands.md",
+      "sha256": "402133816df463ec7972080e771398b5b9ebe40d6146648a62aa692a2bd60b83",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/entities.md",
+      "sha256": "a85d2b3302cce1e1fcb03119eb72b3bf0b80783f5d5552384cdb9b681f3e05a5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/events.md",
+      "sha256": "a1e5789211b50b16f14bbf69013096e1a6745d084dc926999dc8a5fdfcf403e5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/exact-override-targets.md",
+      "sha256": "4587c8d82d6af180bd4b185909c7fdf271b00d8fa590a5be61ab95a69ab4e51f",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/host-extension-points.md",
+      "sha256": "be0d926f956e24704dda52b869ef9219fa1112a214cd2cf1cd52a5d5e7a1fc9b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/incoming-installed-contributions.md",
+      "sha256": "c9ea6caa921186d06474be601ccd618ded48b0cae336f699e7570aea974ef259",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/index.md",
+      "sha256": "b840fed8e9361790fec577a42d7ed299134139d3bd7d7c912bf0d1a8a4b5d4c8",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/owned-contract-module-metadata.md",
+      "sha256": "f9f1fb62e99cf896f93566f2441dfa31a46c74c58a8528e9c98d6116cf146681",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/setup.md",
+      "sha256": "949545c7e97a8cc5e54fbe50fa6bd54c140bbea3819f37d67d2ad770557a1500",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/umes-contributions.md",
+      "sha256": "62fd66a4458734364583a615731c849045df43d9577afb9b35017bb83ed8fca0",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/umes-diagnostics.md",
+      "sha256": "53fe8ff666f0e731a7412ff6360092cb0073382057567179fe8e725f957ce6db",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/directory/umes-hosts.md",
+      "sha256": "a3713371945d0815b60ead946d5309af746793f12cdb4217ba6c2670c9aeced9",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/entities/acl-features.md",
+      "sha256": "e243b90cbf892fb391beac1925b814add638c20fbebc5a280a3e59eef1f8259d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/entities/active-extension-bindings.md",
+      "sha256": "5ae40b011c597c82d7469b853425f8fe6c6936a6d19639acb2328b81bf6c6537",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/entities/backend-pages.md",
+      "sha256": "a6c1ccdb718ba84b6e121df8820865251df09fb7399540f2fefdf4b47aea131b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/entities/cli-commands.md",
+      "sha256": "3c4bd511976f2e8a1d9874f121b0556db62a78725ba0c239ed884d520ce16121",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/entities/entities.md",
+      "sha256": "22a5611ef847bf26e6e51445cd3282a9a3fdbeae537016f59047f206985f1ef5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/entities/exact-override-targets.md",
+      "sha256": "ae04cfc8babaac73e8874da3fb9c509882e47e4939788c59b46ad4dbcd859c70",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/entities/host-extension-points.md",
+      "sha256": "5806239e5df6d010e5ceda6d2823a3c3966a7941a662888971b1ff24bbad067d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/entities/index.md",
+      "sha256": "d241d115ef8f3d6e4df7ea8ca2b85746d27a92fe0a1665c9c543906730c65ee3",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/entities/owned-contract-module-metadata.md",
+      "sha256": "e125555e88e118598a5b815fc92ccc9858ce0efcfadf450d5bbf1014201b182e",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/entities/setup.md",
+      "sha256": "cbebc3324c18790e3dd92bd9b6015812a66c0290d7f5f60ddfa083f8d9ab5652",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/entities/umes-diagnostics.md",
+      "sha256": "d4387df2bd18e086724c8dd6b5e148b6f74a988d81479c26384e31d9a2292b12",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/entities/umes-hosts.md",
+      "sha256": "2887dec1d03af85e4cb634d9e7d3d303713fa9f02e08bf7700785ec8187d0259",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/events/exact-override-targets.md",
+      "sha256": "cab47228123d4136625215f1621716196a241693ac39f63c465639052cbb5ad1",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/events/index.md",
+      "sha256": "b397760e95968dd50d9455122e8be3755073c9748b5f38dbaf5a8e25e8c45d75",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/events/owned-contract-module-metadata.md",
+      "sha256": "6f4298bd997dea769c1883c580af472f47cfbfe24b39f8dd3df9e5c726919cf6",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/events/workers.md",
+      "sha256": "411f55a9415c648a54cebff7bdf9cd11263388d3f44770092d1b99e90b4d7d09",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/acl-features.md",
+      "sha256": "50061e9a4675af9323101948b24a275f1c2299d92e31eb6d9ff4df78951ee1f5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/backend-pages.md",
+      "sha256": "a40535b726b36bf352ad77dbf18956b98f9a50f0ef3dda3d9a4a1d24dbc564fd",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/cli-commands.md",
+      "sha256": "0a072711374e2556c22f34a1eb19a64eaa82c8cf3ba22dc30ddefca6f46a4b9b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/contribution-resolutions.md",
+      "sha256": "f5c01542a5a0e2667b76eeb450720d249d73c1e72215a6e31a4211ed0fcb29c0",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/di-registrations-rich.md",
+      "sha256": "6f3f03a3921a96f0781e138109e850de48ec29d3144516044c3a677d256cfa7f",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/di-service-tokens.md",
+      "sha256": "7a5658417acb49b71815bfd781e1139090f94c91b474d4c45d3683531e7014ef",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/entities.md",
+      "sha256": "63d96b4ea00d84a5bcf7f05006e5dfe397cb18909480e9d61fcae45b6158beb5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/exact-override-targets.md",
+      "sha256": "49560cbbf8b167fb95a26917b9a9301844efab8e1399fae78126e3d445efd118",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/generator-plugins.md",
+      "sha256": "87779b7df955db1a872278510d6dbbd5882e2819b73c635fa42afc23dbf522d7",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/index.md",
+      "sha256": "678f7d15426bea3f1b4c0dfa95410826f77f144c5dc2e6747fe9f2d303a4f118",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/owned-contract-module-metadata.md",
+      "sha256": "15e8041c5f30e88bc84cbf589a40222a05e390736574ee63b0f5839c3f3e446a",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/setup.md",
+      "sha256": "1c84e9ec2e4f5c766cbc6c9ecc272fbcc26cca16e8f12de9e2dcd220e5f29233",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/umes-contributions.md",
+      "sha256": "f79ae64c74686c75d1cbf668a14d139d314b811937375d5dbe702dfc68c40970",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/umes-hosts.md",
+      "sha256": "40f929f38829503623a945413c6e07803ee910bdfd2e089e83d0e921409ed01d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/notifications/workers.md",
+      "sha256": "46690c03af0f80ee7f99082d91c51bb432aa7b4481e74a619bb19c5004fa512f",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/acl-features.md",
+      "sha256": "6e680a84d609f7c7cb3cc969e3308f256c076392ae102f09de7e4367a6c8aa60",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/active-extension-bindings.md",
+      "sha256": "abb7746fdde6e9a34622c14fb0e2747f3b56360bffaa286ccdb2884ce37f4436",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/backend-pages.md",
+      "sha256": "ba5ccb17971254dfb316ef4339d452c4d774866bfc9fbc88f5f034980726e694",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/cli-commands.md",
+      "sha256": "163a7e24dd2ef44ea427acc03c9c79679e9b96eb86ed1c9088882e929ec6178f",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/contribution-resolutions.md",
+      "sha256": "af45eda1279b246249d5d5ba35d2a7c9f339b0ad1d21360320be310745f0c1ec",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/entities.md",
+      "sha256": "4d79463c1ede7722e65840afce1ca52109f615050f9e5c6d1f4a606e78f81ec5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/events.md",
+      "sha256": "572aebd4532abfd44070f45a867f2ff661be90b5591a3ee9ad29d0117527fe18",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/exact-override-targets.md",
+      "sha256": "c2086eb813d4d733fc5945800761b51eb42783bd84ee34070a3d5615db76b72f",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/host-extension-points.md",
+      "sha256": "418f78a8e1de98586add770c9052bfc8c21e2d67ebba2d246ce68185a1e0c48d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/incoming-installed-contributions.md",
+      "sha256": "2ce6315a71a4e0a91fa01e479b79c960c7a476957eece017ba20ffc5ad02eaa0",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/index.md",
+      "sha256": "9b7e195e3048069d2a34115b303721165165a70266440aee9d25be5945b86a22",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/owned-contract-module-metadata.md",
+      "sha256": "066c4eb4ec286748245ad0492c1084efd1064f5cbcd59d61f66f29770e2c46bc",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/setup.md",
+      "sha256": "3aca3b6c783220f3aa17b4f1f1660463506e28542ac313216abd3b0953233793",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/umes-contributions.md",
+      "sha256": "7d1cd26bea1bb989476c1b3be2d0956b20ed115da9c939ee56f96ea3bce0fe3f",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/umes-diagnostics.md",
+      "sha256": "c8c22d24ffa7bec4033296b4c0e6270bdc219a96aea0573ed3b3d5545f2bc3cf",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/query_index/umes-hosts.md",
+      "sha256": "c9bf306dc449eb673da757e85f71c5b8a46ced14a98d8520de187c57fd678e66",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/acl-features.md",
+      "sha256": "f9ac8187f247935956a2493464aeac2f1681e4b02ca60484ac510a1518ee182c",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/ai-tools-mcp-capabilities.md",
+      "sha256": "c8bd8b536c075f6ea86a45a211f9482b1ccd7fac0c9fe487b06f0941a81c3280",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/backend-pages.md",
+      "sha256": "96c1db14d82b3f3ae60870e27eb0b8b4f4e9209702061d206313fc54cea1bda5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/cli-commands.md",
+      "sha256": "3500609f9de7ecd74ecccb304e6a39ac55c5ebdbc3d83f51d1b8f6ef5084976a",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/contribution-resolutions.md",
+      "sha256": "15b9a83f021101194da759ce62fa63a1906e45d9ff7f5eb69acc6fafebb66f9d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/di-registrations-rich.md",
+      "sha256": "f798edd974dd9d6ee132ed09a330e7cae5fb30c66de12dbb71fe28ac815055ca",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/encryption.md",
+      "sha256": "0f10459601f4ad55686ead0480c9631241172eb050db42e9a545461ec197304c",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/events.md",
+      "sha256": "063edb0631ed1a198b8885c99a6dcffc802c5cc05fa0e94d5ed6c55400c64dc6",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/exact-override-targets.md",
+      "sha256": "1c61306cc02c1b487b1fdd657fcdd088798ca75f4e3411c0d586b56e30e4891d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/index.md",
+      "sha256": "856e376da7b007072dbf444a27c5e6d465ce06715a293d42bcb2dbac657aaa4d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/owned-contract-module-metadata.md",
+      "sha256": "620039b88197a73fb7fac030261906e8e2fd2c5173d308f5ccf5c510e2c1e338",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/setup.md",
+      "sha256": "35647b679924ecd4fc17d06d519033e04f701a0f2a08620b401ca2f7209e26a1",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/umes-contributions.md",
+      "sha256": "489697849f87c7569dfe1dc165a0fcb201a8433c9a9945ed8a8d51194dbb6826",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/umes-hosts.md",
+      "sha256": "4c727cf99eace21182e777c90980a0ecadf8777a704e116cb46d6e54802ba587",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/modules/search/workers.md",
+      "sha256": "91aee85290478ff1048a2a32550e8001e4328c615fb996984c5657a20e233a44",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-module-facts.json",
+      "sha256": "f79514887451f0a08b1266a4eb02fc791006f539f4ab70435ef56ea33d05b184",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/acl-features.md",
+      "sha256": "b65f669be190851c9c9073455e145fc745d2320be5cc51e4ce6912bce86aef84",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/active-extension-bindings.md",
+      "sha256": "e2ecf8b4d787aa7c3dd00e7ede37f495cfc44547d5b11117ed5f48b37cb276e5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/ai-agents.md",
+      "sha256": "3ef273bbb8a645f793f5b0e42afcfbdf765fba21900f2c0593b803413f133d8f",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/ai-extensions.md",
+      "sha256": "75664ba96efacb37209e83a47d2bab9d0e1e1d7d6a14994b2b0d9c5977ba1757",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/ai-tools-mcp-capabilities.md",
+      "sha256": "98bc56e16b9c0b81e25b970a92a6046153776517c9405aabccd1ef968f83db50",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/backend-pages.md",
+      "sha256": "10712cf4711e602fb605b42fe106d5bdf620750ce73e8c32417b26a30d5d2208",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/cli-commands.md",
+      "sha256": "d6bbcd40660962aaabb4ada80b73c5c5195f5c37962e8bbf25a3ef4f0690e6d8",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/contribution-resolutions.md",
+      "sha256": "d4322eadafa6f9b3a7ceedf102da79ec4541875a36671b67f1410c03020f4889",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/custom-entities.md",
+      "sha256": "5bc37a8f99842d59f12c31ea3264db2647c2adbbdc6ea6da7a7d1f1925022026",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/di-registrations-rich.md",
+      "sha256": "0ee83f5898d882f82bd04c5e6511123915fd7e783396175f7c8d9d588e90be22",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/di-service-tokens.md",
+      "sha256": "7161dbcbc9ff613f478d9ac085b678276285fc49d9cacf434cb1f518fe439438",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/domain-commands.md",
+      "sha256": "f6e77e534b2320d2a4a2ba76cf53baa0150d26b4154db12b83a31143f4c61a3b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/encryption.md",
+      "sha256": "b7671fee02425d8dfc95bf98def80939c6a8744de004e2f564010c07e2003103",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/entities.md",
+      "sha256": "b5ac485d50a36d27ccdd1207c51fd4a206461d179e099e8b7f48a70efbd551cb",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/events.md",
+      "sha256": "dcae8fe894d5a597cfca59271724d001c410754cb1b33b29b2d621bc589faebb",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/exact-override-targets.md",
+      "sha256": "62a38af8fac47787896156a1d8dfd3576afdfc8ee02ffba8214f028d2477003b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/frontend-pages.md",
+      "sha256": "be7705a98dea5d516b6d349cc99258dff976efc01113ebe20c81ab6d716fb1d1",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/generator-plugins.md",
+      "sha256": "352f56029eaddb8f1976cfed84a36bc7201b9bb82ba4962ff8f2d10027353d78",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/host-extension-points.md",
+      "sha256": "6023ad565ded766bda01ff1f2f51a0427e1ead1f0e47e5d9c680b6582f8aea2b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/index.md",
+      "sha256": "8501bea3cf92f57ff9afb5bb7757b54d9304f6253b60263d44f43e56a8ba6e95",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/notifications.md",
+      "sha256": "a97e7c599d68c9fa565524c60bf3413cff829f35ed22e08b5794a48982c001b2",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/owned-contract-module-metadata.md",
+      "sha256": "35cff3e5aee3d9892251f695821065c0e563f281c06a9134209fd4c77578fc52",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/page-middleware.md",
+      "sha256": "cf6344c9d3ab7fc00b7a3b695d25bd32c1cc027bc4b5584f5ca725beee10fd98",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/search-entities.md",
+      "sha256": "cbfc57d8093187d5967c8e299686c2876fd9e2ca60907e80be4d949fcf014132",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/setup.md",
+      "sha256": "460142e4b5bc9f749b8460c6f4675d214629332262d420bb9d96a1d7238cfb12",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/umes-contributions.md",
+      "sha256": "f8ecc1b8bd943d2bec7d64037120f8769ead5f6336e958e32f56c20140b36e5b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/umes-diagnostics.md",
+      "sha256": "71888b029804549a68d8958a6386c382f794d5c3bcca7c1357c15c2090f627d0",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/umes-hosts.md",
+      "sha256": "ec66c418afef26aa0a4f1ed713b1f0908bafb33c773932fe63483065cf6a07c7",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/reference-modules/example/workers.md",
+      "sha256": "79bbe3dba3b90e8394f514ace4115bc6c849b1c83dc5c1d21dc63f01f18ae689",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/spec-delivery.md",
+      "sha256": "c711942b1361a4675148f0ce2ee216f109fe462111ca6c70880495118e8dc1bc",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/testing-debugging.md",
+      "sha256": "0b9737169d08f52340a99bc2eeacd5ef5fd1d8727b7b39a5f4c4c23d7a6734d8",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/upstream/AGENTS.md",
+      "sha256": "9fdaca247f55c64f5966cc103265cfb03233e0532f58f14aff538ae18aa3555d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/upstream/BACKWARD_COMPATIBILITY.md",
+      "sha256": "89a54c0b08f043967f284052d2e1d9f16e406e4a70dd68078749831334e3dcc2",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/guides/upstream/manifest.json",
+      "sha256": "82acbc6dbc5f19de7a2d8ea83b6d653796fb3c701410614dc58ca59f1b17b3c2",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/cases.json",
+      "sha256": "32058650733436423ec585d16e630898816976f4fabc14a868a1ef3384b45b6c",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/cases.schema.json",
+      "sha256": "906d12a38a489641c98ed976eecaee0deda348a2ebe08e402034c8a288676095",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/design-system-inventory.json",
+      "sha256": "d7c6ff07aeab323b593e526c90447647d3505b544440f31681fd9a4adf8c1722",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/fixtures/index.json",
+      "sha256": "e4946813023e35eed8eba280889554f011af88a0abf70f92cd577af192f3c943",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/fixtures/seeds.json",
+      "sha256": "bfca66e2d8657e4855bb11f937fafebf78ecad83b33167ff4b36bd12425ba589",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/generated-code-review-policy.md",
+      "sha256": "83644a7a1c534da5f745cb1fde2624bc012e4e1e7d412642298e08b5e0086000",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/generated-code-review-response.schema.json",
+      "sha256": "498abaab4dc00e9bdd0447e6e2056aefc286b2e4afed361bb5fc1ece83587329",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/generated-code-review-result.schema.json",
+      "sha256": "ff4dde3d0c52fb5e0c10c20970650ee58ca8ffea4e8c5d5482e3fa0a438f949d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/knowledge-change.schema.json",
+      "sha256": "6c0999536fb829fabbcb6c29696e565755427c8b2e2a3a4ecf8e4e4017c5d0bc",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/README.md",
+      "sha256": "415b839b555841296f361bd3085aa8468d370b3f55a7d322cc9e2934ba5234fc",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/release-matrix.json",
+      "sha256": "296a7e94161a054fe93b746ca36231e09fc62766303b06caa74bdc14dbc520cb",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/release-result.schema.json",
+      "sha256": "a4529ff4c36bcd9933e02d9f1222ac1c7a880ac5f4cd31c89884c505d2362e83",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/RELEASE.md",
+      "sha256": "77796954ca81e5eed01bcee263d2b3745e2a5ff6a810d7b4245104c45828a483",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/result.schema.json",
+      "sha256": "6e0c32087e4b39b7a5da927ac547a958876a82b25e83620561d97812cc4c38e2",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/routing-response.schema.json",
+      "sha256": "fa2619a8478b2842548f68e2ebd8d0fed799247bc6edac5d6e46d189d00dca90",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/source-link-inventory.json",
+      "sha256": "d1caa1389c6c721d994c2f128ba3c18cc4124df8fb6088abc72867e51ffcd629",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/target-validation-result.schema.json",
+      "sha256": "e5ad8911d30fcc653be3f9cc0a7b4f21a68eee6ccde5e899c15d152589975d8e",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/validators.json",
+      "sha256": "ef6c90c8f3f36b48940dc6fd7df154909c43b0525b39590c60305e9494c15906",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/writable-ast-oracles.mjs",
+      "sha256": "b8035e423fac9db8d0e779d4bd339a148d4d25f34265297567b74cad3cc489b5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/writable-behavior-oracles.mjs",
+      "sha256": "96a5f781527555b7ef61ed6ea6a656b70f0b2ce4afd9325e0494bb22a36f0e65",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/harness/writable-spec-oracles.mjs",
+      "sha256": "19ddea4b706cec2601fb52c42e80e5dd243671ad9696a1f1f4f9407fb3b8faa6",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/lessons.md",
+      "sha256": "bc525258022743fc14fa756798ba709447f218cf8eebd260426565e3fc228382",
+      "source": "generated",
+      "userEditable": true
+    },
+    {
+      "path": ".ai/lessons/_template.md",
+      "sha256": "669ecfdc92fbc312d4d1c2f1399bc271784d6aa7370d5b811400f635d858f389",
+      "source": "generated",
+      "userEditable": true
+    },
+    {
+      "path": ".ai/qa/tests/playwright.config.ts",
+      "sha256": "4c2ff9d819fab31ef69292b78242b4be4d96dc98c161aba6052899709e909304",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/review-checklist.md",
+      "sha256": "673499c53d7a7dba4ca798665dabc47ee06b3fad2a6104d04413f15341227275",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-auto-continue-pr/SKILL.md",
+      "sha256": "f5c11493debdf44d8915495f3d27f56be7f2508ad76896112375afec322b61b9",
+      "source": "external-override",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-auto-create-pr/SKILL.md",
+      "sha256": "af16090fb3a64c92e14ee882cccf8cbe898f605b9eaba016145090ed79cbcb70",
+      "source": "external-override",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-auto-fix-issue/SKILL.md",
+      "sha256": "a62f43fdf0cb04851a6d6a8f12ff855652e811a09b4d2c9b75288d6b2b8fc7c2",
+      "source": "external-override",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-auto-implement-spec/SKILL.md",
+      "sha256": "3f3186bd43a2e670f29897073b33bedb4104320eecc0fd952b2b654ebddc92ca",
+      "source": "external-override",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-auto-review-pr/SKILL.md",
+      "sha256": "98a810453d33d2b0b4b4919ffcf4e8667a8b65b4170f7a7ea8ba8fa739aefbdb",
+      "source": "external-override",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-auto-upgrade-0.4.10-to-0.5.0/SKILL.md",
+      "sha256": "9855b314098503380b147f3c6d00b8ca5a153d8344585b087a521ded6e1a7a58",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-auto-upgrade-0.6.6-to-0.6.7/SKILL.md",
+      "sha256": "d2b74f7e883946e6e23ddc7b170f1f8b143f008dd1aab02294d51eaa2c6e5c1d",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-auto-upgrade-0.6.7-to-0.7.0/SKILL.md",
+      "sha256": "e48058704310560c03a762329399b8593f10053ae96307890e02f3de76f772dd",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-auto-upgrade-0.7.0-to-0.8.0/SKILL.md",
+      "sha256": "58c453711db6075c5a5a347820519646be5a56974626263175236bb549785065",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-backend-ui-design/references/crud-surfaces.md",
+      "sha256": "2744ce61649f6eb46774fdc23398b844f467effa5ec076d610f046258003e401",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-backend-ui-design/references/frontend-and-design-system.md",
+      "sha256": "da1938c450530c92508ea73910c70189f4d8daeeeca752af93b1f2312b862fad",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-backend-ui-design/references/page-and-navigation.md",
+      "sha256": "826108e5a5ac5af09cb42cf6053849833c5ed2b52922175c985868e293a79f3b",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-backend-ui-design/references/quality-states.md",
+      "sha256": "be90ccca7b130681faf060ba9a7230f591986b8286be6242ce5f7ab501c577ab",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-backend-ui-design/SKILL.md",
+      "sha256": "b58596f98536abad3cbe8452c022ea9cffb31a76c3bf2a9bf5804554cb69aa42",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-build-workflow/references/activity-contracts.md",
+      "sha256": "281515d7f3a0392c0458196a700fe8a2268cc2e74aca0c21594efdf81628fc85",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-build-workflow/references/durability-and-progress.md",
+      "sha256": "b7b2f93a6536697929f467f55d61f53589886c9bd965b01fb489128e4cdaa21d",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-build-workflow/references/workflow-design.md",
+      "sha256": "10950cf0d93c7a87d2691168bbb1ebd2468631691b37765398581563325a20ed",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-build-workflow/SKILL.md",
+      "sha256": "f30b3f4b78c088d776b974417ea042d53531d93afdafbc921e57d27ca880c4e4",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-create-ai-agent/references/attachments-and-overrides.md",
+      "sha256": "81d95c402f291a39bb43279dd98e6ec3b9f01c54fa25060f5688b82708039ee0",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-create-ai-agent/references/module-agents-and-tools.md",
+      "sha256": "dab1aee0de68279f94504385f2c75c0fc46002fdb37fe824bc5b5be9b9feaca6",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-create-ai-agent/references/orchestrator-agents.md",
+      "sha256": "78e551e71fb13b7c4537cbc66c5979493d3ba546566649114e96361139d2dfcd",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-create-ai-agent/references/surface-selector.md",
+      "sha256": "5fd6ed26ff75e097eed3c3ea2b26c14bce1de0a3a2d856025546cf5bec18f259",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-create-ai-agent/SKILL.md",
+      "sha256": "0d422af37e63ef6fb513908ae13248426f3722e5bdedc66f5db0f7fa8186da28",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-data-model-design/references/integrity-and-concurrency.md",
+      "sha256": "1585379057b4746b0ffe41b9aa67818cf3a7dfdf87891c4b628a9705d5383dcd",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-data-model-design/references/migration-workflow.md",
+      "sha256": "1acbd5b7e013693cf745ba8ea9a1809139ca3956f32afa4d2638516b1390a102",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-data-model-design/references/schema-design.md",
+      "sha256": "a9134e607096c1954ede7fc532189ea3951eeac6499b46344add8f338e5ba5a2",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-data-model-design/references/sensitive-data.md",
+      "sha256": "0a7a449b83a887ec702e038270bd06417cb0f6241b8a36b15fab2f5c445db2b6",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-data-model-design/SKILL.md",
+      "sha256": "987fb4cf4dfb08c930d100e5a283c06a3c24056e23c02ae5ca6384d7a4464571",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-eject-and-customize/references/decision-and-procedure.md",
+      "sha256": "e4c63d5b8926a1c19f0443908906faa7a043e149e7dad61afa1c35bb551d0e4b",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-eject-and-customize/SKILL.md",
+      "sha256": "bf1c800d47fb785177e0986f6190e5c1aecfc6c4ad7577716ec628b9c32889f3",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-evolve-harness/references/case-template.md",
+      "sha256": "03d6c9e84d563529f5351c144878bb166875a26a3f08e327fb4ace4ca5982676",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-evolve-harness/references/case-workflow.md",
+      "sha256": "8e8d34c687f6fc9578ccdb26604fe692fed3aa175eb044b029191741d5926b04",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-evolve-harness/references/knowledge-change.md",
+      "sha256": "e9d917a7b570ca038ee4739b845f7779e8ece71eae7f680a8191be4b4e23c3f6",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-evolve-harness/references/owner-selection.md",
+      "sha256": "4b286f5da68470c05b6bda7622d22b870ce2b99df41e90297e2a9ec988d91d1a",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-evolve-harness/SKILL.md",
+      "sha256": "5947c94d2f0e10113d1919b9608d85c56777d83b5c7357f33678860ce9ea72b0",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-framework-context/references/resolver-procedure.md",
+      "sha256": "4b0b17a17ec3f8c7cf02be6d0998218414a355b1ebe712ea39495863875dee9d",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-framework-context/references/skew-and-escalation.md",
+      "sha256": "5f9be7743c9c83c656656fec1d1d8a0b651fdf0a183d2b87dbe8874e17877c87",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-framework-context/SKILL.md",
+      "sha256": "753c89974b709b6324c6dc9b3ab86e8e16343b88c0424e96ea70bb95865ffd3b",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-help/references/delivery-workflows.md",
+      "sha256": "22fe045bc0cdc83f43a98219e01d759b2d155be0da6c5d53c77d3b3775398c80",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-help/references/task-families.md",
+      "sha256": "adc6169034273602c0e90901d41172ce89ac728c0f0db15462a3c7e9c83ad4bf",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-help/SKILL.md",
+      "sha256": "385311abed969d41770051014d139f5bba4842dfc1d6ff4cd217dc42d7eefd39",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-implement-spec/references/phases-and-gates.md",
+      "sha256": "e00e3ae2a6738113ecd8d7a57ba691684e39e38bb3e7342aeb3e913dd2d257d6",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-implement-spec/references/planning-and-progress.md",
+      "sha256": "7d02c9397abc41708529d795bb431dab6a88394abb166af7ccac3958a7642e41",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-implement-spec/references/report-templates.md",
+      "sha256": "169e3a476235a52edb742fb3818f811a49a9cbf01c264f6478d4defd3637bbf2",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-implement-spec/references/resume.md",
+      "sha256": "ae8188c89cadd499f9ff6daed3cc6a0284c47be12b356dea2b637f6b0f411fe0",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-implement-spec/references/spec-resolution.md",
+      "sha256": "eca08e05d45a1e8cc87562094068d3941a98491130542742061ddfd9cfd219e6",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-implement-spec/SKILL.md",
+      "sha256": "83d3a903b2e71fcd969cd16cc1ed70860ba55810ee0578ad926aecec3128f2d9",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-integration-builder/references/package-and-activation.md",
+      "sha256": "745bd908b2244c0e2e851d86811ccf367ab75fa2bce61983f90be04964fae751",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-integration-builder/references/provider-families.md",
+      "sha256": "fc12e37a873a60f34c48eacb7162ffa2e5f494241592ff228b94863cbf3aaa70",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-integration-builder/references/security-and-reliability.md",
+      "sha256": "4c50f41908081cd7862d8ccf4eedba2b9b19c846363f25690b5e496ef441d97f",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-integration-builder/references/sync-and-files.md",
+      "sha256": "35901f77bda55ce7762ee1f8364fb47e306c77fdce1a19c976b4b83e26387de5",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-integration-builder/SKILL.md",
+      "sha256": "0d81aab2b2d7f95bd87da51fb82c446cec58caac795662465ef5665b31efa585",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-judge-agent-session/agents/openai.yaml",
+      "sha256": "e2bebe3b4d66f995e431538d09bf1b461cfe10515d431d79dd8503be260631ea",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-judge-agent-session/references/agentic-setup.md",
+      "sha256": "c364dcc8356e1c0429bdf370ea82b1a030d84b652dfc171db8702fb5bc9ba3ac",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-judge-agent-session/references/input-normalization.md",
+      "sha256": "34601a92bebca150cdc86403dd380dbd7189788cecddfcc3196df7f69b1fb736",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-judge-agent-session/references/judge-workflow.md",
+      "sha256": "cf7ac1edbea4d6beec873dbc2c9316744b60fb3b8bbc8a00108cdb3893c9583c",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-judge-agent-session/references/report-template.md",
+      "sha256": "144f5ff27b5b07888d9de1ead3357b8aa7c5aef141f2bcc75fd946ceac431796",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-judge-agent-session/references/rules.md",
+      "sha256": "73c20592816d112dc1b7deebfbb0c24747ea9749a17e236352183c29d4234ee4",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-judge-agent-session/SKILL.md",
+      "sha256": "cb8110d47d1c97c8d7a7002fa2847dba60635cf17ddb46839720ebb8c02df7b8",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-module-scaffold/references/api-and-domain.md",
+      "sha256": "c408579c4afa70d6eb497dd86ef13f3b21a61125af4ea3f071f10a869bc82813",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-module-scaffold/references/business-one-shot-blueprints.md",
+      "sha256": "8f7867635979adcd81c769f25080fb33abab943ec8263b54572488d4371c1e0c",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-module-scaffold/references/data-and-migrations.md",
+      "sha256": "daf22986638d31a4a1370da0bcbacb9c537bc0aa56c9054c0f57a7e1769cd811",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-module-scaffold/references/discovery-surface-catalog.md",
+      "sha256": "d645c112c6572bc9946a5b45ef1cc1eb43065cd23aa0fdb4dc42cdb674948a56",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-module-scaffold/references/module-surfaces.md",
+      "sha256": "2e686937700b6dae34ed49ea7f62debf669be07c4f482aabb12df5999c127caa",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-module-scaffold/references/planning.md",
+      "sha256": "0af48d4aa3dd2f6da91e06bec95a314ea6a39de09446fd6489de0e6252bccd69",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-module-scaffold/references/runtime-cache-and-queues.md",
+      "sha256": "49f2fb5078e33415c4c5b192dfd76936cf5e744fff87b077b4af36cedfe9a1df",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-module-scaffold/references/verification.md",
+      "sha256": "df4ef1bd8db80a1abd798f54461b02b6c4c01b54818880be22686f33795ecb56",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-module-scaffold/SKILL.md",
+      "sha256": "94238dd03ce64f5c3f5763df1548daf935343aeafb2f7bdf7b47d8166070ead3",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-prepare-test-env/SKILL.md",
+      "sha256": "01b76c9def5563e013ad4530036eb622cad4767ec0177686c960a861f58b33a0",
+      "source": "external-override",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-share-this-session/references/agentic-setup.md",
+      "sha256": "2d2ed112f3a512331124d9bf0bef1dc19fa0fdae1693317a868f2d7d022b2b61",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-share-this-session/references/bundle-preparation.md",
+      "sha256": "f5c98f329336c422d923101dc8d885b0aa2abc2d1ccb9e53f626b01e91417bc3",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-share-this-session/references/consent-and-review.md",
+      "sha256": "fb19ca5dc92f1b86c8e8fa32348fdf6e2481944aea7ac07926c5e40ebc1e1ca4",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-share-this-session/references/publication.md",
+      "sha256": "7a2528f181e3f000e0fe21648d32144a09fc7d4dff956948f3ad24fbe2f62f7d",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-share-this-session/references/report-templates.md",
+      "sha256": "860addb1db610de22629d91f8f015643a4f7f31a3bca10acf760bef8e2832f8d",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-share-this-session/references/rules.md",
+      "sha256": "8ce59f171fb26520815fe9185f89657e3626c0f14022312a1f3224e6c39dff63",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-share-this-session/scripts/export-codex-session.mjs",
+      "sha256": "c062145ce9b1f7d5acb6923ded08926132f3fb9b6a9cf597fe12df1a78dddc3f",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-share-this-session/scripts/prepare-share-bundle.mjs",
+      "sha256": "728514276e51071dc9c0142d9b1267861b62523a140adf35d30787befd22a8d5",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-share-this-session/SKILL.md",
+      "sha256": "5a640463023233a7ca964e5544d916baa523b16d11f162d0ef3c4bb5349cfecc",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-system-extension/references/extension-branches.md",
+      "sha256": "91e3c0331ae1bc7d4e031e9dd4eebf53b127956d97f26fc3749b4f211d61e162",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-system-extension/references/mechanism-selector.md",
+      "sha256": "6e4d8e741fac3b228bb6f85bd5cdae4459156e3e275492774886a8e69856273f",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-system-extension/references/read-write-roundtrip.md",
+      "sha256": "998e4adc9d0833ea031ffa680d3892cf91756517d0a6c180a19e4de435197556",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-system-extension/references/unified-overrides.md",
+      "sha256": "b7db26446048d2211cbfacd5123d4f72fa84a0476fa9c916302333a17be2b670",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-system-extension/references/verification.md",
+      "sha256": "c20cba7f815fe19055b370aa08813921c11e55df7b042b38d402af4750941da0",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-system-extension/SKILL.md",
+      "sha256": "9ef992e322592da961b7a16abdd36dbd21ebee9d7e7237f21ba7106253bbe70c",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-trim-unused-modules/references/dependency-and-redirect.md",
+      "sha256": "617ba54f1c5947a2cabb433929ef8216532448cbb1afe79121a486fbba83c3e0",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-trim-unused-modules/SKILL.md",
+      "sha256": "ab2eb2e2d7debbe462ec70e39531afc7e6ba822a7afa8f866664be564e18672c",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-troubleshooter/references/diagnosis-map.md",
+      "sha256": "39131c5973da35fa6b981c432e06789dd20c4ca5b78e69d9deb9d3ea78d6a62d",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-troubleshooter/references/regression-oracles.md",
+      "sha256": "db68fa9691e994798aaf2665379a87461c43ffb1ad389b4b5f082af0473d476f",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/om-troubleshooter/SKILL.md",
+      "sha256": "ddbcbd772af523b3c2d0381c743359da9d44647b48ab335666885d7963aa0969",
+      "source": "local-skill",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/tiers.json",
+      "sha256": "60d07766f645abbbc3fcefeff55aa689cfc8914ad605fb775dd49ee4fafc46fb",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/skills/tiers.schema.json",
+      "sha256": "bac149530967802b053a9a39fb4ae8f6fa1d834d66df40a4eac45040c3e68caf",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/specs/2026-08-06-reference-module-activation.md",
+      "sha256": "1abb42f5b3588ece981717dbbbe8a72c58a43008d077eae2eee11078a66d266a",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/specs/README.md",
+      "sha256": "eeb239a2649cb8ff5d945922a3da4a211ff67f30f2190ea4702b230234eb10aa",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/specs/SPEC-000-template.md",
+      "sha256": "ea9b878ab5bc1d1d14fc0591498d8155e358fee1376b8d18c0955c87e8c6636d",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".ai/trackers/github.md",
+      "sha256": "8f735331a47ee3b599bc5afee5f51ae69191217d7fe3a4d4ad17f1c2f091059b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".claude/hooks/entity-migration-check.ts",
+      "sha256": "0d7206bd4c3dcfecd7118e74e2e726faefac91971b4f3c3c43598995894ddfa6",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".claude/settings.json",
+      "sha256": "33159774d0349356ea8911d402075ec7d8b661cbf9f997a446f7699f2641addc",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".codex/mcp.json.example",
+      "sha256": "4e297c2bf85813611234bfb070f4f05c419583ce5ad340cfc48a80437099fcf6",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": ".mcp.json.example",
+      "sha256": "4918f33549acffe688c448ab7c21f10caf0330b8da89d093135a703424b8ee18",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "65794c800d92d214dd36f66de6f6591dc7d8ba639483961766cf653ae029aa7b",
+      "source": "generated",
+      "userEditable": true
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha256": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": "scripts/agent-harness-tool-server.mjs",
+      "sha256": "d1fb0c3681b2ba03e63e7b85ca50120ada1621b5fd6270df82438fa8ccb8a06a",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": "scripts/check-lessons.mjs",
+      "sha256": "f5b4ee2a8341408402f199898c6340db8669d994a621ad5b7b7dfefe321dca1b",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": "scripts/design-source-contract.mjs",
+      "sha256": "60b8ce58259c977c8d1403cf7f5a146c6b993bb43c3ca33fe4c45293814812c5",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": "scripts/evaluate-agent-harness.mjs",
+      "sha256": "dd296dffd41b06876090fc119dd3ecba0d1473976cf9aa40e19ca9e7989cf31a",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": "scripts/execution-sandbox.mjs",
+      "sha256": "c8cda9d2d4e70706e985f422038401da0a34614366d00dffebaa2f423b0d6913",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": "scripts/framework-context.mjs",
+      "sha256": "18d30e8b4f4eb35b9cd7ad6f269d15e0a84b8045f7f42e92aa01027e6f4eb348",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": "scripts/install-skills.mjs",
+      "sha256": "704887a7f2e91f42f64f9e43904144a890418559d61582ecf08ff52ca03bc2ad",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": "scripts/install-skills.sh",
+      "sha256": "b63d54666656d9ea80f2528f4363bcdf7ae663d216a54f01583dc27d00f3d378",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": "scripts/prepare-agent-harness-fixture.mjs",
+      "sha256": "691a93c0110d6cacf66ea8a975bc777e05b72224fcdda17fa2330891b303b9e0",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": "scripts/run-agent-harness-release.mjs",
+      "sha256": "54ff8aefde87a9db82c328ced9bd8e30c9d0bdc027a7c4691f1d495e1db5976f",
+      "source": "generated",
+      "userEditable": false
+    },
+    {
+      "path": "scripts/validate-knowledge-change.mjs",
+      "sha256": "19b09d7aa778593777e64e5c768cd4df346576522dce3cf4137cb9b927fe65b4",
+      "source": "generated",
+      "userEditable": false
+    }
+  ]
+}
