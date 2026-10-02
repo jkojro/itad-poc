@@ -15,6 +15,8 @@ import {
   itadJobStatusLabelKey,
 } from './jobStatus'
 import type { ItadJobListItem } from './types'
+import { JobStatusPanel } from './JobStatusPanel'
+import { JobHistory } from './JobHistory'
 import { ITAD_JOB_ENTITY_ID } from '../lib/constants'
 
 const API_PATH = 'itad/jobs'
@@ -271,6 +273,8 @@ export function JobDetailForm({ id }: { id: string }) {
   const [loading, setLoading] = React.useState(true)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [notFound, setNotFound] = React.useState(false)
+  const [reloadToken, setReloadToken] = React.useState(0)
+  const reload = React.useCallback(() => setReloadToken((value) => value + 1), [])
 
   React.useEffect(() => {
     let cancelled = false
@@ -296,7 +300,7 @@ export function JobDetailForm({ id }: { id: string }) {
     return () => {
       cancelled = true
     }
-  }, [id, t])
+  }, [id, reloadToken, t])
 
   const editable = job?.editableFields ?? []
   const fields = useJobFields(t, editable, job?.customerName ?? null)
@@ -339,27 +343,31 @@ export function JobDetailForm({ id }: { id: string }) {
     : { id, customerId: '', name: '', customerReference: '', expectedAssetEstimate: null, scheduledPickupAt: null, updatedAt: null }
 
   return (
-    <CrudForm<JobFormValues>
-      key={job?.updatedAt ?? 'loading'}
-      title={job ? `${job.internalReference} · ${job.name}` : t('itad.jobs.detail.title', 'ITAD job')}
-      titleHeadingLevel={1}
-      backHref={LIST_HREF}
-      entityId={ENTITY_ID}
-      injectionSpotId="crud-form:itad.itad_job"
-      fields={fields}
-      groups={groups}
-      initialValues={initialValues}
-      submitLabel={t('itad.jobs.detail.submit', 'Save')}
-      cancelHref={LIST_HREF}
-      successRedirect={successRedirect}
-      deleteRedirect={deleteRedirect}
-      isLoading={loading}
-      loadingMessage={t('itad.jobs.form.loading', 'Loading job…')}
-      readOnly={terminal}
-      onSubmit={async (values) => {
-        await updateCrud(API_PATH, { id, ...toJobPayload(values) })
-      }}
-      onDelete={job?.status === 'draft' ? async () => { await deleteCrud(API_PATH, id) } : undefined}
-    />
+    <div className="space-y-6">
+      <CrudForm<JobFormValues>
+        key={job?.updatedAt ?? 'loading'}
+        title={job ? `${job.internalReference} · ${job.name}` : t('itad.jobs.detail.title', 'ITAD job')}
+        titleHeadingLevel={1}
+        backHref={LIST_HREF}
+        entityId={ENTITY_ID}
+        injectionSpotId="crud-form:itad.itad_job"
+        fields={fields}
+        groups={groups}
+        initialValues={initialValues}
+        submitLabel={t('itad.jobs.detail.submit', 'Save')}
+        cancelHref={LIST_HREF}
+        successRedirect={successRedirect}
+        deleteRedirect={deleteRedirect}
+        isLoading={loading}
+        loadingMessage={t('itad.jobs.form.loading', 'Loading job…')}
+        readOnly={terminal}
+        onSubmit={async (values) => {
+          await updateCrud(API_PATH, { id, ...toJobPayload(values) })
+        }}
+        onDelete={job?.status === 'draft' ? async () => { await deleteCrud(API_PATH, id) } : undefined}
+      />
+      {job ? <JobStatusPanel job={job} onChanged={reload} /> : null}
+      {job ? <JobHistory jobId={job.id} version={job.updatedAt} /> : null}
+    </div>
   )
 }

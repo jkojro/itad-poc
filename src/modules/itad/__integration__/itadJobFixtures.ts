@@ -18,6 +18,13 @@ export type JobListItem = {
   name: string
   customerName: string | null
   status: string
+  statusBeforeHold?: string | null
+  heldBy?: { id: string; name: string | null } | null
+  holdReason?: string | null
+  startedAt?: string | null
+  completedAt?: string | null
+  scheduledPickupAt?: string | null
+  expectedAssetEstimate?: number | null
   updatedAt: string | null
   editableFields?: string[]
 }
@@ -62,3 +69,69 @@ export function referenceNumber(reference: string): number {
   expect(match, `Unexpected reference format: ${reference}`).not.toBeNull()
   return Number(match![2])
 }
+
+export type TransitionBody = {
+  action: string
+  reason?: string
+  confirmations?: Array<{ condition: string; comment?: string }>
+}
+
+export const LOCK_HEADER = 'x-om-ext-optimistic-lock-expected-updated-at'
+
+/** POSTs one status transition; returns the raw response for status/body assertions. */
+export async function postTransition(
+  request: APIRequestContext,
+  token: string,
+  jobId: string,
+  body: TransitionBody,
+  headers?: Record<string, string>,
+) {
+  return apiRequest(request, 'POST', `/api/itad/jobs/${encodeURIComponent(jobId)}/transitions`, {
+    token,
+    data: body,
+    ...(headers ? { headers } : {}),
+  })
+}
+
+/** Runs a transition that must succeed and returns the new status. */
+export async function transitionOk(
+  request: APIRequestContext,
+  token: string,
+  jobId: string,
+  body: TransitionBody,
+): Promise<string> {
+  const response = await postTransition(request, token, jobId, body)
+  const payload = await readJsonSafe<{ status?: string }>(response)
+  expect(response.status(), `${body.action} failed: ${JSON.stringify(payload)}`).toBe(200)
+  return String(payload?.status)
+}
+
+export async function errorCode(response: { json: () => Promise<unknown> }): Promise<string | undefined> {
+  const body = (await response.json().catch(() => null)) as { code?: string } | null
+  return body?.code
+}
+
+/** Draft job with a pickup date, ready to be scheduled. */
+export async function createSchedulableJob(
+  request: APIRequestContext,
+  token: string,
+  customerId: string,
+  name: string,
+  extra: Partial<JobPayload> = {},
+): Promise<{ id: string; internalReference: string }> {
+  return createJob(request, token, {
+    customerId,
+    name,
+    scheduledPickupAt: new Date(Date.now() + 86_400_000).toISOString(),
+    ...extra,
+  })
+}
+
+/** Moves a fresh schedulable job forward to `receiving` with admin rights. */
+export async function advanceToReceiving(request: APIRequestContext, token: string, jobId: string): Promise<void> {
+  await transitionOk(request, token, jobId, { action: 'schedule' })
+  await transitionOk(request, token, jobId, { action: 'dispatch' })
+  await transitionOk(request, token, jobId, { action: 'start_receiving' })
+}
+
+export const CONFIRM = (condition: string) => ({ condition, comment: `QA confirmed ${condition}` })

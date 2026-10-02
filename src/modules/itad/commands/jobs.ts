@@ -27,9 +27,9 @@ import { ITAD_JOB_ENTITY_ID } from '../lib/constants'
 const CUSTOMER_REFERENCE_INDEX = 'itad_jobs_customer_reference_unique'
 const INTERNAL_REFERENCE_INDEX = 'itad_jobs_internal_reference_unique'
 
-type JobScope = { tenantId: string; organizationId: string }
+export type JobScope = { tenantId: string; organizationId: string }
 
-type SerializedJob = {
+export type SerializedJob = {
   id: string
   tenantId: string
   organizationId: string
@@ -72,7 +72,7 @@ export const itadJobCrudIndexer: CrudIndexerConfig<ItadJob> = {
   }),
 }
 
-async function ensureScope(ctx: CommandRuntimeContext): Promise<JobScope> {
+export async function ensureScope(ctx: CommandRuntimeContext): Promise<JobScope> {
   const { translate } = await resolveTranslations()
   const tenantId = ctx.auth?.tenantId ?? null
   if (!tenantId) {
@@ -139,7 +139,7 @@ function currentValues(job: ItadJob): JobFieldValues {
   }
 }
 
-function serializeJob(job: ItadJob): SerializedJob {
+export function serializeJob(job: ItadJob): SerializedJob {
   return {
     id: String(job.id),
     tenantId: job.tenantId,
@@ -154,7 +154,7 @@ function serializeJob(job: ItadJob): SerializedJob {
   }
 }
 
-async function loadJob(em: EntityManager, scope: JobScope, id: string): Promise<ItadJob> {
+export async function loadJob(em: EntityManager, scope: JobScope, id: string): Promise<ItadJob> {
   const job = await em.findOne(ItadJob, {
     id,
     tenantId: scope.tenantId,
@@ -168,7 +168,7 @@ async function loadJob(em: EntityManager, scope: JobScope, id: string): Promise<
   return job
 }
 
-async function emitJobEffects(
+export async function emitJobEffects(
   ctx: CommandRuntimeContext,
   action: 'created' | 'updated' | 'deleted',
   job: ItadJob,

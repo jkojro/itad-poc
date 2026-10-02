@@ -14,6 +14,7 @@ export type ItadJobListItem = {
   heldAt: string | null
   heldByUserId: string | null
   holdReason: string | null
+  heldBy: { id: string; name: string | null } | null
   expectedAssetEstimate: number | null
   scheduledPickupAt: string | null
   startedAt: string | null
