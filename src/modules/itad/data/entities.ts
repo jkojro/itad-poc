@@ -1,4 +1,4 @@
-import { Entity, Index, PrimaryKey, Property, Unique } from '@mikro-orm/decorators/legacy'
+import { Entity, Index, ManyToOne, PrimaryKey, Property, Unique } from '@mikro-orm/decorators/legacy'
 
 export const ITAD_JOB_STATUSES = [
   'draft',
@@ -131,4 +131,84 @@ export class ItadReferenceSequence {
 
   @Property({ name: 'updated_at', type: Date, onUpdate: () => new Date() })
   updatedAt: Date = new Date()
+}
+
+/**
+ * Domain history of a job's lifecycle (spec "History vs. audit log"): one append-only
+ * row per transition, shown to operators. Never updated or deleted; business history is
+ * never reconstructed from the platform `audit_logs`.
+ */
+@Entity({ tableName: 'itad_job_status_transitions' })
+@Index({
+  name: 'itad_job_status_transitions_scope_job_idx',
+  properties: ['tenantId', 'organizationId', 'job', 'createdAt'],
+})
+export class ItadJobStatusTransition {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  @Property({ type: 'text' })
+  action!: string
+
+  @Property({ name: 'from_status', type: 'text' })
+  fromStatus!: ItadJobStatus
+
+  @Property({ name: 'to_status', type: 'text' })
+  toStatus!: ItadJobStatus
+
+  @Property({ type: 'text', nullable: true })
+  reason?: string | null
+
+  @Property({ name: 'actor_user_id', type: 'uuid' })
+  actorUserId!: string
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
+}
+
+/**
+ * Audited manual confirmation of an operational condition, created atomically with the
+ * transition it enabled. Append-only.
+ */
+@Entity({ tableName: 'itad_job_condition_confirmations' })
+@Index({
+  name: 'itad_job_condition_confirmations_scope_job_idx',
+  properties: ['tenantId', 'organizationId', 'job'],
+})
+export class ItadJobConditionConfirmation {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  @ManyToOne(() => ItadJobStatusTransition, { fieldName: 'transition_id' })
+  transition!: ItadJobStatusTransition
+
+  @Property({ type: 'text' })
+  condition!: string
+
+  @Property({ type: 'text' })
+  comment!: string
+
+  @Property({ name: 'confirmed_by_user_id', type: 'uuid' })
+  confirmedByUserId!: string
+
+  @Property({ name: 'confirmed_at', type: Date, onCreate: () => new Date() })
+  confirmedAt: Date = new Date()
 }

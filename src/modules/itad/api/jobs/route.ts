@@ -21,6 +21,7 @@ import { itadJobCrudEvents, itadJobCrudIndexer } from '../../commands/jobs'
 import { ITAD_JOB_ENTITY_ID } from '../../lib/constants'
 import { loadCompanyNames } from '../../lib/customer-lookup'
 import { getEditableFields } from '../../lib/job-editability'
+import { loadUserDisplayNames } from '../../lib/user-lookup'
 import type { ItadJobListItem } from '../../components/types'
 
 const id = 'id'
@@ -106,8 +107,10 @@ async function decorateItems(payload: ListPayload, ctx: CrudCtx & { query: ItadJ
     const found = await loadCompanyNames(queryEngine, { tenantId, organizationId }, customerIds)
     for (const [customerId, displayName] of found) names.set(`${organizationId}:${customerId}`, displayName)
   }
+  const holders = await loadUserDisplayNames(queryEngine, tenantId, items.map((item) => item.heldByUserId))
   const singleRecord = typeof ctx.query.id === 'string' && ctx.query.id.length > 0
   for (const item of items) {
+    item.heldBy = item.heldByUserId ? { id: item.heldByUserId, name: holders.get(item.heldByUserId) ?? null } : null
     // `null` means the company was deleted (or moved out of scope) after the job was created.
     item.customerName = names.get(`${item.organizationId}:${item.customerId}`) ?? null
     if (singleRecord) item.editableFields = getEditableFields(item)
@@ -193,6 +196,7 @@ export const { metadata, GET, POST, PUT, DELETE } = makeCrudRoute({
       heldAt: toIso(item.held_at),
       heldByUserId: item.held_by_user_id ?? null,
       holdReason: item.hold_reason ?? null,
+      heldBy: null,
       expectedAssetEstimate: toIntOrNull(item.expected_asset_estimate),
       scheduledPickupAt: toIso(item.scheduled_pickup_at),
       startedAt: toIso(item.started_at),
@@ -240,6 +244,7 @@ const itadJobListItemSchema = z.object({
   heldAt: z.string().nullable(),
   heldByUserId: z.string().uuid().nullable(),
   holdReason: z.string().nullable(),
+  heldBy: z.object({ id: z.string().uuid(), name: z.string().nullable() }).nullable(),
   expectedAssetEstimate: z.number().int().nullable(),
   scheduledPickupAt: z.string().nullable(),
   startedAt: z.string().nullable(),

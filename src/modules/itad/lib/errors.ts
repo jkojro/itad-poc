@@ -13,6 +13,13 @@ export type ItadJobErrorCode =
   | 'customer_invalid'
   | 'customer_reference_taken'
   | 'reference_conflict'
+  | 'transition_not_allowed'
+  | 'reason_required'
+  | 'comment_required'
+  | 'confirmation_duplicate'
+  | 'confirmation_not_allowed'
+  | 'confirmation_not_required'
+  | 'condition_unmet'
 
 /**
  * Builds the module's coded error. The body keeps the platform `{ error }` shape and
@@ -27,10 +34,12 @@ export function itadJobError(
   code: ItadJobErrorCode,
   message: string,
   fieldErrors?: Record<string, string>,
+  extra?: Record<string, unknown>,
 ): CrudHttpError {
   return new CrudHttpError(status, {
     error: message,
     code: `${ITAD_JOB_ERROR_PREFIX}${code}`,
     ...(fieldErrors ? { fieldErrors } : {}),
+    ...(extra ?? {}),
   })
 }
