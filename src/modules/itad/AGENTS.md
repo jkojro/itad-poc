@@ -16,10 +16,17 @@ Framework-discovered paths (`index.ts`, `acl.ts`, `setup.ts`, `events.ts`, `data
 | `services/` | Module application/infrastructure services with side effects used by commands, e.g. `job-reference-generator.ts` (sequence allocation). Later: `job-condition-evaluator.ts` (reads assets/exceptions/documents and computes condition facts). **Registration in `di.ts` is optional** — unlike some installed modules where `services/` implies DI; a service that writes inside a command's transaction stays a plain module (see Transactions). | Hold business rules (they belong in `domain/`), know who or why called them, write audit entries or emit events. |
 | `module-integrations/` | Reads of other Open Mercato modules through public contracts (`QueryEngine` by entity id, public APIs/DI): `customers.ts`, `users.ts`, later `attachments.ts`. One file per installed module. | Import another module's ORM entity classes or create relations to them. Store foreign IDs as scalars. |
 | `commands/` | One file per resource or use case (`jobs.ts` = create/update/delete, `transitions.ts`). Commands are the only entry point for user-initiated writes: they own transactions, guards, optimistic locking, audit (`buildLog`) and post-commit side effects, and orchestrate `domain/` + `services/`. | Duplicate rules that exist in `domain/`. |
-| `lib/` | Module-internal infrastructure glue: coded HTTP errors (`errors.ts`), request context for hand-written routes (`route-context.ts`), generated-id constants (`constants.ts`). | Become a catch-all: business rules go to `domain/`, cross-module reads to `module-integrations/`, side-effecting operations to `services/`. |
+| `lib/` | Module-internal glue that knows the framework (HTTP, DI, error shapes, generated ids) but holds no ITAD rules and reads no other module's data. Current examples: coded HTTP errors (`errors.ts`), request context for hand-written routes (`route-context.ts`), generated-id constants (`constants.ts`). | Become a catch-all: business rules go to `domain/`, cross-module data reads to `module-integrations/`, side-effecting operations to `services/`. |
 | `components/` | Client UI for this module's pages and widgets. | Call APIs with raw `fetch` (use `@open-mercato/ui` API helpers). |
 | `__integration__/` | Playwright API/UI tests `TC-ITAD-NNN-<scenario>.spec.ts` plus shared fixtures (`itad-job-fixtures.ts`). Self-contained data, cleaned up in `finally`. | Depend on seeded/demo data or run order. |
 | `<dir>/__tests__/` | Jest unit tests next to the code they test (`domain/__tests__/` for the pure rules). | Hit the database. |
+
+### Allowed touchpoints with other modules outside `module-integrations/`
+
+`module-integrations/` is the only place that **reads data** owned by another module. Two other kinds of cross-module imports are allowed where they are used, and are not data reads:
+
+- **Platform infrastructure** used through DI or shared helpers — authorization/RBAC (`rbacService`), organization scope (`resolveOrganizationScopeForRequest`), command bus, query engine, events — in `lib/`, `api/` and `commands/`.
+- **Reusable UI components** exported by installed modules (e.g. `CompanySelectField` from `customers`) in `components/`.
 
 ## External systems
 
