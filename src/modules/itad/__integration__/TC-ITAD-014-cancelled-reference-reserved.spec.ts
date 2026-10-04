@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { apiRequest, getAuthToken } from '@open-mercato/core/helpers/integration/api'
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
-import { createJob, errorCode, transitionOk, uniqueSuffix } from './itadJobFixtures'
+import { createJob, errorCode, transitionOk, uniqueSuffix } from './itad-job-fixtures'
 
 /**
  * TC-ITAD-014 (spec TEST-005, cancellation part; REQ-003): a cancelled job keeps its

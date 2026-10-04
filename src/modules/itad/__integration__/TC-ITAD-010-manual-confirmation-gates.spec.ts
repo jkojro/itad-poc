@@ -17,7 +17,7 @@ import {
   getJob,
   postTransition,
   uniqueSuffix,
-} from './itadJobFixtures'
+} from './itad-job-fixtures'
 
 type TransitionsView = {
   canTransition: boolean

@@ -1,4 +1,4 @@
-import type { ItadJobStatus } from '../data/entities'
+import type { ItadJobStatus } from './job-types'
 import type { ItadJobConditionKey } from './job-conditions'
 import { isTerminalStatus } from './job-editability'
 

@@ -1,4 +1,4 @@
-import type { ItadJobStatus } from '../data/entities'
+import type { ItadJobStatus } from './job-types'
 
 export const ITAD_JOB_EDITABLE_FIELDS = [
   'customerId',

@@ -22,18 +22,18 @@ import { buildOptimisticLockHeader } from '@open-mercato/ui/backend/utils/optimi
 import { surfaceRecordConflict } from '@open-mercato/ui/backend/conflicts'
 import { flash } from '@open-mercato/ui/backend/FlashMessages'
 import { useT } from '@open-mercato/shared/lib/i18n/context'
-import type { ItadJobStatus } from '../data/entities'
+import type { ItadJobStatus } from '../domain/job-types'
 import {
   ITAD_JOB_STATUS_FALLBACK_LABELS,
   ITAD_JOB_STATUS_VARIANTS,
   itadJobStatusLabelKey,
-} from './jobStatus'
+} from './job-status'
 import {
   ITAD_JOB_ACTION_FALLBACK_LABELS,
   ITAD_JOB_CONDITION_FALLBACK_LABELS,
   type ItadJobActionId,
   type ItadJobConditionId,
-} from './jobLifecycleLabels'
+} from './job-lifecycle-labels'
 import type { ItadJobListItem } from './types'
 
 type ConditionView = {

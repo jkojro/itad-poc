@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals'
-import { formatJobReference, referenceYearOf } from '../reference-sequence'
+import { formatJobReference, referenceYearOf } from '../references'
 
 describe('formatJobReference', () => {
   it('zero-pads to five digits', () => {

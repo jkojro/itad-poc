@@ -7,7 +7,7 @@ import {
 } from '@open-mercato/core/helpers/integration/authFixtures'
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
 import { getTokenContext } from '@open-mercato/core/helpers/integration/generalFixtures'
-import { LOCK_HEADER, createSchedulableJob, getJob, postTransition, uniqueSuffix } from './itadJobFixtures'
+import { LOCK_HEADER, createSchedulableJob, getJob, postTransition, uniqueSuffix } from './itad-job-fixtures'
 
 /**
  * TC-ITAD-013 (spec TEST-010 transition part, TEST-009a transition part): a transition

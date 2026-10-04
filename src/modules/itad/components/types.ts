@@ -1,4 +1,4 @@
-import type { ItadJobStatus } from '../data/entities'
+import type { ItadJobStatus } from '../domain/job-types'
 
 /** Shape of one item returned by `GET /api/itad/jobs`. */
 export type ItadJobListItem = {

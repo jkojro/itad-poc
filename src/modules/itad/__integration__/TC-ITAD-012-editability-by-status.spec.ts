@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { apiRequest, getAuthToken } from '@open-mercato/core/helpers/integration/api'
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
-import { createSchedulableJob, errorCode, getJob, postTransition, transitionOk, uniqueSuffix } from './itadJobFixtures'
+import { createSchedulableJob, errorCode, getJob, postTransition, transitionOk, uniqueSuffix } from './itad-job-fixtures'
 
 /**
  * TC-ITAD-012 (spec TEST-008, "Field editability by status"): scheduledPickupAt is

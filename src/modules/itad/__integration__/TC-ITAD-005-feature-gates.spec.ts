@@ -9,7 +9,7 @@ import {
 } from '@open-mercato/core/helpers/integration/authFixtures'
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
 import { getTokenContext } from '@open-mercato/core/helpers/integration/generalFixtures'
-import { createJob, deleteJobIfExists, uniqueSuffix } from './itadJobFixtures'
+import { createJob, deleteJobIfExists, uniqueSuffix } from './itad-job-fixtures'
 
 /**
  * TC-ITAD-005 (spec TEST-009b, CRUD part): a user granted only `itad.jobs.view` can
