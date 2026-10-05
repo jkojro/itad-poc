@@ -135,3 +135,16 @@ export async function advanceToReceiving(request: APIRequestContext, token: stri
 }
 
 export const CONFIRM = (condition: string) => ({ condition, comment: `QA confirmed ${condition}` })
+
+/**
+ * Browser session for an arbitrary user (the core `login` helper only knows fixed roles).
+ * Only sets the session cookie through the login API; the caller navigates afterwards.
+ */
+export async function loginAs(page: import('@playwright/test').Page, email: string, password: string): Promise<void> {
+  const form = new URLSearchParams({ email, password })
+  const response = await page.request.post('/api/auth/login', {
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    data: form.toString(),
+  })
+  expect(response.ok(), `login failed for ${email}: ${response.status()}`).toBe(true)
+}
