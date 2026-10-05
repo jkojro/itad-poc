@@ -1,18 +1,5 @@
 import { Entity, Index, ManyToOne, PrimaryKey, Property, Unique } from '@mikro-orm/decorators/legacy'
-
-export const ITAD_JOB_STATUSES = [
-  'draft',
-  'scheduled',
-  'in_transit',
-  'receiving',
-  'processing',
-  'closeout_review',
-  'completed',
-  'on_hold',
-  'cancelled',
-] as const
-
-export type ItadJobStatus = (typeof ITAD_JOB_STATUSES)[number]
+import type { ItadJobStatus } from '../domain/job-types'
 
 /**
  * One unit of ITAD work for one customer company.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals'
-import { ITAD_JOB_STATUSES, type ItadJobStatus } from '../../data/entities'
+import { ITAD_JOB_STATUSES, type ItadJobStatus } from '../job-types'
 import {
   ITAD_JOB_ACTIONS,
   availableActions,

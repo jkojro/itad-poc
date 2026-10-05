@@ -9,7 +9,8 @@ import {
   createCrudOpenApiFactory,
   createPagedListResponseSchema,
 } from '@open-mercato/shared/lib/openapi/crud'
-import { ITAD_JOB_STATUSES, ItadJob, type ItadJobStatus } from '../../data/entities'
+import { ItadJob } from '../../data/entities'
+import { ITAD_JOB_STATUSES, type ItadJobStatus } from '../../domain/job-types'
 import {
   itadJobCreateSchema,
   itadJobListSchema,
@@ -19,9 +20,9 @@ import {
 } from '../../data/validators'
 import { itadJobCrudEvents, itadJobCrudIndexer } from '../../commands/jobs'
 import { ITAD_JOB_ENTITY_ID } from '../../lib/constants'
-import { loadCompanyNames } from '../../lib/customer-lookup'
-import { getEditableFields } from '../../lib/job-editability'
-import { loadUserDisplayNames } from '../../lib/user-lookup'
+import { loadCompanyNames } from '../../module-integrations/customers'
+import { getEditableFields } from '../../domain/job-editability'
+import { loadUserDisplayNames } from '../../module-integrations/users'
 import type { ItadJobListItem } from '../../components/types'
 
 const id = 'id'

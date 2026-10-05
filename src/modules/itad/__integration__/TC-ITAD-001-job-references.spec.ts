@@ -8,7 +8,7 @@ import {
   getJob,
   referenceNumber,
   uniqueSuffix,
-} from './itadJobFixtures'
+} from './itad-job-fixtures'
 
 /**
  * TC-ITAD-001 (spec TEST-003): consecutive creates issue consecutive references in the

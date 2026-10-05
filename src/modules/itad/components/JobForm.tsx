@@ -13,7 +13,7 @@ import {
   ITAD_JOB_STATUS_FALLBACK_LABELS,
   ITAD_JOB_STATUS_VARIANTS,
   itadJobStatusLabelKey,
-} from './jobStatus'
+} from './job-status'
 import type { ItadJobListItem } from './types'
 import { JobStatusPanel } from './JobStatusPanel'
 import { JobHistory } from './JobHistory'

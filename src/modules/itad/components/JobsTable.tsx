@@ -25,7 +25,7 @@ import {
   ITAD_JOB_STATUS_FALLBACK_LABELS,
   ITAD_JOB_STATUS_VARIANTS,
   itadJobStatusLabelKey,
-} from './jobStatus'
+} from './job-status'
 import type { ItadJobListItem } from './types'
 import { ITAD_JOB_ENTITY_ID } from '../lib/constants'
 

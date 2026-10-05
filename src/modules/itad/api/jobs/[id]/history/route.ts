@@ -3,13 +3,10 @@ import { z } from 'zod'
 import type { EntityManager, FilterQuery } from '@mikro-orm/postgresql'
 import type { OpenApiRouteDoc } from '@open-mercato/shared/lib/openapi'
 import type { QueryEngine } from '@open-mercato/shared/lib/query/types'
-import {
-  ITAD_JOB_STATUSES,
-  ItadJobConditionConfirmation,
-  ItadJobStatusTransition,
-} from '../../../../data/entities'
-import { ITAD_JOB_ACTIONS } from '../../../../lib/job-state-machine'
-import { loadUserDisplayNames } from '../../../../lib/user-lookup'
+import { ItadJobConditionConfirmation, ItadJobStatusTransition } from '../../../../data/entities'
+import { ITAD_JOB_STATUSES } from '../../../../domain/job-types'
+import { ITAD_JOB_ACTIONS } from '../../../../domain/job-state-machine'
+import { loadUserDisplayNames } from '../../../../module-integrations/users'
 import {
   itadRouteErrorResponse,
   jobIdParamsSchema,

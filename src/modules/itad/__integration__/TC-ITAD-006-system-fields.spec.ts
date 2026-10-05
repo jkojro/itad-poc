@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { apiRequest, getAuthToken } from '@open-mercato/core/helpers/integration/api'
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
 import { readJsonSafe } from '@open-mercato/core/helpers/integration/generalFixtures'
-import { createJob, deleteJobIfExists, getJob, uniqueSuffix } from './itadJobFixtures'
+import { createJob, deleteJobIfExists, getJob, uniqueSuffix } from './itad-job-fixtures'
 
 /**
  * TC-ITAD-006 (spec TEST-009c): status, references and lifecycle timestamps are never

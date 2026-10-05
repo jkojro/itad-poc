@@ -15,13 +15,13 @@ import {
   itadJobUpdateSchema,
 } from '../data/validators'
 import { itadJobError } from '../lib/errors'
-import { allocateJobReference } from '../lib/reference-sequence'
-import { isCompanyInScope } from '../lib/customer-lookup'
+import { allocateJobReference } from '../services/job-reference-generator'
+import { isCompanyInScope } from '../module-integrations/customers'
 import {
   findEditabilityViolation,
   isTerminalStatus,
   type JobFieldValues,
-} from '../lib/job-editability'
+} from '../domain/job-editability'
 import { ITAD_JOB_ENTITY_ID } from '../lib/constants'
 
 const CUSTOMER_REFERENCE_INDEX = 'itad_jobs_customer_reference_unique'

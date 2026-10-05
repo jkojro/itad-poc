@@ -1,28 +1,20 @@
 import type { EntityManager } from '@mikro-orm/postgresql'
+import { formatJobReference, referenceYearOf } from '../domain/references'
 
-export const JOB_REFERENCE_PREFIX = 'ITAD'
+/** Sequence kind for job references (room for later document numbering). */
 export const JOB_REFERENCE_KIND = 'job'
-const MIN_DIGITS = 5
-
-/** `ITAD-2026-00042`; numbers above 99999 widen instead of wrapping. */
-export function formatJobReference(year: number, value: number): string {
-  return `${JOB_REFERENCE_PREFIX}-${year}-${String(value).padStart(MIN_DIGITS, '0')}`
-}
-
-/** Reference year is the UTC year of the same instant written to `created_at`. */
-export function referenceYearOf(at: Date): number {
-  return at.getUTCFullYear()
-}
 
 type SequenceRow = { last_value: number | string }
 
 /**
  * Atomically issues the next number for `(tenant, organization, kind, year)`.
  *
- * MUST run on the EntityManager that holds the job-create transaction: the upsert
- * takes a row lock until commit, so concurrent creates in one organization
- * serialize here, and a rolled-back create rolls the increment back with it.
- * `em.execute` runs inside that EntityManager's transaction context.
+ * Transaction contract: `em` MUST be the EntityManager of the calling command's open
+ * transaction (inside `withAtomicFlush(..., { transaction: true })`). The generator never
+ * resolves an EntityManager itself — it is deliberately not a DI service — so the
+ * sequence increment and the INSERT that consumes the number can never end up in two
+ * transactions. The upsert holds the sequence row lock until commit; a rolled-back
+ * create rolls the increment back with it, so an issued number is never handed out twice.
  */
 export async function allocateSequenceValue(
   em: EntityManager,
@@ -46,6 +38,7 @@ export async function allocateSequenceValue(
   return value
 }
 
+/** Issues the next `ITAD-{YYYY}-{NNNNN}` reference; same transaction contract as above. */
 export async function allocateJobReference(
   em: EntityManager,
   scope: { tenantId: string; organizationId: string },

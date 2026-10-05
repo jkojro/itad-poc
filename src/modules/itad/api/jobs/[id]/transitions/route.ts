@@ -15,11 +15,11 @@ import {
   ITAD_JOB_LOCK_RESOURCE_KIND,
   itadJobTransitionSchema,
   type ItadJobTransitionResult,
-} from '../../../../commands/transition'
-import { ITAD_JOB_STATUSES } from '../../../../data/entities'
-import { isCompanyInScope } from '../../../../lib/customer-lookup'
-import { ITAD_JOB_CONDITIONS, ITAD_JOB_CONDITION_KEYS, evaluateConditions } from '../../../../lib/job-conditions'
-import { ITAD_JOB_ACTIONS, ITAD_JOB_TRANSITIONS, availableActions, resolveTargetStatus } from '../../../../lib/job-state-machine'
+} from '../../../../commands/transitions'
+import { ITAD_JOB_STATUSES } from '../../../../domain/job-types'
+import { isCompanyInScope } from '../../../../module-integrations/customers'
+import { ITAD_JOB_CONDITIONS, ITAD_JOB_CONDITION_KEYS, evaluateConditions } from '../../../../domain/job-conditions'
+import { ITAD_JOB_ACTIONS, ITAD_JOB_TRANSITIONS, availableActions, resolveTargetStatus } from '../../../../domain/job-state-machine'
 import {
   itadRouteErrorResponse,
   jobIdParamsSchema,

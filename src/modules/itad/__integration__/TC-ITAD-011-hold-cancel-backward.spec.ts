@@ -10,7 +10,7 @@ import {
   postTransition,
   transitionOk,
   uniqueSuffix,
-} from './itadJobFixtures'
+} from './itad-job-fixtures'
 
 /**
  * TC-ITAD-011 (spec TEST-008, REQ-006, REQ-008): hold stores and resume restores the

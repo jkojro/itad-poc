@@ -3,7 +3,7 @@ import { getAuthToken } from '@open-mercato/core/helpers/integration/api'
 import { login } from '@open-mercato/core/helpers/integration/auth'
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
 import { fillControlledInput, waitForApiMutation } from '@open-mercato/core/helpers/integration/ui'
-import { createJob, deleteJobIfExists, getJob, uniqueSuffix } from './itadJobFixtures'
+import { createJob, deleteJobIfExists, getJob, uniqueSuffix } from './itad-job-fixtures'
 
 const JOB_URL = /\/backend\/itad\/jobs\/([0-9a-f-]{36})/
 

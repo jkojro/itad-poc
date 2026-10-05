@@ -1,5 +1,5 @@
-import type { ItadJobConditionKey } from '../lib/job-conditions'
-import type { ItadJobAction } from '../lib/job-state-machine'
+import type { ItadJobConditionKey } from '../domain/job-conditions'
+import type { ItadJobAction } from '../domain/job-state-machine'
 
 export type ItadJobActionId = ItadJobAction
 export type ItadJobConditionId = ItadJobConditionKey

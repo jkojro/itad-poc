@@ -5,7 +5,7 @@ import {
   isTerminalStatus,
   type JobFieldValues,
 } from '../job-editability'
-import type { ItadJobStatus } from '../../data/entities'
+import type { ItadJobStatus } from '../job-types'
 
 const pickup = new Date('2026-10-10T08:00:00.000Z')
 

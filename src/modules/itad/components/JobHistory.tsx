@@ -5,14 +5,14 @@ import { Spinner } from '@open-mercato/ui/primitives/spinner'
 import { SectionHeader } from '@open-mercato/ui/backend/SectionHeader'
 import { readApiResultOrThrow } from '@open-mercato/ui/backend/utils/apiCall'
 import { useT } from '@open-mercato/shared/lib/i18n/context'
-import type { ItadJobStatus } from '../data/entities'
-import { ITAD_JOB_STATUS_FALLBACK_LABELS, itadJobStatusLabelKey } from './jobStatus'
+import type { ItadJobStatus } from '../domain/job-types'
+import { ITAD_JOB_STATUS_FALLBACK_LABELS, itadJobStatusLabelKey } from './job-status'
 import {
   ITAD_JOB_ACTION_FALLBACK_LABELS,
   ITAD_JOB_CONDITION_FALLBACK_LABELS,
   type ItadJobActionId,
   type ItadJobConditionId,
-} from './jobLifecycleLabels'
+} from './job-lifecycle-labels'
 
 type Actor = { id: string; name: string | null }
 

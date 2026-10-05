@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ITAD_JOB_STATUSES } from './entities'
+import { ITAD_JOB_STATUSES } from '../domain/job-types'
 
 export const itadJobStatusSchema = z.enum(ITAD_JOB_STATUSES)
 

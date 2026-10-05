@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { apiRequest, getAuthToken } from '@open-mercato/core/helpers/integration/api'
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
 import { readJsonSafe } from '@open-mercato/core/helpers/integration/generalFixtures'
-import { createJob, deleteJobIfExists, uniqueSuffix } from './itadJobFixtures'
+import { createJob, deleteJobIfExists, uniqueSuffix } from './itad-job-fixtures'
 
 type ErrorBody = { code?: string; fieldErrors?: Record<string, string> }
 

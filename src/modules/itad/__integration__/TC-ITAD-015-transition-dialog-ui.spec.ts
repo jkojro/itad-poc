@@ -3,7 +3,7 @@ import { getAuthToken } from '@open-mercato/core/helpers/integration/api'
 import { login } from '@open-mercato/core/helpers/integration/auth'
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
 import { waitForApiMutation } from '@open-mercato/core/helpers/integration/ui'
-import { advanceToReceiving, createSchedulableJob, getJob, postTransition, uniqueSuffix } from './itadJobFixtures'
+import { advanceToReceiving, createSchedulableJob, getJob, postTransition, uniqueSuffix } from './itad-job-fixtures'
 
 /**
  * TC-ITAD-015 (spec TEST-011, lifecycle part): on the job detail page a supervisor

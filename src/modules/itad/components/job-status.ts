@@ -1,5 +1,5 @@
 import type { StatusMap } from '@open-mercato/ui/primitives/status-badge'
-import { ITAD_JOB_STATUSES, type ItadJobStatus } from '../data/entities'
+import { ITAD_JOB_STATUSES, type ItadJobStatus } from '../domain/job-types'
 
 /** Semantic variants only — never hard-coded colors. */
 export const ITAD_JOB_STATUS_VARIANTS: StatusMap<ItadJobStatus> = {

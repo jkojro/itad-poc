@@ -10,7 +10,7 @@ import {
   postTransition,
   transitionOk,
   uniqueSuffix,
-} from './itadJobFixtures'
+} from './itad-job-fixtures'
 
 type HistoryItem = { action: string; from: string; to: string; actor: { name: string | null }; confirmations: Array<{ condition: string; comment: string }> }
 

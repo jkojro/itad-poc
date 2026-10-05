@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { getAuthToken } from '@open-mercato/core/helpers/integration/api'
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
-import { createJob, deleteJobIfExists, referenceNumber, uniqueSuffix } from './itadJobFixtures'
+import { createJob, deleteJobIfExists, referenceNumber, uniqueSuffix } from './itad-job-fixtures'
 
 /**
  * TC-ITAD-002 (spec TEST-004): parallel creates in one organization serialize on the

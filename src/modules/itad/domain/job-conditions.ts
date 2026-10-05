@@ -1,4 +1,4 @@
-import type { ItadJobStatus } from '../data/entities'
+import type { ItadJobStatus } from './job-types'
 import {
   ITAD_JOB_TRANSITIONS,
   isReasonValid,

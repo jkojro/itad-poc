@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { apiRequest, getAuthToken } from '@open-mercato/core/helpers/integration/api'
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
-import { createJob, deleteJobIfExists, getJob, uniqueSuffix } from './itadJobFixtures'
+import { createJob, deleteJobIfExists, getJob, uniqueSuffix } from './itad-job-fixtures'
 
 const LOCK_HEADER = 'x-om-ext-optimistic-lock-expected-updated-at'
 
