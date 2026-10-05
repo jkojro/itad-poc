@@ -9,6 +9,9 @@ const events = [
   { id: 'itad.job.status_changed', label: 'ITAD Job Status Changed', entity: 'job', category: 'lifecycle', clientBroadcast: true },
   // Payload: { jobId, transitionId, condition, confirmedByUserId, tenantId, organizationId }.
   { id: 'itad.job.condition_manually_confirmed', label: 'ITAD Job Condition Manually Confirmed', entity: 'job', category: 'lifecycle' },
+  // Payload: { jobId, importId, importedCount, skippedCount, actorUserId, tenantId, organizationId }.
+  // Ids and counts only: manifest source data never travels in events.
+  { id: 'itad.manifest.imported', label: 'ITAD Manifest Imported', entity: 'manifest_import', category: 'lifecycle' },
 ] as const
 
 export const eventsConfig = createModuleEvents({

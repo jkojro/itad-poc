@@ -43,3 +43,34 @@ export function itadJobError(
     ...(extra ?? {}),
   })
 }
+
+export const ITAD_MANIFEST_ERROR_PREFIX = 'itad.manifest.errors.'
+
+export type ItadManifestErrorCode =
+  | 'manifest_locked'
+  | 'file_required'
+  | 'file_unreadable'
+  | 'file_type_unsupported'
+  | 'file_too_large'
+  | 'file_empty'
+  | 'too_many_rows'
+  | 'too_many_columns'
+  | 'file_changed'
+  | 'mapping_invalid'
+  | 'manifest_rows_invalid'
+  | 'warnings_not_accepted'
+  | 'manifest_already_imported'
+
+/** Coded manifest error; same body shape as `itadJobError`, with the manifest key prefix. */
+export function itadManifestError(
+  status: 400 | 409,
+  code: ItadManifestErrorCode,
+  message: string,
+  extra?: Record<string, unknown>,
+): CrudHttpError {
+  return new CrudHttpError(status, {
+    error: message,
+    code: `${ITAD_MANIFEST_ERROR_PREFIX}${code}`,
+    ...(extra ?? {}),
+  })
+}

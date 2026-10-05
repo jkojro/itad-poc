@@ -16,6 +16,8 @@ export type ItadJobListItem = {
   holdReason: string | null
   heldBy: { id: string; name: string | null } | null
   expectedAssetEstimate: number | null
+  /** Derived: active manifest items of the job. */
+  expectedAssetCount: number
   scheduledPickupAt: string | null
   startedAt: string | null
   completedAt: string | null
