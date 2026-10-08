@@ -17,11 +17,15 @@ import {
 import type { ItadJobListItem } from './types'
 import { JobStatusPanel } from './JobStatusPanel'
 import { JobHistory } from './JobHistory'
+import { JobManifestPanel } from './JobManifestPanel'
+import { useGrantedFeatures } from './use-granted-features'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@open-mercato/ui/primitives/tabs'
 import { ITAD_JOB_ENTITY_ID } from '../lib/constants'
 
 const API_PATH = 'itad/jobs'
 const LIST_HREF = '/backend/itad/jobs'
 const ENTITY_ID = ITAD_JOB_ENTITY_ID
+const MANIFEST_FEATURES = ['itad.manifest.view', 'itad.manifest.manage'] as const
 
 type Translate = ReturnType<typeof useT>
 
@@ -194,6 +198,10 @@ function JobSummary({ job, t }: { job: ItadJobListItem; t: Translate }) {
         </dd>
       </div>
       <div>
+        <dt className="text-muted-foreground">{t('itad.jobs.detail.expectedAssetCount', 'Expected devices (manifest)')}</dt>
+        <dd>{job.expectedAssetCount}</dd>
+      </div>
+      <div>
         <dt className="text-muted-foreground">{t('itad.jobs.detail.startedAt', 'Started')}</dt>
         <dd>{formatDateTime(job.startedAt)}</dd>
       </div>
@@ -275,6 +283,22 @@ export function JobDetailForm({ id }: { id: string }) {
   const [notFound, setNotFound] = React.useState(false)
   const [reloadToken, setReloadToken] = React.useState(0)
   const reload = React.useCallback(() => setReloadToken((value) => value + 1), [])
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { granted } = useGrantedFeatures(MANIFEST_FEATURES)
+  const canViewManifest = granted.has('itad.manifest.view')
+  // The selected tab lives in the URL (`?tab=manifest`) so it survives reloads and can be linked.
+  const tab = searchParams?.get('tab') === 'manifest' && canViewManifest ? 'manifest' : 'overview'
+  const selectTab = React.useCallback(
+    (next: string) => {
+      const params = new URLSearchParams(searchParams?.toString() ?? '')
+      if (next === 'overview') params.delete('tab')
+      else params.set('tab', next)
+      const query = params.toString()
+      router.replace(`${LIST_HREF}/${id}${query ? `?${query}` : ''}`, { scroll: false })
+    },
+    [id, router, searchParams],
+  )
 
   React.useEffect(() => {
     let cancelled = false
@@ -342,7 +366,7 @@ export function JobDetailForm({ id }: { id: string }) {
     ? toJobFormValues(job)
     : { id, customerId: '', name: '', customerReference: '', expectedAssetEstimate: null, scheduledPickupAt: null, updatedAt: null }
 
-  return (
+  const overview = (
     <div className="space-y-6">
       <CrudForm<JobFormValues>
         key={job?.updatedAt ?? 'loading'}
@@ -369,5 +393,20 @@ export function JobDetailForm({ id }: { id: string }) {
       {job ? <JobStatusPanel job={job} onChanged={reload} /> : null}
       {job ? <JobHistory jobId={job.id} version={job.updatedAt} /> : null}
     </div>
+  )
+
+  if (!job || !canViewManifest) return overview
+
+  return (
+    <Tabs value={tab} onValueChange={selectTab} variant="underline">
+      <TabsList aria-label={t('itad.jobs.detail.tabs', 'Job sections')}>
+        <TabsTrigger value="overview">{t('itad.jobs.detail.tab.overview', 'Overview')}</TabsTrigger>
+        <TabsTrigger value="manifest">{t('itad.manifest.title', 'Manifest')}</TabsTrigger>
+      </TabsList>
+      <TabsContent value="overview" className="pt-4">{overview}</TabsContent>
+      <TabsContent value="manifest" className="pt-4">
+        <JobManifestPanel job={job} canManage={granted.has('itad.manifest.manage')} onChanged={reload} />
+      </TabsContent>
+    </Tabs>
   )
 }

@@ -68,6 +68,14 @@ export function buildJobColumns(
       cell: ({ row }) => formatDateTime(row.original.scheduledPickupAt),
     },
     {
+      id: 'expectedAssetCount',
+      accessorKey: 'expectedAssetCount',
+      header: t('itad.jobs.table.column.expectedAssetCount', 'Expected (manifest)'),
+      enableSorting: false,
+      meta: { priority: 5 },
+      cell: ({ row }) => row.original.expectedAssetCount,
+    },
+    {
       id: 'updatedAt',
       accessorKey: 'updatedAt',
       header: t('itad.jobs.table.column.updatedAt', 'Updated'),

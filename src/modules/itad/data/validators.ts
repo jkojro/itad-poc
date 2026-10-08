@@ -80,3 +80,39 @@ export const itadJobListSchema = z.object({
 export type ItadJobCreateInput = z.infer<typeof itadJobCreateSchema>
 export type ItadJobUpdateInput = z.infer<typeof itadJobUpdateSchema>
 export type ItadJobListQuery = z.infer<typeof itadJobListSchema>
+
+const optionalColumnSchema = z.preprocess(emptyToNull, z.string().min(1).max(300).nullable().optional())
+
+/** Target field → source column chosen in the import wizard (`serial` required). */
+export const itadManifestMappingSchema = z.object({
+  serial: z.string().trim().min(1).max(300),
+  customerAssetTag: optionalColumnSchema,
+  manufacturer: optionalColumnSchema,
+  model: optionalColumnSchema,
+})
+
+export type ItadManifestMappingInput = z.infer<typeof itadManifestMappingSchema>
+
+/**
+ * Durable input of `itad.manifest.import`. The file bytes travel in the command
+ * context, never in this payload, so audit records hold no customer source data.
+ */
+export const itadManifestImportSchema = z.object({
+  jobId: z.string().uuid(),
+  fileName: z.string().trim().min(1).max(255),
+  fileType: z.string().max(255).nullable(),
+  fileSize: z.number().int().nonnegative(),
+  mapping: itadManifestMappingSchema,
+  sheet: z.string().max(200).nullable().optional(),
+  expectedSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  acceptWarnings: z.boolean().default(false),
+})
+
+export type ItadManifestImportInput = z.infer<typeof itadManifestImportSchema>
+
+export const itadManifestItemListSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  search: z.string().trim().max(200).optional(),
+  id: z.string().uuid().optional(),
+})

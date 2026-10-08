@@ -1,5 +1,6 @@
 import { Entity, Index, ManyToOne, PrimaryKey, Property, Unique } from '@mikro-orm/decorators/legacy'
 import type { ItadJobStatus } from '../domain/job-types'
+import type { ManifestFieldMapping, RowWarningCode, SourceDataEntry } from '../domain/manifest-mapping'
 
 /**
  * One unit of ITAD work for one customer company.
@@ -198,4 +199,164 @@ export class ItadJobConditionConfirmation {
 
   @Property({ name: 'confirmed_at', type: Date, onCreate: () => new Date() })
   confirmedAt: Date = new Date()
+}
+
+export type ManifestImportMapping = { fields: ManifestFieldMapping; unused: string[] }
+
+/**
+ * One committed manifest file import (spec "Data Models"). Append-only. The original
+ * file lives in the installed `attachments` module (owner `itad:itad_manifest_import` /
+ * this id), referenced by `attachmentId` only. Identity = job + file hash + sheet, so a
+ * double submit is rejected while other sheets of a workbook stay importable.
+ */
+@Entity({ tableName: 'itad_manifest_imports' })
+@Index({
+  name: 'itad_manifest_imports_scope_job_idx',
+  properties: ['tenantId', 'organizationId', 'job', 'createdAt'],
+})
+@Index({
+  name: 'itad_manifest_imports_file_unique',
+  expression:
+    'create unique index "itad_manifest_imports_file_unique" on "itad_manifest_imports" ("tenant_id", "organization_id", "job_id", "file_sha256", coalesce("sheet_name", \'\'))',
+})
+export class ItadManifestImport {
+  @PrimaryKey({ type: 'uuid' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  @Property({ name: 'attachment_id', type: 'uuid' })
+  attachmentId!: string
+
+  @Property({ name: 'file_name', type: 'text' })
+  fileName!: string
+
+  @Property({ name: 'mime_type', type: 'text' })
+  mimeType!: string
+
+  @Property({ name: 'file_size', type: 'integer' })
+  fileSize!: number
+
+  @Property({ name: 'file_sha256', type: 'text' })
+  fileSha256!: string
+
+  @Property({ type: 'text' })
+  format!: 'csv' | 'xlsx'
+
+  @Property({ name: 'sheet_name', type: 'text', nullable: true })
+  sheetName?: string | null
+
+  @Property({ name: 'source_columns', type: 'jsonb' })
+  sourceColumns!: string[]
+
+  @Property({ type: 'jsonb' })
+  mapping!: ManifestImportMapping
+
+  @Property({ type: 'jsonb' })
+  warnings: Array<{ code: RowWarningCode; row: number; column?: string }> = []
+
+  @Property({ name: 'accepted_warnings_by_user_id', type: 'uuid', nullable: true })
+  acceptedWarningsByUserId?: string | null
+
+  @Property({ name: 'total_rows', type: 'integer' })
+  totalRows!: number
+
+  @Property({ name: 'imported_count', type: 'integer' })
+  importedCount!: number
+
+  @Property({ name: 'skipped_count', type: 'integer' })
+  skippedCount!: number
+
+  @Property({ name: 'blank_count', type: 'integer' })
+  blankCount!: number
+
+  @Property({ name: 'skipped_rows', type: 'jsonb' })
+  skippedRows: Array<{ row: number; serial: string }> = []
+
+  @Property({ name: 'job_status_at_change', type: 'text' })
+  jobStatusAtChange!: ItadJobStatus
+
+  @Property({ name: 'imported_by_user_id', type: 'uuid' })
+  importedByUserId!: string
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
+}
+
+/**
+ * One expected device from a customer manifest. `serialNormalized` is unique per job
+ * among active items. `sourceData` holds every column of the source row as parsed
+ * logical values; it is immutable and belongs to the import that created the item.
+ */
+@Entity({ tableName: 'itad_manifest_items' })
+@Index({
+  name: 'itad_manifest_items_scope_job_idx',
+  properties: ['tenantId', 'organizationId', 'job', 'deletedAt'],
+})
+@Index({
+  name: 'itad_manifest_items_serial_unique',
+  expression:
+    'create unique index "itad_manifest_items_serial_unique" on "itad_manifest_items" ("tenant_id", "organization_id", "job_id", "serial_normalized") where "deleted_at" is null',
+})
+export class ItadManifestItem {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  @ManyToOne(() => ItadManifestImport, { fieldName: 'import_id' })
+  manifestImport!: ItadManifestImport
+
+  @Property({ name: 'source_row', type: 'integer' })
+  sourceRow!: number
+
+  @Property({ type: 'text' })
+  serial!: string
+
+  @Property({ name: 'serial_normalized', type: 'text' })
+  serialNormalized!: string
+
+  @Property({ name: 'customer_asset_tag', type: 'text', nullable: true })
+  customerAssetTag?: string | null
+
+  @Property({ type: 'text', nullable: true })
+  manufacturer?: string | null
+
+  @Property({ type: 'text', nullable: true })
+  model?: string | null
+
+  @Property({ name: 'source_data', type: 'jsonb' })
+  sourceData!: SourceDataEntry[]
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
+
+  @Property({ name: 'updated_at', type: Date, onUpdate: () => new Date() })
+  updatedAt: Date = new Date()
+
+  @Property({ name: 'deleted_at', type: Date, nullable: true })
+  deletedAt?: Date | null
+
+  @Property({ name: 'deleted_by_user_id', type: 'uuid', nullable: true })
+  deletedByUserId?: string | null
+
+  @Property({ name: 'delete_reason', type: 'text', nullable: true })
+  deleteReason?: string | null
+
+  @Property({ name: 'delete_job_status', type: 'text', nullable: true })
+  deleteJobStatus?: ItadJobStatus | null
 }
