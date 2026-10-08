@@ -34,6 +34,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       jobId: job.id,
       fileName: upload.fileName,
       buffer: upload.buffer,
+      sheet: upload.sheet,
       mapping: upload.mapping as ManifestFieldMapping | null,
     })
     if (!result.ok) return await manifestError(400, result.code)

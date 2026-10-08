@@ -110,6 +110,15 @@ export const itadManifestImportSchema = z.object({
 
 export type ItadManifestImportInput = z.infer<typeof itadManifestImportSchema>
 
+/** Durable input of `itad.manifest.delete_item`; the reason is required while the job is receiving. */
+export const itadManifestItemDeleteSchema = z.object({
+  jobId: z.string().uuid(),
+  itemId: z.string().uuid(),
+  reason: z.string().max(1000).nullable().optional(),
+})
+
+export type ItadManifestItemDeleteInput = z.infer<typeof itadManifestItemDeleteSchema>
+
 export const itadManifestItemListSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(50),

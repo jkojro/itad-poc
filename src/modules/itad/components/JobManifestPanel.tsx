@@ -15,9 +15,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@open-mercato/ui/primitives/dialog'
-import { readApiResultOrThrow } from '@open-mercato/ui/backend/utils/apiCall'
+import { Textarea } from '@open-mercato/ui/primitives/textarea'
+import { FormField } from '@open-mercato/ui/primitives/form-field'
+import { DialogFooter } from '@open-mercato/ui/primitives/dialog'
+import { apiCall, readApiResultOrThrow } from '@open-mercato/ui/backend/utils/apiCall'
+import { flash } from '@open-mercato/ui/backend/FlashMessages'
 import { useT } from '@open-mercato/shared/lib/i18n/context'
-import { canChangeManifest } from '../domain/manifest-rules'
+import { MANIFEST_DELETE_REASON_MIN, canChangeManifest, effectiveJobStatus } from '../domain/manifest-rules'
 import { ITAD_MANIFEST_ITEM_ENTITY_ID } from '../lib/constants'
 import { ITAD_JOB_STATUS_FALLBACK_LABELS, itadJobStatusLabelKey } from './job-status'
 import { ManifestImportDialog } from './ManifestImportDialog'
@@ -95,6 +99,108 @@ function SourceDataDialog({ item, onClose }: { item: ManifestItemRow | null; onC
   )
 }
 
+/**
+ * Removes one manifest item. A reason is required while the job is receiving (the
+ * removal then shows in the job history with a "During receiving" badge).
+ */
+function RemoveItemDialog({
+  jobId,
+  item,
+  reasonRequired,
+  onClose,
+  onRemoved,
+}: {
+  jobId: string
+  item: ManifestItemRow | null
+  reasonRequired: boolean
+  onClose: () => void
+  onRemoved: () => void
+}) {
+  const t = useT()
+  const [reason, setReason] = React.useState('')
+  const [submitting, setSubmitting] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    setReason('')
+    setSubmitting(false)
+    setError(null)
+  }, [item])
+
+  const trimmed = reason.trim()
+  const canSubmit =
+    !submitting && (reasonRequired ? trimmed.length >= MANIFEST_DELETE_REASON_MIN : trimmed.length === 0 || trimmed.length >= MANIFEST_DELETE_REASON_MIN)
+
+  const submit = async () => {
+    if (!item || !canSubmit) return
+    setSubmitting(true)
+    setError(null)
+    const call = await apiCall<{ error?: string }>(
+      `/api/itad/jobs/${encodeURIComponent(jobId)}/manifest/items/${encodeURIComponent(item.id)}`,
+      {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ reason: trimmed || null }),
+      },
+    )
+    if (call.ok) {
+      flash(t('itad.manifest.remove.flash.done', 'Removed {serial} from the manifest', { serial: item.serial }), 'success')
+      onRemoved()
+      onClose()
+      return
+    }
+    setSubmitting(false)
+    setError(
+      typeof call.result?.error === 'string' && call.result.error
+        ? call.result.error
+        : t('itad.manifest.remove.error', 'Could not remove the manifest item'),
+    )
+  }
+
+  return (
+    <Dialog open={item !== null} onOpenChange={(open) => { if (!open && !submitting) onClose() }}>
+      <DialogContent
+        onKeyDown={(event) => {
+          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+            event.preventDefault()
+            void submit()
+          }
+        }}
+      >
+        {item ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>{t('itad.manifest.remove.title', 'Remove {serial} from the manifest', { serial: item.serial })}</DialogTitle>
+              <DialogDescription>
+                {reasonRequired
+                  ? t('itad.manifest.remove.descriptionReceiving', 'The job is in receiving, so the removal and its reason are shown in the job history.')
+                  : t('itad.manifest.remove.description', 'The device will no longer be expected. Its source data is kept for audit.')}
+              </DialogDescription>
+            </DialogHeader>
+            <FormField
+              label={t('itad.manifest.remove.reason', 'Reason')}
+              required={reasonRequired}
+              description={t('itad.manifest.remove.reasonHint', '3–1000 characters, stored in the job history.')}
+            >
+              <Textarea value={reason} maxLength={1000} autoFocus onChange={(event) => setReason(event.target.value)} />
+            </FormField>
+            {error ? <Alert status="error"><AlertDescription>{error}</AlertDescription></Alert> : null}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
+                {t('itad.manifest.import.cancel', 'Cancel')}
+              </Button>
+              <Button type="button" variant="destructive" onClick={() => void submit()} disabled={!canSubmit}>
+                {submitting ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                {t('itad.manifest.remove.submit', 'Remove')}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function ImportsList({ t, jobId, imports }: { t: Translate; jobId: string; imports: ManifestImportListItem[] }) {
   if (!imports.length) return null
   return (
@@ -152,6 +258,7 @@ export function JobManifestPanel({
   const [page, setPage] = React.useState(1)
   const [importOpen, setImportOpen] = React.useState(false)
   const [sourceItem, setSourceItem] = React.useState<ManifestItemRow | null>(null)
+  const [removeItem, setRemoveItem] = React.useState<ManifestItemRow | null>(null)
   const columns = React.useMemo(() => buildItemColumns(t), [t])
   const basePath = `/api/itad/jobs/${encodeURIComponent(job.id)}/manifest`
   const editable = canChangeManifest(job)
@@ -243,7 +350,17 @@ export function JobManifestPanel({
           )}
           rowActions={(row) => (
             <RowActions
-              items={[{ id: 'itad.manifest.sourceData', label: t('itad.manifest.actions.sourceData', 'Source data'), onSelect: () => setSourceItem(row) }]}
+              items={[
+                { id: 'itad.manifest.sourceData', label: t('itad.manifest.actions.sourceData', 'Source data'), onSelect: () => setSourceItem(row) },
+                ...(canManage && editable
+                  ? [{
+                      id: 'itad.manifest.remove',
+                      label: t('itad.manifest.actions.remove', 'Remove'),
+                      destructive: true,
+                      onSelect: () => setRemoveItem(row),
+                    }]
+                  : []),
+              ]}
             />
           )}
           onRowClick={(row) => setSourceItem(row)}
@@ -271,6 +388,15 @@ export function JobManifestPanel({
       )}
 
       <SourceDataDialog item={sourceItem} onClose={() => setSourceItem(null)} />
+      {canManage && editable ? (
+        <RemoveItemDialog
+          jobId={job.id}
+          item={removeItem}
+          reasonRequired={effectiveJobStatus(job) === 'receiving'}
+          onClose={() => setRemoveItem(null)}
+          onRemoved={refresh}
+        />
+      ) : null}
       {canManage && editable ? (
         <ManifestImportDialog jobId={job.id} open={importOpen} onOpenChange={setImportOpen} onImported={refresh} />
       ) : null}

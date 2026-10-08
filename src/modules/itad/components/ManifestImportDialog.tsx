@@ -140,12 +140,13 @@ export function ManifestImportDialog({
     typeof body?.error === 'string' && body.error ? body.error : fallback
 
   const runPreview = React.useCallback(
-    async (target: File, nextMapping: ManifestMappingValue | null): Promise<ManifestPreview | null> => {
+    async (target: File, nextMapping: ManifestMappingValue | null, sheet: string | null): Promise<ManifestPreview | null> => {
       setBusy(true)
       setError(null)
       const form = new FormData()
       form.append('file', target)
       if (nextMapping) form.append('mapping', JSON.stringify(nextMapping))
+      if (sheet) form.append('sheet', sheet)
       const call = await apiCall<ManifestPreview & { error?: string }>(`${basePath}/preview`, { method: 'POST', body: form })
       setBusy(false)
       if (!call.ok || !call.result) {
@@ -163,16 +164,23 @@ export function ManifestImportDialog({
     const selected = files[0]
     if (!selected) return
     setFile(selected)
-    const result = await runPreview(selected, null)
+    const result = await runPreview(selected, null, null)
     if (result) {
       setMapping(result.mapping)
       setStep('mapping')
     }
   }
 
+  // Another sheet has other columns: preview it again and start from its suggested mapping.
+  const onSheetChange = async (sheet: string) => {
+    if (!file || sheet === preview?.sheetName) return
+    const result = await runPreview(file, null, sheet)
+    if (result) setMapping(result.mapping)
+  }
+
   const goToPreview = async () => {
     if (!file || mappingProblem) return
-    const result = await runPreview(file, mapping)
+    const result = await runPreview(file, mapping, preview?.sheetName ?? null)
     if (!result) return
     // The server re-validates the mapping; an invalid one yields no row evaluation.
     if (result.mappingError) {
@@ -190,6 +198,7 @@ export function ManifestImportDialog({
     form.append('file', file)
     form.append('mapping', JSON.stringify(mapping))
     form.append('expectedSha256', preview.sha256)
+    if (preview.sheetName) form.append('sheet', preview.sheetName)
     form.append('acceptWarnings', acceptWarnings ? 'true' : 'false')
     const call = await apiCall<ManifestImportResult & { error?: string; code?: string }>(`${basePath}/imports`, {
       method: 'POST',
@@ -247,12 +256,12 @@ export function ManifestImportDialog({
           {step === 'file' ? (
             <FileUploadArea
               className="w-full"
-              accept=".csv,text/csv"
+              accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               multiple={false}
               maxSizeBytes={MAX_FILE_BYTES}
               disabled={busy}
-              heading={t('itad.manifest.import.file.heading', 'Choose a CSV file or drag & drop it here.')}
-              description={t('itad.manifest.import.file.hint', 'CSV in UTF-8, up to 10 MB and 5,000 rows. The first non-empty row must hold the column names.')}
+              heading={t('itad.manifest.import.file.heading', 'Choose a CSV or XLSX file or drag & drop it here.')}
+              description={t('itad.manifest.import.file.hint', 'CSV (UTF-8) or XLSX, up to 10 MB and 5,000 rows. The first non-empty row must hold the column names.')}
               onFilesSelected={(files) => void onFileSelected(files)}
             />
           ) : null}
@@ -266,6 +275,23 @@ export function ManifestImportDialog({
                   columns: preview.columns.length,
                 })}
               </p>
+              {preview.sheets.length > 1 ? (
+                <FormField
+                  label={t('itad.manifest.import.mapping.sheet', 'Sheet')}
+                  description={t('itad.manifest.import.mapping.sheetHint', 'Each sheet is imported separately.')}
+                >
+                  <Select value={preview.sheetName ?? undefined} onValueChange={(value) => void onSheetChange(value)}>
+                    <SelectTrigger aria-label={t('itad.manifest.import.mapping.sheet', 'Sheet')} disabled={busy}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {preview.sheets.map((sheet) => (
+                        <SelectItem key={sheet} value={sheet}>{sheet}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              ) : null}
               <div className="grid gap-4 sm:grid-cols-2">
                 {MANIFEST_TARGET_FIELD_IDS.map((field) => (
                   <FormField key={field} label={fieldLabel(t, field)} required={field === 'serial'}>

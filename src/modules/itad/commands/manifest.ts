@@ -7,9 +7,15 @@ import { isUniqueViolation, notFound } from '@open-mercato/shared/lib/crud/error
 import { resolveTranslations } from '@open-mercato/shared/lib/i18n/server'
 import { createLogger } from '@open-mercato/shared/lib/logger'
 import { ItadJob, ItadManifestImport, ItadManifestItem } from '../data/entities'
-import { itadManifestImportSchema, type ItadManifestImportInput } from '../data/validators'
+import {
+  itadManifestImportSchema,
+  itadManifestItemDeleteSchema,
+  type ItadManifestImportInput,
+  type ItadManifestItemDeleteInput,
+} from '../data/validators'
 import { MANIFEST_LIMITS, evaluateManifestRows, type ManifestFieldMapping } from '../domain/manifest-mapping'
-import { effectiveJobStatus } from '../domain/manifest-rules'
+import type { ItadJobStatus } from '../domain/job-types'
+import { effectiveJobStatus, resolveItemDeleteReason } from '../domain/manifest-rules'
 import { emitItadEvent } from '../events'
 import { ITAD_MANIFEST_IMPORT_ENTITY_ID } from '../lib/constants'
 import { assertManifestEditable, manifestError } from '../lib/manifest-errors'
@@ -97,7 +103,15 @@ const importManifestCommand: CommandHandler<ItadManifestImportInput, ItadManifes
     await assertManifestEditable(job)
 
     const mapping = toFieldMapping(input.mapping)
-    const result = await prepareManifest({ em, scope, jobId: job.id, fileName: input.fileName, buffer, mapping })
+    const result = await prepareManifest({
+      em,
+      scope,
+      jobId: job.id,
+      fileName: input.fileName,
+      buffer,
+      sheet: input.sheet ?? null,
+      mapping,
+    })
     if (!result.ok) return await manifestError(400, result.code)
     const prepared = result.prepared
     if (prepared.sha256 !== input.expectedSha256) return await manifestError(400, 'file_changed')
@@ -264,3 +278,108 @@ const importManifestCommand: CommandHandler<ItadManifestImportInput, ItadManifes
 }
 
 registerCommand(importManifestCommand)
+
+export type ItadManifestItemDeleteResult = {
+  itemId: string
+  jobId: string
+  tenantId: string
+  organizationId: string
+  serialNormalized: string
+  reason: string | null
+  jobStatusAtChange: ItadJobStatus
+}
+
+/**
+ * Soft-deletes one manifest item (spec "Where changes are allowed"). Under the job row
+ * lock it checks that the manifest is still editable and that a reason is given while
+ * receiving; the deleter, reason and effective job status are kept on the item for the
+ * history. Source data stays on the row. Not undoable: re-import restores an item.
+ */
+const deleteManifestItemCommand: CommandHandler<ItadManifestItemDeleteInput, ItadManifestItemDeleteResult> = {
+  id: 'itad.manifest.delete_item',
+  isUndoable: false,
+  async execute(rawInput, ctx) {
+    const input = itadManifestItemDeleteSchema.parse(rawInput)
+    const scope = await ensureScope(ctx)
+    const actorUserId = ctx.auth?.sub ?? null
+    if (!actorUserId) throw new Error('[internal] Manifest item delete requires an authenticated actor')
+    const em = ctx.container.resolve<EntityManager>('em').fork()
+    await loadJob(em, scope, input.jobId)
+
+    const result = await em.transactional(async (tx) => {
+      const locked = await lockJob(tx, scope, input.jobId)
+      await assertManifestEditable(locked)
+      const reason = resolveItemDeleteReason(locked, input.reason)
+      if (!reason.ok) return manifestError(400, 'reason_required')
+      const item = await tx.findOne(ItadManifestItem, {
+        id: input.itemId,
+        tenantId: scope.tenantId,
+        organizationId: scope.organizationId,
+        job: locked.id,
+        deletedAt: null,
+      } as FilterQuery<ItadManifestItem>)
+      if (!item) {
+        const { translate } = await resolveTranslations()
+        throw notFound(translate('itad.manifest.errors.item_not_found', 'Manifest item not found'))
+      }
+      const jobStatusAtChange = effectiveJobStatus(locked)
+      const now = new Date()
+      item.deletedAt = now
+      item.deletedByUserId = actorUserId
+      item.deleteReason = reason.reason
+      item.deleteJobStatus = jobStatusAtChange
+      item.updatedAt = now
+      await tx.flush()
+      return {
+        itemId: item.id,
+        jobId: locked.id,
+        tenantId: scope.tenantId,
+        organizationId: scope.organizationId,
+        serialNormalized: item.serialNormalized,
+        reason: reason.reason,
+        jobStatusAtChange,
+      }
+    })
+
+    try {
+      await emitItadEvent(
+        'itad.manifest.item_deleted',
+        {
+          jobId: result.jobId,
+          itemId: result.itemId,
+          serialNormalized: result.serialNormalized,
+          reason: result.reason,
+          actorUserId,
+          tenantId: result.tenantId,
+          organizationId: result.organizationId,
+        },
+        { persistent: true },
+      )
+    } catch (err) {
+      logger.error('Failed to emit itad.manifest.item_deleted', { err, itemId: result.itemId })
+    }
+    return result
+  },
+  // Audit record: identifiers, serial and reason only — never the item's source data.
+  buildLog: async ({ result }) => {
+    const { translate } = await resolveTranslations()
+    return {
+      actionLabel: translate('itad.audit.manifest.deleteItem', 'Remove ITAD manifest item'),
+      resourceKind: 'itad.manifest_item',
+      resourceId: result.itemId,
+      parentResourceKind: 'itad.job',
+      parentResourceId: result.jobId,
+      tenantId: result.tenantId,
+      organizationId: result.organizationId,
+      snapshotAfter: {
+        id: result.itemId,
+        jobId: result.jobId,
+        serialNormalized: result.serialNormalized,
+        reason: result.reason,
+        jobStatusAtChange: result.jobStatusAtChange,
+      },
+    }
+  },
+}
+
+registerCommand(deleteManifestItemCommand)

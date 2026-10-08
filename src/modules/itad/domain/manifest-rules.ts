@@ -17,3 +17,21 @@ export function effectiveJobStatus(job: ManifestRulesJob): ItadJobStatus {
 export function canChangeManifest(job: ManifestRulesJob): boolean {
   return MANIFEST_EDITABLE_STATUSES.includes(effectiveJobStatus(job))
 }
+
+export const MANIFEST_DELETE_REASON_MIN = 3
+export const MANIFEST_DELETE_REASON_MAX = 1000
+
+/**
+ * Reason for removing a manifest item (spec Q6): required while the job is (or was
+ * held in) `receiving`, optional before. A given reason is trimmed and kept either way.
+ */
+export function resolveItemDeleteReason(
+  job: ManifestRulesJob,
+  reason: string | null | undefined,
+): { ok: true; reason: string | null } | { ok: false } {
+  const trimmed = typeof reason === 'string' ? reason.trim() : ''
+  if (trimmed.length > MANIFEST_DELETE_REASON_MAX) return { ok: false }
+  if (effectiveJobStatus(job) === 'receiving' && trimmed.length < MANIFEST_DELETE_REASON_MIN) return { ok: false }
+  if (trimmed.length > 0 && trimmed.length < MANIFEST_DELETE_REASON_MIN) return { ok: false }
+  return { ok: true, reason: trimmed.length ? trimmed : null }
+}

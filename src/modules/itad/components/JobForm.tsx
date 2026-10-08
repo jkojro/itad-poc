@@ -391,7 +391,9 @@ export function JobDetailForm({ id }: { id: string }) {
         onDelete={job?.status === 'draft' ? async () => { await deleteCrud(API_PATH, id) } : undefined}
       />
       {job ? <JobStatusPanel job={job} onChanged={reload} /> : null}
-      {job ? <JobHistory jobId={job.id} version={job.updatedAt} /> : null}
+      {job ? (
+        <JobHistory jobId={job.id} version={job.updatedAt} includeManifest={canViewManifest} refreshKey={reloadToken} />
+      ) : null}
     </div>
   )
 

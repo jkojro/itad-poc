@@ -626,7 +626,7 @@ Design choices confirmed by the user (2026-10-05):
 | Phase | Status | Evidence |
 |---|---|---|
 | 1 — Manifest import (CSV) | verified (2026-10-05) | see Phase 1 progress |
-| 2 — XLSX and manifest corrections | not started | — |
+| 2 — XLSX and manifest corrections | verified (2026-10-08) | see Phase 2 progress |
 | 3 — Receiving scans | not started | — |
 | 4 — Reconciliation and `receivingComplete` | not started | — |
 
@@ -668,6 +668,32 @@ Design choices confirmed by the user (2026-10-05):
   - Warnings come only from XLSX cells, so the `warnings_not_accepted` test moves to Phase 2 (TEST-107 XLSX part).
   - The "no `source_data` in event payloads" assertion of TEST-105 is ensured structurally (payload type holds ids and counts only) rather than observed at runtime.
 
+### Phase 2 progress
+
+- **Step 1 — XLSX:**
+  - `exceljs` 4.4.0 added with an exact version (Q3).
+  - `services/manifest-file/xlsx.ts` is loaded with a dynamic `import()`. Rich text, formula results (`formula_cell`), numbers (`numeric_serial_cell`), dates (ISO), booleans, hyperlinks and error codes become logical text values.
+  - The reader picks the first sheet or a requested one; an unknown sheet returns 400 `sheet_not_found`. Physical reads are capped at 6,000 rows and 200 columns before the domain limits apply.
+  - `.xlsx` must be a zip package, otherwise `file_type_unsupported`.
+  - Unit tests TEST-102 (XLSX part).
+- **Step 2 — corrections:**
+  - Command `itad.manifest.delete_item` runs under the job row lock and soft-deletes the item, recording who removed it, the reason and the effective job status. A reason is required while receiving (`domain/manifest-rules.ts` `resolveItemDeleteReason`, unit-tested).
+  - Event `itad.manifest.item_deleted`.
+  - `DELETE manifest/items/{itemId}` and `GET manifest/changes` (imports and removals, newest first, with `duringReceiving`).
+  - No migration: the delete columns came with Phase 1.
+- **Step 3 — UI:**
+  - Wizard: accepts XLSX; a sheet selector appears when the workbook has more than one sheet, and changing the sheet re-previews with that sheet's suggested mapping.
+  - Manifest table: "Remove" row action with a reason dialog (required during receiving, Cmd/Ctrl+Enter submits).
+  - Job history interleaves manifest imports and removals (only with `itad.manifest.view`) and shows a "During receiving" badge; it reloads after manifest changes.
+  - 22 i18n keys added or updated in 5 locales.
+- **Integration tests:**
+  - TC-ITAD-105 (TEST-106 and TEST-107, XLSX part: warnings without and with `acceptWarnings`, sheets, 409 for the same sheet again, `sheet_not_found`);
+  - TC-ITAD-106 (TEST-108: reason rules, `/changes` flags, processing lock);
+  - TC-ITAD-107 (TEST-116, wizard sheet selection plus removal and history badge).
+  - Full TC-ITAD suite: 23/23 in two runs on a fresh ephemeral build.
+- **Gates:** `yarn generate`, `yarn typecheck`, `yarn lint` (0 errors), `yarn ds:check` (286 files) and `yarn test` (172 passed) all pass. The build passed in the ephemeral environment.
+- **UI checked:** Polish, history at 1280 px light, remove dialog at 390 px dark.
+
 ## Changelog
 
 | Date | Change |
@@ -678,3 +704,4 @@ Design choices confirmed by the user (2026-10-05):
 | 2026-10-05 | User review: Q14 → a; original manifest is the durable source and the mapping records unused columns; warnings must be accepted; different-device duplicates stay unresolved and blocking (flag action + `differentDeviceUnresolved`); Phase 2 (XLSX) required for the epic; follow-ups listed. Approved for implementation |
 | 2026-10-05 | Review fixes: `differentDeviceUnresolved`/`duplicatesPending` defined on `resolvedAt`; source data on Receiving requires `itad.manifest.view` too (asset responses never embed it); import identity = job + sha256 + sheet; `sourceData` belongs to the creating import (later rows with the same serial don't update it); attachment = byte-for-byte file vs `sourceData` = parsed logical values; counters need only `itad.jobs.view` |
 | 2026-10-05 | Phase 1 implemented and verified (CSV manifest import, source data, Manifest tab, TC-ITAD-101…104) |
+| 2026-10-08 | Phase 2 implemented and verified (XLSX import with sheets and warnings, manifest item removal, manifest changes in the job history, TC-ITAD-105…107) |

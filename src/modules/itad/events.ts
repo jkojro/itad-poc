@@ -12,6 +12,8 @@ const events = [
   // Payload: { jobId, importId, importedCount, skippedCount, actorUserId, tenantId, organizationId }.
   // Ids and counts only: manifest source data never travels in events.
   { id: 'itad.manifest.imported', label: 'ITAD Manifest Imported', entity: 'manifest_import', category: 'lifecycle' },
+  // Payload: { jobId, itemId, serialNormalized, reason, actorUserId, tenantId, organizationId }; no source data.
+  { id: 'itad.manifest.item_deleted', label: 'ITAD Manifest Item Deleted', entity: 'manifest_item', category: 'lifecycle' },
 ] as const
 
 export const eventsConfig = createModuleEvents({
