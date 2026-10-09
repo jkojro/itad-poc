@@ -758,6 +758,7 @@ Design choices confirmed by the user (2026-10-05):
 - **Fixes during verification:**
   - TC-ITAD-116 used an ambiguous `searchbox` locator; there are two on the page at desktop width (header and table), so it now uses the field's placeholder.
   - The page icon `scan-barcode` is not in the lucide registry and was replaced with `package-search`.
+  - Found in user testing: returning from the Manifest or Receiving tab to Overview focused the job form's "Name" field, because `CrudForm` autofocuses on mount and the tab remounts it. The job detail form now passes `disableInitialFocus`; the create form keeps autofocus. TC-ITAD-116 asserts "Name" is not focused after returning to Overview.
 
 ## Changelog
 

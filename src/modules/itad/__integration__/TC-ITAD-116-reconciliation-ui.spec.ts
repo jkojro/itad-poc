@@ -10,7 +10,8 @@ import { scanOk } from './itad-receiving-fixtures'
  * TC-ITAD-116 (spec TEST-116, reconciliation part): the status panel shows the
  * reconciliation line and names why `start_processing` is blocked; the Manifest tab
  * counts and filters missing devices; the serial lookup page finds a device across jobs
- * and opens its Receiving tab. No HTML nesting or hydration errors in the console.
+ * and opens its Receiving tab; returning to Overview does not focus the "Name" field. No
+ * HTML nesting or hydration errors in the console.
  */
 test.describe('TC-ITAD-116: reconciliation in the UI and serial lookup page', () => {
   test('status summary, blocked reason, missing filter and lookup', async ({ page, request }) => {
@@ -51,6 +52,12 @@ test.describe('TC-ITAD-116: reconciliation in the UI and serial lookup page', ()
       const manifest = page.getByRole('region', { name: 'Manifest' })
       await expect(manifest.getByRole('row').filter({ hasText: `RB${tag}` }).getByText('Missing')).toBeVisible()
       await expect(manifest.getByRole('row').filter({ hasText: `RA${tag}` }).getByText('Matched')).toBeVisible()
+
+      // Regression: coming back to Overview must not focus the "Name" field.
+      await page.getByRole('tab', { name: 'Overview' }).click()
+      const nameInput = page.locator('[data-crud-field-id="name"] input')
+      await expect(nameInput).toBeVisible()
+      await expect(nameInput).not.toBeFocused()
 
       await page.goto('/backend/itad/assets')
       await page.getByPlaceholder('Serial number or its beginning').fill(`rx${tag.toLowerCase()}`)
