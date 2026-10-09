@@ -35,6 +35,20 @@ import {
   type ItadJobConditionId,
 } from './job-lifecycle-labels'
 import type { ItadJobListItem } from './types'
+import { effectiveJobStatus } from '../domain/manifest-rules'
+import { reconciliationSummaryText, useReconciliation } from './reconciliation-ui'
+
+/** Reconciliation line shown while the job is (or was held in) receiving. */
+function ReceivingSummary({ jobId, t }: { jobId: string; t: Translate }) {
+  const { data } = useReconciliation(jobId)
+  if (!data) return null
+  return (
+    <p className="text-sm text-muted-foreground">
+      <span className="font-medium text-foreground">{t('itad.reconciliation.title', 'Receiving')}: </span>
+      {reconciliationSummaryText(t, data)}
+    </p>
+  )
+}
 
 type ConditionView = {
   key: ItadJobConditionId
@@ -88,6 +102,9 @@ function blockedReason(t: Translate, action: ActionView, canTransition: boolean)
   if (action.allowed) return null
   const needsSupervisor = action.conditions.some((condition) => condition.state === 'confirmation_required' && !condition.canConfirm)
   if (needsSupervisor) return t('itad.jobs.transition.blocked.needsConfirmation', 'Requires a supervisor confirmation')
+  // A data condition names what is missing (e.g. no manifest, duplicates to resolve).
+  const unmetDetail = action.conditions.find((condition) => condition.state === 'unmet' && condition.detailKey)?.detailKey
+  if (unmetDetail) return t(unmetDetail, t('itad.jobs.transition.blocked.unmet', 'Required conditions are not met'))
   return t('itad.jobs.transition.blocked.unmet', 'Required conditions are not met')
 }
 
@@ -181,6 +198,7 @@ export function JobStatusPanel({ job, onChanged }: { job: ItadJobListItem; onCha
           {statusLabel(t, job.status)}
         </StatusBadge>
       </div>
+      {effectiveJobStatus(job) === 'receiving' ? <ReceivingSummary jobId={job.id} t={t} /> : null}
 
       {job.status === 'on_hold' ? (
         <Alert status="warning">

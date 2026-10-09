@@ -26,7 +26,7 @@ import { loadUserDisplayNames } from '../../module-integrations/users'
 import type { ItadJobListItem } from '../../components/types'
 import type { EntityManager } from '@mikro-orm/postgresql'
 import { countActiveManifestItems } from '../../services/manifest-import'
-import { countActiveAssets } from '../../services/receiving-reader'
+import { countActiveAssets } from '../../services/reconciliation-reader'
 
 const id = 'id'
 const tenant_id = 'tenant_id'

@@ -31,6 +31,8 @@ import {
   type ManifestItemRow,
 } from './manifest-types'
 import type { ItadJobListItem } from './types'
+import type { FilterValues } from '@open-mercato/ui/backend/FilterBar'
+import { ReconciliationBadge, reconciliationLabel, useInvalidateReconciliation, useReconciliation } from './reconciliation-ui'
 
 type Translate = ReturnType<typeof useT>
 
@@ -56,6 +58,11 @@ function buildItemColumns(t: Translate): ColumnDef<ManifestItemRow>[] {
     { id: 'customerAssetTag', accessorKey: 'customerAssetTag', header: label('customerAssetTag'), cell: ({ row }) => row.original.customerAssetTag ?? '—' },
     { id: 'manufacturer', accessorKey: 'manufacturer', header: label('manufacturer'), cell: ({ row }) => row.original.manufacturer ?? '—' },
     { id: 'model', accessorKey: 'model', header: label('model'), cell: ({ row }) => row.original.model ?? '—' },
+    {
+      id: 'reconciliation',
+      header: t('itad.reconciliation.column', 'Reconciliation'),
+      cell: ({ row }) => <ReconciliationBadge t={t} state={row.original.reconciliation} />,
+    },
     {
       id: 'source',
       header: t('itad.manifest.items.source', 'Source'),
@@ -259,15 +266,20 @@ export function JobManifestPanel({
   const [importOpen, setImportOpen] = React.useState(false)
   const [sourceItem, setSourceItem] = React.useState<ManifestItemRow | null>(null)
   const [removeItem, setRemoveItem] = React.useState<ManifestItemRow | null>(null)
+  const [filterValues, setFilterValues] = React.useState<FilterValues>({})
+  const reconciliationFilter = typeof filterValues.reconciliation === 'string' ? filterValues.reconciliation : ''
+  const reconciliation = useReconciliation(job.id)
+  const invalidateReconciliation = useInvalidateReconciliation(job.id)
   const columns = React.useMemo(() => buildItemColumns(t), [t])
   const basePath = `/api/itad/jobs/${encodeURIComponent(job.id)}/manifest`
   const editable = canChangeManifest(job)
 
   const itemsQuery = useQuery<ItemsResponse>({
-    queryKey: ['itad-manifest-items', job.id, page, search],
+    queryKey: ['itad-manifest-items', job.id, page, search, reconciliationFilter],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) })
       if (search.trim()) params.set('search', search.trim())
+      if (reconciliationFilter) params.set('reconciliation', reconciliationFilter)
       return readApiResultOrThrow<ItemsResponse>(`${basePath}/items?${params.toString()}`, undefined, {
         errorMessage: t('itad.manifest.items.error', 'Could not load the manifest'),
       })
@@ -285,11 +297,24 @@ export function JobManifestPanel({
     setPage(1)
     void queryClient.invalidateQueries({ queryKey: ['itad-manifest-items', job.id] })
     void queryClient.invalidateQueries({ queryKey: ['itad-manifest-imports', job.id] })
+    invalidateReconciliation()
     onChanged()
-  }, [job.id, onChanged, queryClient])
+  }, [invalidateReconciliation, job.id, onChanged, queryClient])
+
+  const filters = React.useMemo(
+    () => [
+      {
+        id: 'reconciliation',
+        label: t('itad.reconciliation.column', 'Reconciliation'),
+        type: 'select' as const,
+        options: (['matched', 'missing'] as const).map((state) => ({ value: state, label: reconciliationLabel(t, state) })),
+      },
+    ],
+    [t],
+  )
 
   const total = itemsQuery.data?.total ?? 0
-  const searching = search.trim().length > 0
+  const searching = search.trim().length > 0 || Boolean(reconciliationFilter)
 
   return (
     <section className="space-y-4 rounded-lg border bg-card p-4" aria-label={t('itad.manifest.title', 'Manifest')}>
@@ -303,6 +328,22 @@ export function JobManifestPanel({
           </span>
         ) : null}
       </p>
+      {reconciliation.data ? (
+        <dl className="grid grid-cols-3 gap-3 text-sm">
+          <div>
+            <dt className="text-muted-foreground">{t('itad.receiving.counters.expected', 'Expected (manifest)')}</dt>
+            <dd className="text-lg font-medium">{reconciliation.data.expectedAssetCount}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">{reconciliationLabel(t, 'matched')}</dt>
+            <dd className="text-lg font-medium">{reconciliation.data.matched}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">{reconciliationLabel(t, 'missing')}</dt>
+            <dd className="text-lg font-medium">{reconciliation.data.missing}</dd>
+          </div>
+        </dl>
+      ) : null}
       {!editable ? (
         <Alert status="information">
           <AlertDescription>{t('itad.manifest.locked', 'The manifest can no longer be changed in the current job status.')}</AlertDescription>
@@ -332,6 +373,16 @@ export function JobManifestPanel({
             setPage(1)
           }}
           searchAlign="right"
+          filters={filters}
+          filterValues={filterValues}
+          onFiltersApply={(values: FilterValues) => {
+            setFilterValues(values)
+            setPage(1)
+          }}
+          onFiltersClear={() => {
+            setFilterValues({})
+            setPage(1)
+          }}
           entityId={ITAD_MANIFEST_ITEM_ENTITY_ID}
           extensionTableId="itad.manifest.items"
           emptyState={(

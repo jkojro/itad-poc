@@ -124,6 +124,7 @@ export const itadManifestItemListSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
   search: z.string().trim().max(200).optional(),
   id: z.string().uuid().optional(),
+  reconciliation: z.enum(['matched', 'missing']).optional(),
 })
 
 /** Durable input of `itad.assets.scan`; the raw serial as scanned or typed. */
@@ -173,6 +174,14 @@ export const itadAssetListSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(50),
   search: z.string().trim().max(200).optional(),
   id: z.string().uuid().optional(),
+  reconciliation: z.enum(['matched', 'unexpected']).optional(),
+})
+
+/** Cross-job serial lookup: exact or prefix match on the normalized serial. */
+export const itadAssetLookupSchema = z.object({
+  serial: z.string().trim().max(200),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
 })
 
 export const itadScanListSchema = z.object({

@@ -44,6 +44,7 @@ export type AssetRow = {
   dataBearing: boolean | null
   status: string
   manifestItemId: string | null
+  reconciliation: 'matched' | 'unexpected'
   receivedAt: string
   receivedBy: { id: string; name: string | null }
   updatedAt: string

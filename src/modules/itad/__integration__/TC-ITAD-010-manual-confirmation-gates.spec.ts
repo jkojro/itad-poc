@@ -11,13 +11,13 @@ import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/h
 import { getTokenContext, readJsonSafe } from '@open-mercato/core/helpers/integration/generalFixtures'
 import {
   CONFIRM,
-  advanceToReceiving,
   createSchedulableJob,
   errorCode,
   getJob,
   postTransition,
   uniqueSuffix,
 } from './itad-job-fixtures'
+import { advanceToProcessing } from './itad-flow-fixtures'
 
 type TransitionsView = {
   canTransition: boolean
@@ -53,7 +53,9 @@ test.describe('TC-ITAD-010: manual confirmation and transition permissions', () 
     try {
       companyId = await createCompanyFixture(request, adminToken, `QA ITAD Gates ${suffix}`)
       jobId = (await createSchedulableJob(request, adminToken, companyId, `QA gates ${suffix}`)).id
-      await advanceToReceiving(request, adminToken, jobId)
+      // Manual confirmations are exercised on `start_closeout` (allAssetsProcessed): since the
+      // manifest spec Phase 4, receivingComplete is a data condition that is never confirmed by hand.
+      await advanceToProcessing(request, adminToken, jobId)
 
       const operatorToken = await makeUser('qa_itad_operator', ['itad.jobs.view', 'itad.jobs.manage', 'itad.jobs.transition'])
       const viewerToken = await makeUser('qa_itad_viewer', ['itad.jobs.view'])
@@ -62,17 +64,17 @@ test.describe('TC-ITAD-010: manual confirmation and transition permissions', () 
       const operatorView = await readJsonSafe<TransitionsView>(view)
       expect(operatorView?.canTransition).toBe(true)
       expect(operatorView?.canConfirm).toBe(false)
-      const startProcessing = operatorView?.actions.find((action) => action.id === 'start_processing')
-      expect(startProcessing?.allowed).toBe(false)
-      expect(startProcessing?.conditions[0]).toMatchObject({ key: 'receivingComplete', state: 'confirmation_required', canConfirm: false })
+      const startCloseout = operatorView?.actions.find((action) => action.id === 'start_closeout')
+      expect(startCloseout?.allowed).toBe(false)
+      expect(startCloseout?.conditions[0]).toMatchObject({ key: 'allAssetsProcessed', state: 'confirmation_required', canConfirm: false })
 
-      const unconfirmed = await postTransition(request, operatorToken, jobId, { action: 'start_processing' })
+      const unconfirmed = await postTransition(request, operatorToken, jobId, { action: 'start_closeout' })
       expect(unconfirmed.status()).toBe(400)
       expect(await errorCode(unconfirmed)).toBe('itad.jobs.errors.condition_unmet')
 
       const operatorConfirm = await postTransition(request, operatorToken, jobId, {
-        action: 'start_processing',
-        confirmations: [CONFIRM('receivingComplete')],
+        action: 'start_closeout',
+        confirmations: [CONFIRM('allAssetsProcessed')],
       })
       expect(operatorConfirm.status()).toBe(403)
 
@@ -80,27 +82,27 @@ test.describe('TC-ITAD-010: manual confirmation and transition permissions', () 
       expect(viewerMove.status()).toBe(403)
 
       const duplicate = await postTransition(request, adminToken, jobId, {
-        action: 'start_processing',
-        confirmations: [CONFIRM('receivingComplete'), CONFIRM('receivingComplete')],
+        action: 'start_closeout',
+        confirmations: [CONFIRM('allAssetsProcessed'), CONFIRM('allAssetsProcessed')],
       })
       expect(duplicate.status()).toBe(400)
       expect(await errorCode(duplicate)).toBe('itad.jobs.errors.confirmation_duplicate')
 
       const unrelated = await postTransition(request, adminToken, jobId, {
-        action: 'start_processing',
-        confirmations: [CONFIRM('receivingComplete'), CONFIRM('allAssetsProcessed')],
+        action: 'start_closeout',
+        confirmations: [CONFIRM('allAssetsProcessed'), CONFIRM('noBlockingExceptions')],
       })
       expect(unrelated.status()).toBe(400)
       expect(await errorCode(unrelated)).toBe('itad.jobs.errors.confirmation_not_required')
 
       const noComment = await postTransition(request, adminToken, jobId, {
-        action: 'start_processing',
-        confirmations: [{ condition: 'receivingComplete', comment: ' ' }],
+        action: 'start_closeout',
+        confirmations: [{ condition: 'allAssetsProcessed', comment: ' ' }],
       })
       expect(noComment.status()).toBe(400)
       expect(await errorCode(noComment)).toBe('itad.jobs.errors.comment_required')
 
-      expect((await getJob(request, adminToken, jobId))?.status).toBe('receiving')
+      expect((await getJob(request, adminToken, jobId))?.status).toBe('processing')
     } finally {
       if (jobId) await postTransition(request, adminToken, jobId, { action: 'cancel', reason: 'QA cleanup' }).catch(() => undefined)
       for (const id of userIds) await deleteUserIfExists(request, adminToken, id)

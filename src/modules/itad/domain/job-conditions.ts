@@ -1,4 +1,5 @@
 import type { ItadJobStatus } from './job-types'
+import { receivingCompleteBlocker, type ReceivingFacts } from './reconciliation'
 import {
   ITAD_JOB_TRANSITIONS,
   isReasonValid,
@@ -26,6 +27,7 @@ export type ConditionEvaluation = {
 }
 
 export type ConditionJob = {
+  id: string
   status: ItadJobStatus
   statusBeforeHold?: ItadJobStatus | null
   customerId: string
@@ -36,6 +38,8 @@ export type ConditionJob = {
 /** Side-effect-free lookups a condition may need; injected so the registry stays testable. */
 export type ConditionDeps = {
   isCustomerValid: (customerId: string) => Promise<boolean>
+  /** Manifest/receiving facts of the job (manifest spec); read inside the caller's transaction. */
+  loadReceivingFacts: (jobId: string) => Promise<ReceivingFacts>
 }
 
 type ConditionDefinition = {
@@ -76,7 +80,18 @@ export const ITAD_JOB_CONDITIONS: Record<ItadJobConditionKey, ConditionDefinitio
       return { key: 'schedulingDataComplete', state: 'met' }
     },
   },
-  receivingComplete: manualCondition('receivingComplete'),
+  // Manifest spec Phase 4: computed from the manifest and the receiving scans.
+  receivingComplete: {
+    key: 'receivingComplete',
+    source: 'data',
+    manualAllowed: false,
+    evaluate: async (job, deps) => {
+      const blocker = receivingCompleteBlocker(await deps.loadReceivingFacts(job.id))
+      return blocker
+        ? { key: 'receivingComplete', state: 'unmet', detailKey: `itad.jobs.conditions.detail.${blocker}` }
+        : { key: 'receivingComplete', state: 'met' }
+    },
+  },
   allAssetsProcessed: manualCondition('allAssetsProcessed'),
   noBlockingExceptions: manualCondition('noBlockingExceptions'),
   requiredDocumentsComplete: manualCondition('requiredDocumentsComplete'),

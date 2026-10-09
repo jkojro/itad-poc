@@ -343,6 +343,15 @@
           "columnNames": [],
           "composite": false,
           "constraint": false,
+          "keyName": "itad_assets_serial_lookup_idx",
+          "primary": false,
+          "unique": false,
+          "expression": "create index \"itad_assets_serial_lookup_idx\" on \"itad_assets\" (\"tenant_id\", \"organization_id\", \"serial_normalized\" text_pattern_ops) where \"deleted_at\" is null"
+        },
+        {
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
           "keyName": "itad_assets_serial_unique",
           "primary": false,
           "unique": false,

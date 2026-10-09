@@ -3,7 +3,6 @@ import { getAuthToken } from '@open-mercato/core/helpers/integration/api'
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
 import { readJsonSafe } from '@open-mercato/core/helpers/integration/generalFixtures'
 import {
-  CONFIRM,
   advanceToReceiving,
   createSchedulableJob,
   deleteJobIfExists,
@@ -89,7 +88,8 @@ test.describe('TC-ITAD-106: manifest item removal and manifest changes', () => {
       expect(changes[0].actor.name).toBeTruthy()
       expect((await listManifestItems(request, token, jobId)).items.map((item) => item.serial).sort()).toEqual([`R3-${tag}`, `R4-${tag}`])
 
-      await transitionOk(request, token, jobId, { action: 'start_processing', confirmations: [CONFIRM('receivingComplete')] })
+      // receivingComplete from data: the manifest has items and there are no open duplicates.
+      await transitionOk(request, token, jobId, { action: 'start_processing' })
       ids = await byId()
       const lockedRemoval = await deleteManifestItem(request, token, jobId, ids.get(`R3-${tag}`)!, 'Too late')
       expect(lockedRemoval.status()).toBe(409)

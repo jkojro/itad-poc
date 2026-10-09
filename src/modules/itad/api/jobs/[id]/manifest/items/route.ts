@@ -4,6 +4,7 @@ import type { EntityManager } from '@mikro-orm/postgresql'
 import { escapeLikePattern } from '@open-mercato/shared/lib/db/escapeLikePattern'
 import type { OpenApiRouteDoc } from '@open-mercato/shared/lib/openapi'
 import { itadManifestItemListSchema } from '../../../../../data/validators'
+import { MANIFEST_ITEM_RECONCILIATION, classifyManifestItem } from '../../../../../domain/reconciliation'
 import { normalizeSerial } from '../../../../../domain/serial'
 import {
   itadRouteErrorResponse,
@@ -27,7 +28,13 @@ type ItemRow = {
   import_id: string
   import_file_name: string
   created_at: Date | string
+  asset_id: string | null
 }
+
+/** Active asset of the same job with the same normalized serial (reconciliation match). */
+const MATCHING_ASSET = `select a."id" from "itad_assets" a
+  where a."tenant_id" = i."tenant_id" and a."organization_id" = i."organization_id" and a."job_id" = i."job_id"
+    and a."serial_normalized" = i."serial_normalized" and a."deleted_at" is null limit 1`
 
 /**
  * Active manifest items of one job in import and file order. `search` matches the
@@ -47,6 +54,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
       where.push('i."id" = ?')
       values.push(query.id)
     }
+    if (query.reconciliation) {
+      where.push(query.reconciliation === 'matched' ? `exists (${MATCHING_ASSET})` : `not exists (${MATCHING_ASSET})`)
+    }
     if (query.search) {
       const text = `%${escapeLikePattern(query.search)}%`
       const serial = `%${escapeLikePattern(normalizeSerial(query.search))}%`
@@ -64,7 +74,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const [rows, totals] = await Promise.all([
       em.execute<ItemRow[]>(
         `select i."id", i."serial", i."customer_asset_tag", i."manufacturer", i."model", i."source_row",
-                i."source_data", i."import_id", m."file_name" as "import_file_name", i."created_at"
+                i."source_data", i."import_id", m."file_name" as "import_file_name", i."created_at",
+                (${MATCHING_ASSET}) as "asset_id"
          from "itad_manifest_items" i
          join "itad_manifest_imports" m on m."id" = i."import_id"
          where ${whereSql}
@@ -90,6 +101,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
         importId: row.import_id,
         importFileName: row.import_file_name,
         createdAt: new Date(row.created_at).toISOString(),
+        reconciliation: classifyManifestItem(Boolean(row.asset_id)),
+        assetId: row.asset_id,
       })),
       total: Number(totals[0]?.total ?? 0),
       page: query.page,
@@ -113,6 +126,8 @@ const itemsResponseSchema = z.object({
       importId: z.string().uuid(),
       importFileName: z.string(),
       createdAt: z.string(),
+      reconciliation: z.enum(MANIFEST_ITEM_RECONCILIATION),
+      assetId: z.string().uuid().nullable(),
     }),
   ),
   total: z.number().int(),
