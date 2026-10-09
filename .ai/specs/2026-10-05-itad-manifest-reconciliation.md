@@ -627,7 +627,7 @@ Design choices confirmed by the user (2026-10-05):
 |---|---|---|
 | 1 — Manifest import (CSV) | verified (2026-10-05) | see Phase 1 progress |
 | 2 — XLSX and manifest corrections | verified (2026-10-08) | see Phase 2 progress |
-| 3 — Receiving scans | not started | — |
+| 3 — Receiving scans | verified (2026-10-09) | see Phase 3 progress |
 | 4 — Reconciliation and `receivingComplete` | not started | — |
 
 ### Phase 1 progress
@@ -699,6 +699,38 @@ Design choices confirmed by the user (2026-10-05):
   - The tests had missed this because their workbooks were written by `exceljs` itself. A regression unit test builds a prefixed workbook; it fails without the fix and passes with it. TC-ITAD-105 also imports a prefixed workbook end to end.
   - Removing a manifest item during receiving logged a hydration error: the history wrapped the "During receiving" badge (a `div`) in a `p`. The wrapper is now a `div`, and TC-ITAD-107 fails on HTML nesting or hydration errors in the browser console.
 
+### Phase 3 progress
+
+- **Step 1 — data:** migration `Migration20261009075007_itad` (tables `itad_assets`, `itad_intake_scans`; partial unique index on active serials per job; pending-duplicates partial index; `down()` hand-completed). Reviewed and applied to dev (user approval 2026-10-09). The cross-job lookup index stays in Phase 4, as planned.
+- **Step 2 — ACL:** `itad.assets.view|receive|manage`; employee gets view and receive, admin gets everything via `itad.*`.
+- **Step 3 — scan:**
+  - `domain/receiving-rules.ts` (`isReceivingActive`, `decideScanResult`, `resolveNote`, `canResolveAsSameDevice`, `canFlagDifferentDevice`; unit-tested).
+  - Command `itad.assets.scan` runs under the job row lock: matched or unexpected creates the asset (copying tag, manufacturer and model from the matched item); a repeat creates a pending `duplicate` scan; the unique index stays as a backstop (409 `serial_conflict`).
+  - `commands/job-lock.ts` is the shared row lock, also used by the manifest commands.
+- **Step 4 — corrections:**
+  - Commands `itad.assets.resolve_duplicate`, `itad.assets.flag_different_device`, `itad.assets.update` (optimistic lock on the asset, system fields refused) and `itad.assets.delete` (reason required, `itad.assets.manage`).
+  - Events `itad.asset.received|updated|deleted` and `itad.intake_scan.duplicate_detected|resolved|flagged_different_device`.
+  - Routes `POST/GET scans`, `scans/{id}/resolve`, `scans/{id}/flag-different-device`, `GET assets` (with `manifestItemId`, never source data), `PUT/DELETE assets/{id}`, sharing `lib/command-route.ts` (mutation guard + command bus).
+  - `receivedAssetCount` on the jobs list and detail.
+- **Step 5 — UI:**
+  - Receiving tab (`?tab=receiving`, needs `itad.assets.view`):
+    - counters (expected, received, duplicates to resolve);
+    - Enter-driven scan field that keeps focus and sends scans one at a time, with an `aria-live` result and the last 10 scans;
+    - duplicates list with "Same device" and "Different device" dialogs (the flagged state shows "Waiting for exception handling");
+    - received-devices table with Edit details (embedded `CrudForm`), Remove scan and Source data (only with `itad.manifest.view`).
+  - "Received" column on the jobs list. 73 i18n keys in 5 locales.
+- **Integration tests:**
+  - TC-ITAD-108 (TEST-109), TC-ITAD-109 (TEST-110), TC-ITAD-110 (TEST-111, 20 parallel scans), TC-ITAD-111 (TEST-114, assets part), TC-ITAD-112 (TEST-116, receiving part, including a console check for HTML nesting and hydration errors).
+  - Full TC-ITAD suite: 28/28 in 6 of 7 full runs.
+  - One run had a single TC-ITAD-015 failure (jobs-spec transition dialog). It could not be reproduced in 8 isolated repeats or 5 more full runs and is recorded as an observed flake.
+- **Found during testing:**
+  - The flag route required `note` in its own schema, so a missing note returned a generic 400 instead of the coded `note_required`. The command is now the only place that enforces it.
+  - In the embedded `CrudForm` the extra Cancel action rendered twice. It was removed; the dialog closes with its X.
+  - The data-bearing select with an empty value showed "—" instead of "Not determined". The value is now `unknown`.
+  - The scan result banner first nested the badge in a `p`; corrected before testing.
+- **Gates:** `yarn generate`, `yarn typecheck`, `yarn lint` (0 errors), `yarn ds:check` (300 files) and `yarn test` (177 passed) all pass. The build passed in the ephemeral environment.
+- **UI checked:** Polish, Receiving tab at 1280 px light and 390 px dark.
+
 ## Changelog
 
 | Date | Change |
@@ -711,3 +743,4 @@ Design choices confirmed by the user (2026-10-05):
 | 2026-10-05 | Phase 1 implemented and verified (CSV manifest import, source data, Manifest tab, TC-ITAD-101…104) |
 | 2026-10-08 | Phase 2 implemented and verified (XLSX import with sheets and warnings, manifest item removal, manifest changes in the job history, TC-ITAD-105…107) |
 | 2026-10-09 | Phase 2 fix: XLSX files with prefixed SpreadsheetML namespace (`<x:…>`, .NET exporters) are normalized before `exceljs` loads them; `jszip` 3.10.2 declared as a direct dependency; regression tests added; history badge no longer nested in a `p` (hydration error) |
+| 2026-10-09 | Phase 3 implemented and verified (assets, intake scans, duplicate resolution and different-device flag, asset edit/void, Receiving tab, TC-ITAD-108…112) |

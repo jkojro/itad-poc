@@ -26,6 +26,7 @@ import { loadUserDisplayNames } from '../../module-integrations/users'
 import type { ItadJobListItem } from '../../components/types'
 import type { EntityManager } from '@mikro-orm/postgresql'
 import { countActiveManifestItems } from '../../services/manifest-import'
+import { countActiveAssets } from '../../services/receiving-reader'
 
 const id = 'id'
 const tenant_id = 'tenant_id'
@@ -113,13 +114,18 @@ async function decorateItems(payload: ListPayload, ctx: CrudCtx & { query: ItadJ
   const holders = await loadUserDisplayNames(queryEngine, tenantId, items.map((item) => item.heldByUserId))
   // Derived counter (spec "Derived values"): part of the job summary, needs only `itad.jobs.view`.
   const em = ctx.container.resolve<EntityManager>('em').fork()
-  const expectedCounts = await countActiveManifestItems(em, tenantId, items.map((item) => item.id))
+  const jobIds = items.map((item) => item.id)
+  const [expectedCounts, receivedCounts] = await Promise.all([
+    countActiveManifestItems(em, tenantId, jobIds),
+    countActiveAssets(em, tenantId, jobIds),
+  ])
   const singleRecord = typeof ctx.query.id === 'string' && ctx.query.id.length > 0
   for (const item of items) {
     item.heldBy = item.heldByUserId ? { id: item.heldByUserId, name: holders.get(item.heldByUserId) ?? null } : null
     // `null` means the company was deleted (or moved out of scope) after the job was created.
     item.customerName = names.get(`${item.organizationId}:${item.customerId}`) ?? null
     item.expectedAssetCount = expectedCounts.get(item.id) ?? 0
+    item.receivedAssetCount = receivedCounts.get(item.id) ?? 0
     if (singleRecord) item.editableFields = getEditableFields(item)
   }
 }
@@ -206,6 +212,7 @@ export const { metadata, GET, POST, PUT, DELETE } = makeCrudRoute({
       heldBy: null,
       expectedAssetEstimate: toIntOrNull(item.expected_asset_estimate),
       expectedAssetCount: 0,
+      receivedAssetCount: 0,
       scheduledPickupAt: toIso(item.scheduled_pickup_at),
       startedAt: toIso(item.started_at),
       completedAt: toIso(item.completed_at),
@@ -255,6 +262,7 @@ const itadJobListItemSchema = z.object({
   heldBy: z.object({ id: z.string().uuid(), name: z.string().nullable() }).nullable(),
   expectedAssetEstimate: z.number().int().nullable(),
   expectedAssetCount: z.number().int(),
+  receivedAssetCount: z.number().int(),
   scheduledPickupAt: z.string().nullable(),
   startedAt: z.string().nullable(),
   completedAt: z.string().nullable(),

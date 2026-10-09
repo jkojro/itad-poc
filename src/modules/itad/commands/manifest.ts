@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { LockMode } from '@mikro-orm/core'
 import type { EntityManager, FilterQuery } from '@mikro-orm/postgresql'
 import type { CommandHandler, CommandRuntimeContext } from '@open-mercato/shared/lib/commands'
 import { registerCommand } from '@open-mercato/shared/lib/commands'
@@ -21,7 +20,8 @@ import { ITAD_MANIFEST_IMPORT_ENTITY_ID } from '../lib/constants'
 import { assertManifestEditable, manifestError } from '../lib/manifest-errors'
 import { MANIFEST_ATTACHMENT_PARTITION, resolveAttachmentService } from '../module-integrations/attachments'
 import { loadActiveManifestSerials, prepareManifest } from '../services/manifest-import'
-import { ensureScope, loadJob, type JobScope } from './jobs'
+import { lockJob } from './job-lock'
+import { ensureScope, loadJob } from './jobs'
 
 const logger = createLogger('itad').child({ component: 'manifest' })
 
@@ -64,18 +64,6 @@ function toFieldMapping(mapping: ItadManifestImportInput['mapping']): ManifestFi
   return result
 }
 
-async function lockJob(tx: EntityManager, scope: JobScope, jobId: string): Promise<ItadJob> {
-  const job = await tx.findOne(
-    ItadJob,
-    { id: jobId, tenantId: scope.tenantId, organizationId: scope.organizationId, deletedAt: null } as FilterQuery<ItadJob>,
-    { lockMode: LockMode.PESSIMISTIC_WRITE },
-  )
-  if (!job) {
-    const { translate } = await resolveTranslations()
-    throw notFound(translate('itad.jobs.errors.not_found', 'ITAD job not found'))
-  }
-  return job
-}
 
 /**
  * Imports one manifest file into a job (spec "Import flow", step 3). Validation runs

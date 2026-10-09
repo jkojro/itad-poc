@@ -76,6 +76,14 @@ export function buildJobColumns(
       cell: ({ row }) => row.original.expectedAssetCount,
     },
     {
+      id: 'receivedAssetCount',
+      accessorKey: 'receivedAssetCount',
+      header: t('itad.jobs.table.column.receivedAssetCount', 'Received'),
+      enableSorting: false,
+      meta: { priority: 5 },
+      cell: ({ row }) => row.original.receivedAssetCount,
+    },
+    {
       id: 'updatedAt',
       accessorKey: 'updatedAt',
       header: t('itad.jobs.table.column.updatedAt', 'Updated'),

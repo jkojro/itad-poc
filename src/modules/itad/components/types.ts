@@ -18,6 +18,8 @@ export type ItadJobListItem = {
   expectedAssetEstimate: number | null
   /** Derived: active manifest items of the job. */
   expectedAssetCount: number
+  /** Derived: active (received) assets of the job. */
+  receivedAssetCount: number
   scheduledPickupAt: string | null
   startedAt: string | null
   completedAt: string | null

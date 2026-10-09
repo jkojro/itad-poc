@@ -1,5 +1,5 @@
 import { Entity, Index, ManyToOne, PrimaryKey, Property, Unique } from '@mikro-orm/decorators/legacy'
-import type { ItadJobStatus } from '../domain/job-types'
+import type { ItadAssetStatus, ItadJobStatus, ItadScanResolution, ItadScanResult } from '../domain/job-types'
 import type { ManifestFieldMapping, RowWarningCode, SourceDataEntry } from '../domain/manifest-mapping'
 
 /**
@@ -359,4 +359,151 @@ export class ItadManifestItem {
 
   @Property({ name: 'delete_job_status', type: 'text', nullable: true })
   deleteJobStatus?: ItadJobStatus | null
+}
+
+/**
+ * One physically received device (manifest spec "Receiving scan"). Created by the first
+ * scan of a serial in a job; `serialNormalized` is unique per job among active assets.
+ * Its manifest match is derived at read time from the serial, never stored. Later
+ * epics (erasure, grading, certificates) attach to it through same-module relations.
+ */
+@Entity({ tableName: 'itad_assets' })
+@Index({
+  name: 'itad_assets_scope_job_idx',
+  properties: ['tenantId', 'organizationId', 'job', 'deletedAt'],
+})
+@Index({
+  name: 'itad_assets_serial_unique',
+  expression:
+    'create unique index "itad_assets_serial_unique" on "itad_assets" ("tenant_id", "organization_id", "job_id", "serial_normalized") where "deleted_at" is null',
+})
+export class ItadAsset {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  @Property({ type: 'text' })
+  serial!: string
+
+  @Property({ name: 'serial_normalized', type: 'text' })
+  serialNormalized!: string
+
+  @Property({ name: 'customer_asset_tag', type: 'text', nullable: true })
+  customerAssetTag?: string | null
+
+  @Property({ type: 'text', nullable: true })
+  manufacturer?: string | null
+
+  @Property({ type: 'text', nullable: true })
+  model?: string | null
+
+  /** `null` = not yet determined whether the device carries data (spec Q9). */
+  @Property({ name: 'data_bearing', type: 'boolean', nullable: true })
+  dataBearing?: boolean | null
+
+  @Property({ type: 'text', default: 'received' })
+  status: ItadAssetStatus = 'received'
+
+  @Property({ name: 'received_at', type: Date })
+  receivedAt!: Date
+
+  @Property({ name: 'received_by_user_id', type: 'uuid' })
+  receivedByUserId!: string
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
+
+  /** Optimistic-lock version for asset edits and deletes. */
+  @Property({ name: 'updated_at', type: Date, onUpdate: () => new Date() })
+  updatedAt: Date = new Date()
+
+  @Property({ name: 'deleted_at', type: Date, nullable: true })
+  deletedAt?: Date | null
+
+  @Property({ name: 'deleted_by_user_id', type: 'uuid', nullable: true })
+  deletedByUserId?: string | null
+
+  @Property({ name: 'delete_reason', type: 'text', nullable: true })
+  deleteReason?: string | null
+}
+
+/**
+ * Log of every receiving scan. `result` is what the operator saw at scan time. A
+ * `duplicate` scan created no asset and stays pending until `resolvedAt` is set; the
+ * different-device flag keeps it pending (blocking) and remains as history.
+ */
+@Entity({ tableName: 'itad_intake_scans' })
+@Index({
+  name: 'itad_intake_scans_scope_job_idx',
+  properties: ['tenantId', 'organizationId', 'job', 'scannedAt'],
+})
+@Index({
+  name: 'itad_intake_scans_pending_duplicates_idx',
+  expression:
+    'create index "itad_intake_scans_pending_duplicates_idx" on "itad_intake_scans" ("tenant_id", "organization_id", "job_id") where "result" = \'duplicate\' and "resolved_at" is null',
+})
+export class ItadIntakeScan {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  /** The created asset, or the already registered one for a `duplicate`. */
+  @ManyToOne(() => ItadAsset, { fieldName: 'asset_id' })
+  asset!: ItadAsset
+
+  /** Manifest item matched at scan time (history only; reconciliation is derived). */
+  @ManyToOne(() => ItadManifestItem, { fieldName: 'manifest_item_id', nullable: true })
+  manifestItem?: ItadManifestItem | null
+
+  @Property({ name: 'raw_serial', type: 'text' })
+  rawSerial!: string
+
+  @Property({ name: 'serial_normalized', type: 'text' })
+  serialNormalized!: string
+
+  @Property({ type: 'text' })
+  result!: ItadScanResult
+
+  @Property({ name: 'scanned_by_user_id', type: 'uuid' })
+  scannedByUserId!: string
+
+  @Property({ name: 'scanned_at', type: Date })
+  scannedAt!: Date
+
+  @Property({ type: 'text', nullable: true })
+  resolution?: ItadScanResolution | null
+
+  @Property({ name: 'resolution_note', type: 'text', nullable: true })
+  resolutionNote?: string | null
+
+  @Property({ name: 'resolved_by_user_id', type: 'uuid', nullable: true })
+  resolvedByUserId?: string | null
+
+  @Property({ name: 'resolved_at', type: Date, nullable: true })
+  resolvedAt?: Date | null
+
+  @Property({ name: 'flagged_different_device_at', type: Date, nullable: true })
+  flaggedDifferentDeviceAt?: Date | null
+
+  @Property({ name: 'flagged_different_device_by_user_id', type: 'uuid', nullable: true })
+  flaggedDifferentDeviceByUserId?: string | null
+
+  @Property({ name: 'flagged_different_device_note', type: 'text', nullable: true })
+  flaggedDifferentDeviceNote?: string | null
 }

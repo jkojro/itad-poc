@@ -9,6 +9,8 @@ export const setup: ModuleSetupConfig = {
       'itad.jobs.transition',
       'itad.manifest.view',
       'itad.manifest.manage',
+      'itad.assets.view',
+      'itad.assets.receive',
     ],
   },
 }

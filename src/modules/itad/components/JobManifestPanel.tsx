@@ -68,7 +68,7 @@ function buildItemColumns(t: Translate): ColumnDef<ManifestItemRow>[] {
   ]
 }
 
-function SourceDataDialog({ item, onClose }: { item: ManifestItemRow | null; onClose: () => void }) {
+export function SourceDataDialog({ item, onClose }: { item: ManifestItemRow | null; onClose: () => void }) {
   const t = useT()
   return (
     <Dialog open={item !== null} onOpenChange={(open) => { if (!open) onClose() }}>
