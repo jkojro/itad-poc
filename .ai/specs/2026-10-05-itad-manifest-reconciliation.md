@@ -693,6 +693,11 @@ Design choices confirmed by the user (2026-10-05):
   - Full TC-ITAD suite: 23/23 in two runs on a fresh ephemeral build.
 - **Gates:** `yarn generate`, `yarn typecheck`, `yarn lint` (0 errors), `yarn ds:check` (286 files) and `yarn test` (172 passed) all pass. The build passed in the ephemeral environment.
 - **UI checked:** Polish, history at 1280 px light, remove dialog at 390 px dark.
+- **Found in user testing (2026-10-09):**
+  - No XLSX from the user's test pack imported (`file_unreadable`). The files bind the SpreadsheetML namespace to a prefix (`<x:workbook>`, as written by .NET Open XML SDK based exporters). This is valid OOXML that Excel reads, but `exceljs` finds no sheets in it.
+  - The reader now rewrites prefixed parts to the default namespace before loading (`normalizeSpreadsheetMlPrefixes`). It needs `jszip`, added as a direct dependency at the already-installed transitive version 3.10.2 (user approval 2026-10-09).
+  - The tests had missed this because their workbooks were written by `exceljs` itself. A regression unit test builds a prefixed workbook; it fails without the fix and passes with it. TC-ITAD-105 also imports a prefixed workbook end to end.
+  - Removing a manifest item during receiving logged a hydration error: the history wrapped the "During receiving" badge (a `div`) in a `p`. The wrapper is now a `div`, and TC-ITAD-107 fails on HTML nesting or hydration errors in the browser console.
 
 ## Changelog
 
@@ -705,3 +710,4 @@ Design choices confirmed by the user (2026-10-05):
 | 2026-10-05 | Review fixes: `differentDeviceUnresolved`/`duplicatesPending` defined on `resolvedAt`; source data on Receiving requires `itad.manifest.view` too (asset responses never embed it); import identity = job + sha256 + sheet; `sourceData` belongs to the creating import (later rows with the same serial don't update it); attachment = byte-for-byte file vs `sourceData` = parsed logical values; counters need only `itad.jobs.view` |
 | 2026-10-05 | Phase 1 implemented and verified (CSV manifest import, source data, Manifest tab, TC-ITAD-101…104) |
 | 2026-10-08 | Phase 2 implemented and verified (XLSX import with sheets and warnings, manifest item removal, manifest changes in the job history, TC-ITAD-105…107) |
+| 2026-10-09 | Phase 2 fix: XLSX files with prefixed SpreadsheetML namespace (`<x:…>`, .NET exporters) are normalized before `exceljs` loads them; `jszip` 3.10.2 declared as a direct dependency; regression tests added; history badge no longer nested in a `p` (hydration error) |

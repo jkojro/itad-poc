@@ -8,6 +8,7 @@ import {
   importManifest,
   listManifestItems,
   previewManifest,
+  toPrefixedSpreadsheetMl,
   xlsxBuffer,
   type ManifestPreviewBody,
 } from './itad-manifest-fixtures'
@@ -16,7 +17,8 @@ import {
  * TC-ITAD-105 (spec TEST-106 and TEST-107, XLSX part): an XLSX workbook with a
  * non-standard header imports with an explicit mapping; a numeric serial cell raises a
  * warning that must be accepted; each sheet imports separately and the same sheet
- * again is rejected; an unknown sheet is reported.
+ * again is rejected; an unknown sheet is reported. A workbook written with
+ * `x:`-prefixed SpreadsheetML elements (.NET exporters) imports like any other.
  */
 test.describe('TC-ITAD-105: manifest XLSX import', () => {
   test('sheets, explicit mapping, accepted warnings and import identity per sheet', async ({ request }) => {
@@ -87,6 +89,25 @@ test.describe('TC-ITAD-105: manifest XLSX import', () => {
       const missingSheet = await previewManifest(request, token, jobId, file, { sheet: 'Printers' })
       expect(missingSheet.status()).toBe(400)
       expect(await errorCode(missingSheet)).toBe('itad.manifest.errors.sheet_not_found')
+
+      // Regression: .NET Open XML SDK exporters prefix the SpreadsheetML namespace (`<x:workbook>`).
+      const dotnet = {
+        name: `dotnet-${tag}.xlsx`,
+        mimeType: XLSX_MIME,
+        buffer: await toPrefixedSpreadsheetMl(
+          await xlsxBuffer({ Assets: [['Serial Number', 'Manufacturer', 'Department'], [`NET-${tag}-1`, 'Lenovo', 'Finance']] }),
+        ),
+      }
+      const dotnetPreview = await readJsonSafe<ManifestPreviewBody & { sheets: string[] }>(await previewManifest(request, token, jobId, dotnet))
+      expect(dotnetPreview).toMatchObject({ sheets: ['Assets'], mappingError: null, counts: { valid: 1, invalid: 0 } })
+      const dotnetImport = await importManifest(request, token, jobId, dotnet, { mapping: { serial: 'Serial Number', manufacturer: 'Manufacturer' } })
+      expect(dotnetImport.status()).toBe(201)
+      const net = (await listManifestItems(request, token, jobId)).items.find((item) => item.serial === `NET-${tag}-1`)
+      expect(net?.sourceData).toEqual([
+        { column: 'Serial Number', value: `NET-${tag}-1` },
+        { column: 'Manufacturer', value: 'Lenovo' },
+        { column: 'Department', value: 'Finance' },
+      ])
     } finally {
       await deleteJobIfExists(request, token, jobId)
       await deleteEntityIfExists(request, token, '/api/customers/companies', companyId)

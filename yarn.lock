@@ -14685,6 +14685,7 @@ __metadata:
     ioredis: "npm:^6.0.0"
     jest: "npm:^30.4.2"
     jest-environment-jsdom: "npm:^30.4.1"
+    jszip: "npm:3.10.2"
     lucide-react: "npm:^1.34.0"
     mammoth: "npm:^1.9.0"
     newrelic: "npm:^14.3.9"
@@ -15448,7 +15449,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"jszip@npm:^3.10.1, jszip@npm:^3.7.1":
+"jszip@npm:3.10.2, jszip@npm:^3.10.1, jszip@npm:^3.7.1":
   version: 3.10.2
   resolution: "jszip@npm:3.10.2"
   dependencies:

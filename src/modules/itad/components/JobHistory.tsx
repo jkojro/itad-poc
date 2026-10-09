@@ -124,7 +124,8 @@ export function JobHistory({
         <ol className="space-y-3">
           {items.map((entry) => entry.kind === 'manifest' ? (
             <li key={`manifest-${entry.change.id}`} className="space-y-1 border-l-2 border-border pl-3 text-sm">
-              <p className="flex flex-wrap items-center gap-2">
+              {/* A div, not a p: StatusBadge renders a div, which a p cannot contain. */}
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">
                   {entry.change.kind === 'import'
                     ? t('itad.jobs.history.manifestImported', 'Manifest imported: {file}', {
@@ -135,7 +136,7 @@ export function JobHistory({
                 {entry.change.duringReceiving ? (
                   <StatusBadge variant="warning">{t('itad.jobs.history.duringReceiving', 'During receiving')}</StatusBadge>
                 ) : null}
-              </p>
+              </div>
               <p className="text-muted-foreground">
                 {formatDateTime(entry.change.at)} · {userName(entry.change.actor)}
               </p>

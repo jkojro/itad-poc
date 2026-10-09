@@ -19,6 +19,35 @@ export type XlsxReadResult =
 
 type RichTextLike = { richText: Array<{ text?: string }> }
 
+const SPREADSHEETML_MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+const PREFIXED_MAIN_NAMESPACE = /xmlns:([A-Za-z_][\w.-]*)="http:\/\/schemas\.openxmlformats\.org\/spreadsheetml\/2006\/main"/
+
+/**
+ * Valid OOXML may bind the SpreadsheetML namespace to a prefix (`<x:workbook>`, as
+ * written by .NET Open XML SDK based exporters). Excel reads that, `exceljs` does not:
+ * it finds no sheets. Rewrite such parts to the default namespace before loading.
+ * Returns the original bytes when no part uses a prefix.
+ */
+export async function normalizeSpreadsheetMlPrefixes(buffer: Buffer): Promise<Buffer> {
+  const loaded = (await import('jszip')) as unknown as { default?: typeof import('jszip') } & typeof import('jszip')
+  const JSZip = loaded.default ?? loaded
+  const zip = await JSZip.loadAsync(buffer)
+  let changed = false
+  for (const entry of Object.values(zip.files)) {
+    if (entry.dir || !/\.(xml|rels)$/i.test(entry.name)) continue
+    const xml = await entry.async('string')
+    const match = PREFIXED_MAIN_NAMESPACE.exec(xml)
+    if (!match) continue
+    const prefix = match[1]
+    const normalized = xml
+      .replace(new RegExp(`<(/?)${prefix}:`, 'g'), '<$1')
+      .replace(`xmlns:${prefix}="${SPREADSHEETML_MAIN}"`, `xmlns="${SPREADSHEETML_MAIN}"`)
+    zip.file(entry.name, normalized)
+    changed = true
+  }
+  return changed ? zip.generateAsync({ type: 'nodebuffer' }) : buffer
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !(value instanceof Date)
 }
@@ -74,7 +103,8 @@ export async function readXlsx(buffer: Buffer, sheet?: string | null): Promise<X
   const ExcelJS = loaded.default ?? loaded
   const workbook = new ExcelJS.Workbook()
   try {
-    await workbook.xlsx.load(buffer as unknown as ArrayBuffer)
+    const normalized = await normalizeSpreadsheetMlPrefixes(buffer)
+    await workbook.xlsx.load(normalized as unknown as ArrayBuffer)
   } catch {
     return { ok: false, code: 'file_unreadable' }
   }

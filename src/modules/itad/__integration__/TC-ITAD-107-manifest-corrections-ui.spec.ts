@@ -10,7 +10,7 @@ import { XLSX_MIME, csv, importManifestOk, xlsxBuffer } from './itad-manifest-fi
  * TC-ITAD-107 (spec TEST-116, wizard + history parts): during receiving an operator
  * imports the second sheet of an XLSX workbook through the wizard, removes a manifest
  * item (the reason is mandatory), and the job history shows both changes with the
- * "During receiving" badge.
+ * "During receiving" badge, without HTML nesting or hydration errors in the console.
  */
 test.describe('TC-ITAD-107: XLSX sheet import, item removal and history badge', () => {
   test('sheet selection, required removal reason and history entries', async ({ page, request }) => {
@@ -24,6 +24,14 @@ test.describe('TC-ITAD-107: XLSX sheet import, item removal and history badge', 
       jobId = (await createSchedulableJob(request, token, companyId, `QA corrections ${suffix}`)).id
       await importManifestOk(request, token, jobId, { name: `base-${tag}.csv`, content: csv([['Serial'], [`B1-${tag}`], [`B2-${tag}`]]) }, { serial: 'Serial' })
       await advanceToReceiving(request, token, jobId)
+
+      // Regression: invalid HTML nesting (a badge div inside a p) caused a hydration error in the history.
+      const markupErrors: string[] = []
+      page.on('console', (message) => {
+        if (message.type() === 'error' && /cannot be a descendant of|cannot contain a nested|hydration/i.test(message.text())) {
+          markupErrors.push(message.text())
+        }
+      })
 
       await login(page, 'admin')
       await page.goto(`/backend/itad/jobs/${jobId}?tab=manifest`)
@@ -72,6 +80,9 @@ test.describe('TC-ITAD-107: XLSX sheet import, item removal and history badge', 
       const sheetImport = history.getByRole('listitem').filter({ hasText: `Manifest imported: workbook-${tag}.xlsx (Monitors)` })
       await expect(sheetImport.getByText('During receiving')).toBeVisible()
       await expect(history.getByRole('listitem').filter({ hasText: `Manifest imported: base-${tag}.csv` }).getByText('During receiving')).toHaveCount(0)
+      await page.reload()
+      await expect(page.getByRole('region', { name: 'Status history' }).getByText('During receiving').first()).toBeVisible()
+      expect(markupErrors).toEqual([])
     } finally {
       await deleteJobIfExists(request, token, jobId)
       await deleteEntityIfExists(request, token, '/api/customers/companies', companyId)

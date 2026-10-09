@@ -165,3 +165,23 @@ export async function xlsxBuffer(sheets: Record<string, Array<Array<string | num
   }
   return Buffer.from(await workbook.xlsx.writeBuffer())
 }
+
+const SPREADSHEETML_MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+
+/** Rewrites a workbook to the `x:`-prefixed SpreadsheetML form written by .NET Open XML SDK exporters. */
+export async function toPrefixedSpreadsheetMl(buffer: Buffer): Promise<Buffer> {
+  const JSZip = (await import('jszip')).default
+  const zip = await JSZip.loadAsync(buffer)
+  for (const entry of Object.values(zip.files)) {
+    if (entry.dir || !entry.name.endsWith('.xml')) continue
+    const xml = await entry.async('string')
+    if (!xml.includes(`xmlns="${SPREADSHEETML_MAIN}"`)) continue
+    zip.file(
+      entry.name,
+      xml
+        .replace(/<(\/?)([A-Za-z_][\w.-]*)(?=[\s/>])/g, '<$1x:$2')
+        .replace(`xmlns="${SPREADSHEETML_MAIN}"`, `xmlns:x="${SPREADSHEETML_MAIN}"`),
+    )
+  }
+  return zip.generateAsync({ type: 'nodebuffer' })
+}

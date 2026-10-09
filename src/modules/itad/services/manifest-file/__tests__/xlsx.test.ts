@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals'
 import ExcelJS from 'exceljs'
+import JSZip from 'jszip'
 import { readManifestFile } from '../read-manifest-file'
 import { toManifestCell } from '../xlsx'
 
@@ -7,6 +8,23 @@ async function workbookBuffer(build: (workbook: ExcelJS.Workbook) => void): Prom
   const workbook = new ExcelJS.Workbook()
   build(workbook)
   return Buffer.from(await workbook.xlsx.writeBuffer())
+}
+
+const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+
+/** Rewrites every SpreadsheetML part to the `x:` prefix, as .NET Open XML SDK exporters write it. */
+async function toPrefixedNamespace(buffer: Buffer): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(buffer)
+  for (const entry of Object.values(zip.files)) {
+    if (entry.dir || !entry.name.endsWith('.xml')) continue
+    const xml = await entry.async('string')
+    if (!xml.includes(`xmlns="${MAIN}"`)) continue
+    zip.file(
+      entry.name,
+      xml.replace(/<(\/?)([A-Za-z_][\w.-]*)(?=[\s/>])/g, '<$1x:$2').replace(`xmlns="${MAIN}"`, `xmlns:x="${MAIN}"`),
+    )
+  }
+  return zip.generateAsync({ type: 'nodebuffer' })
 }
 
 describe('toManifestCell (TEST-102, XLSX part)', () => {
@@ -55,6 +73,26 @@ describe('readManifestFile — XLSX (TEST-102, XLSX part)', () => {
     const monitors = await readManifestFile({ fileName: 'm.xlsx', buffer, sheet: 'Monitors' })
     expect(monitors).toMatchObject({ ok: true, sheetName: 'Monitors' })
     expect(await readManifestFile({ fileName: 'm.xlsx', buffer, sheet: 'Printers' })).toEqual({ ok: false, code: 'sheet_not_found' })
+  })
+
+  it('reads workbooks whose SpreadsheetML elements carry a namespace prefix (.NET exporters)', async () => {
+    const plain = await workbookBuffer((workbook) => {
+      const assets = workbook.addWorksheet('Assets')
+      assets.addRow(['Serial Number', 'Manufacturer'])
+      assets.addRow(['ABC 123', 'Dell'])
+      workbook.addWorksheet('Archive').addRow(['Serial'])
+    })
+    const prefixed = await toPrefixedNamespace(plain)
+    expect((await JSZip.loadAsync(prefixed)).file('xl/workbook.xml')).not.toBeNull()
+    expect(await (await JSZip.loadAsync(prefixed)).file('xl/workbook.xml')!.async('string')).toContain('<x:workbook')
+
+    const result = await readManifestFile({ fileName: 'dotnet.xlsx', buffer: prefixed })
+    if (!result.ok) throw new Error(result.code)
+    expect(result.sheets).toEqual(['Assets', 'Archive'])
+    expect(result.sheet.rows.map((row) => row.map((cell) => cell.value))).toEqual([
+      ['Serial Number', 'Manufacturer'],
+      ['ABC 123', 'Dell'],
+    ])
   })
 
   it('rejects a renamed non-zip file and a corrupt package', async () => {
