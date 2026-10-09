@@ -5,9 +5,10 @@ import { itadManifestError, type ItadManifestErrorCode } from './errors'
 /** Translated manifest errors (`itad.manifest.errors.*`) shared by manifest routes and commands. */
 const MANIFEST_ERROR_MESSAGES: Record<ItadManifestErrorCode, string> = {
   manifest_locked: 'The manifest can no longer be changed in the current job status',
-  file_required: 'Choose a CSV file to import',
+  file_required: 'Choose a CSV or XLSX file to import',
   file_unreadable: 'The file could not be read',
-  file_type_unsupported: 'Only CSV files are supported',
+  file_type_unsupported: 'Only CSV and XLSX files are supported',
+  sheet_not_found: 'The selected sheet is not in the workbook',
   file_too_large: 'The file is larger than 10 MB',
   file_empty: 'The file has no data rows',
   too_many_rows: 'The file has more than 5,000 data rows',
@@ -17,6 +18,7 @@ const MANIFEST_ERROR_MESSAGES: Record<ItadManifestErrorCode, string> = {
   manifest_rows_invalid: 'Some rows are invalid. Fix the file and import it again',
   warnings_not_accepted: 'Review and accept the warnings before importing',
   manifest_already_imported: 'This file has already been imported into this job',
+  reason_required: 'Enter a reason (3–1000 characters); it is required while the job is in receiving',
 }
 
 export async function manifestError(

@@ -10,7 +10,7 @@ import {
   type ManifestTable,
   type MappingErrorCode,
 } from '../domain/manifest-mapping'
-import { readManifestFile, type ManifestFileFormat } from './manifest-file/read-manifest-file'
+import { readManifestFile, type ManifestFileErrorCode, type ManifestFileFormat } from './manifest-file/read-manifest-file'
 
 /**
  * Shared read side of manifest preview and import: bytes → table → mapping →
@@ -35,7 +35,7 @@ export type PreparedManifest = {
 
 export type PrepareManifestResult =
   | { ok: true; prepared: PreparedManifest }
-  | { ok: false; code: 'file_unreadable' | 'file_type_unsupported' | 'file_too_large' | 'file_empty' | 'too_many_rows' | 'too_many_columns' }
+  | { ok: false; code: ManifestFileErrorCode }
 
 /** Normalized serials of the job's active manifest items. */
 export async function loadActiveManifestSerials(
@@ -75,9 +75,10 @@ export async function prepareManifest(input: {
   jobId: string
   fileName: string
   buffer: Buffer
+  sheet?: string | null
   mapping?: ManifestFieldMapping | null
 }): Promise<PrepareManifestResult> {
-  const file = await readManifestFile({ fileName: input.fileName, buffer: input.buffer })
+  const file = await readManifestFile({ fileName: input.fileName, buffer: input.buffer, sheet: input.sheet })
   if (!file.ok) return file
   const built = buildManifestTable(file.sheet)
   if (!built.ok) return built

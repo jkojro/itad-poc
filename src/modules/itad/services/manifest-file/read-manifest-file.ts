@@ -1,17 +1,25 @@
 import { createHash } from 'node:crypto'
 import type { ManifestSheet } from '../../domain/manifest-mapping'
 import { detectDelimiter, parseCsv } from './csv'
+import { readXlsx } from './xlsx'
 
 /**
  * Turns an uploaded manifest file into a `ManifestSheet` (spec "Import flow"). The
- * format is decided by extension and confirmed by content sniffing. Phase 1 reads CSV;
- * XLSX is recognized and reported as unsupported until its reader lands (Phase 2).
+ * format is decided by extension and confirmed by content sniffing: CSV (UTF-8 text)
+ * or XLSX (a zip package). XLSX reads the requested sheet, or the first one.
  */
 export const MANIFEST_MAX_FILE_BYTES = 10 * 1024 * 1024
 
 export type ManifestFileFormat = 'csv' | 'xlsx'
 
-export type ManifestFileErrorCode = 'file_unreadable' | 'file_type_unsupported' | 'file_too_large' | 'file_empty'
+export type ManifestFileErrorCode =
+  | 'file_unreadable'
+  | 'file_type_unsupported'
+  | 'file_too_large'
+  | 'file_empty'
+  | 'sheet_not_found'
+  | 'too_many_rows'
+  | 'too_many_columns'
 
 export type ReadManifestFileResult =
   | {
@@ -60,11 +68,21 @@ function readCsv(buffer: Buffer): ReadManifestFileResult {
   }
 }
 
-export async function readManifestFile(input: { fileName: string; buffer: Buffer }): Promise<ReadManifestFileResult> {
+export async function readManifestFile(input: {
+  fileName: string
+  buffer: Buffer
+  sheet?: string | null
+}): Promise<ReadManifestFileResult> {
   const { fileName, buffer } = input
   if (buffer.length > MANIFEST_MAX_FILE_BYTES) return { ok: false, code: 'file_too_large' }
   if (buffer.length === 0) return { ok: false, code: 'file_empty' }
   const extension = extensionOf(fileName)
   if (extension === 'csv') return readCsv(buffer)
+  if (extension === 'xlsx') {
+    if (!startsWith(buffer, ZIP_SIGNATURE)) return { ok: false, code: 'file_type_unsupported' }
+    const read = await readXlsx(buffer, input.sheet)
+    if (!read.ok) return read
+    return { ok: true, format: 'xlsx', sha256: sha256Of(buffer), sheets: read.sheets, sheetName: read.sheetName, sheet: read.sheet }
+  }
   return { ok: false, code: 'file_type_unsupported' }
 }

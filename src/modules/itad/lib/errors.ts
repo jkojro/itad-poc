@@ -53,6 +53,7 @@ export type ItadManifestErrorCode =
   | 'file_type_unsupported'
   | 'file_too_large'
   | 'file_empty'
+  | 'sheet_not_found'
   | 'too_many_rows'
   | 'too_many_columns'
   | 'file_changed'
@@ -60,6 +61,7 @@ export type ItadManifestErrorCode =
   | 'manifest_rows_invalid'
   | 'warnings_not_accepted'
   | 'manifest_already_imported'
+  | 'reason_required'
 
 /** Coded manifest error; same body shape as `itadJobError`, with the manifest key prefix. */
 export function itadManifestError(
