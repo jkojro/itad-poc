@@ -125,3 +125,59 @@ export const itadManifestItemListSchema = z.object({
   search: z.string().trim().max(200).optional(),
   id: z.string().uuid().optional(),
 })
+
+/** Durable input of `itad.assets.scan`; the raw serial as scanned or typed. */
+export const itadAssetScanSchema = z.object({
+  jobId: z.string().uuid(),
+  serial: z.string().max(500),
+})
+
+export type ItadAssetScanInput = z.infer<typeof itadAssetScanSchema>
+
+/** Input of the duplicate actions (`itad.assets.resolve_duplicate`, `itad.assets.flag_different_device`). */
+export const itadScanActionSchema = z.object({
+  jobId: z.string().uuid(),
+  scanId: z.string().uuid(),
+  note: z.string().max(1000).nullable().optional(),
+})
+
+export type ItadScanActionInput = z.infer<typeof itadScanActionSchema>
+
+/** System fields of an asset that edits may never carry (rejected with `field_not_writable`). */
+export const ITAD_ASSET_SYSTEM_FIELDS = ['serial', 'serialNormalized', 'status', 'receivedAt', 'receivedByUserId'] as const
+
+const optionalAssetText = z.preprocess(emptyToNull, z.string().min(1).max(200).nullable().optional())
+
+/** Durable input of `itad.assets.update`; omitted keys stay unchanged, `null` clears. */
+export const itadAssetUpdateSchema = z.object({
+  jobId: z.string().uuid(),
+  assetId: z.string().uuid(),
+  customerAssetTag: optionalAssetText,
+  manufacturer: optionalAssetText,
+  model: optionalAssetText,
+  dataBearing: z.boolean().nullable().optional(),
+})
+
+export type ItadAssetUpdateInput = z.infer<typeof itadAssetUpdateSchema>
+
+export const itadAssetDeleteSchema = z.object({
+  jobId: z.string().uuid(),
+  assetId: z.string().uuid(),
+  reason: z.string().max(1000).nullable().optional(),
+})
+
+export type ItadAssetDeleteInput = z.infer<typeof itadAssetDeleteSchema>
+
+export const itadAssetListSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  search: z.string().trim().max(200).optional(),
+  id: z.string().uuid().optional(),
+})
+
+export const itadScanListSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  result: z.enum(['matched', 'unexpected', 'duplicate']).optional(),
+  pending: z.enum(['true', 'false']).optional(),
+})

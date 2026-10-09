@@ -76,3 +76,30 @@ export function itadManifestError(
     ...(extra ?? {}),
   })
 }
+
+export const ITAD_ASSET_ERROR_PREFIX = 'itad.assets.errors.'
+
+export type ItadAssetErrorCode =
+  | 'receiving_not_active'
+  | 'assets_locked'
+  | 'serial_missing'
+  | 'serial_too_long'
+  | 'serial_conflict'
+  | 'scan_not_resolvable'
+  | 'note_required'
+  | 'reason_required'
+  | 'field_not_writable'
+
+/** Coded receiving/asset error; same body shape as `itadJobError`, with the asset key prefix. */
+export function itadAssetError(
+  status: 400 | 409,
+  code: ItadAssetErrorCode,
+  message: string,
+  fieldErrors?: Record<string, string>,
+): CrudHttpError {
+  return new CrudHttpError(status, {
+    error: message,
+    code: `${ITAD_ASSET_ERROR_PREFIX}${code}`,
+    ...(fieldErrors ? { fieldErrors } : {}),
+  })
+}

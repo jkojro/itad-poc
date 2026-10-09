@@ -18,6 +18,7 @@ import type { ItadJobListItem } from './types'
 import { JobStatusPanel } from './JobStatusPanel'
 import { JobHistory } from './JobHistory'
 import { JobManifestPanel } from './JobManifestPanel'
+import { JobReceivingPanel } from './JobReceivingPanel'
 import { useGrantedFeatures } from './use-granted-features'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@open-mercato/ui/primitives/tabs'
 import { ITAD_JOB_ENTITY_ID } from '../lib/constants'
@@ -25,7 +26,15 @@ import { ITAD_JOB_ENTITY_ID } from '../lib/constants'
 const API_PATH = 'itad/jobs'
 const LIST_HREF = '/backend/itad/jobs'
 const ENTITY_ID = ITAD_JOB_ENTITY_ID
-const MANIFEST_FEATURES = ['itad.manifest.view', 'itad.manifest.manage'] as const
+const DETAIL_TAB_FEATURES = [
+  'itad.manifest.view',
+  'itad.manifest.manage',
+  'itad.assets.view',
+  'itad.assets.receive',
+  'itad.assets.manage',
+] as const
+const DETAIL_TABS = ['overview', 'manifest', 'receiving'] as const
+type DetailTab = (typeof DETAIL_TABS)[number]
 
 type Translate = ReturnType<typeof useT>
 
@@ -202,6 +211,10 @@ function JobSummary({ job, t }: { job: ItadJobListItem; t: Translate }) {
         <dd>{job.expectedAssetCount}</dd>
       </div>
       <div>
+        <dt className="text-muted-foreground">{t('itad.jobs.detail.receivedAssetCount', 'Received devices')}</dt>
+        <dd>{job.receivedAssetCount}</dd>
+      </div>
+      <div>
         <dt className="text-muted-foreground">{t('itad.jobs.detail.startedAt', 'Started')}</dt>
         <dd>{formatDateTime(job.startedAt)}</dd>
       </div>
@@ -285,10 +298,13 @@ export function JobDetailForm({ id }: { id: string }) {
   const reload = React.useCallback(() => setReloadToken((value) => value + 1), [])
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { granted } = useGrantedFeatures(MANIFEST_FEATURES)
+  const { granted } = useGrantedFeatures(DETAIL_TAB_FEATURES)
   const canViewManifest = granted.has('itad.manifest.view')
-  // The selected tab lives in the URL (`?tab=manifest`) so it survives reloads and can be linked.
-  const tab = searchParams?.get('tab') === 'manifest' && canViewManifest ? 'manifest' : 'overview'
+  const canViewAssets = granted.has('itad.assets.view')
+  // The selected tab lives in the URL (`?tab=manifest|receiving`) so it survives reloads and can be linked.
+  const requestedTab = searchParams?.get('tab')
+  const tab: DetailTab =
+    requestedTab === 'manifest' && canViewManifest ? 'manifest' : requestedTab === 'receiving' && canViewAssets ? 'receiving' : 'overview'
   const selectTab = React.useCallback(
     (next: string) => {
       const params = new URLSearchParams(searchParams?.toString() ?? '')
@@ -296,8 +312,10 @@ export function JobDetailForm({ id }: { id: string }) {
       else params.set('tab', next)
       const query = params.toString()
       router.replace(`${LIST_HREF}/${id}${query ? `?${query}` : ''}`, { scroll: false })
+      // Counters in the summary are derived; refresh them when coming back to the overview.
+      if (next === 'overview') reload()
     },
-    [id, router, searchParams],
+    [id, reload, router, searchParams],
   )
 
   React.useEffect(() => {
@@ -397,18 +415,31 @@ export function JobDetailForm({ id }: { id: string }) {
     </div>
   )
 
-  if (!job || !canViewManifest) return overview
+  if (!job || (!canViewManifest && !canViewAssets)) return overview
 
   return (
     <Tabs value={tab} onValueChange={selectTab} variant="underline">
       <TabsList aria-label={t('itad.jobs.detail.tabs', 'Job sections')}>
         <TabsTrigger value="overview">{t('itad.jobs.detail.tab.overview', 'Overview')}</TabsTrigger>
-        <TabsTrigger value="manifest">{t('itad.manifest.title', 'Manifest')}</TabsTrigger>
+        {canViewManifest ? <TabsTrigger value="manifest">{t('itad.manifest.title', 'Manifest')}</TabsTrigger> : null}
+        {canViewAssets ? <TabsTrigger value="receiving">{t('itad.receiving.title', 'Receiving')}</TabsTrigger> : null}
       </TabsList>
       <TabsContent value="overview" className="pt-4">{overview}</TabsContent>
-      <TabsContent value="manifest" className="pt-4">
-        <JobManifestPanel job={job} canManage={granted.has('itad.manifest.manage')} onChanged={reload} />
-      </TabsContent>
+      {canViewManifest ? (
+        <TabsContent value="manifest" className="pt-4">
+          <JobManifestPanel job={job} canManage={granted.has('itad.manifest.manage')} onChanged={reload} />
+        </TabsContent>
+      ) : null}
+      {canViewAssets ? (
+        <TabsContent value="receiving" className="pt-4">
+          <JobReceivingPanel
+            job={job}
+            canReceive={granted.has('itad.assets.receive')}
+            canManage={granted.has('itad.assets.manage')}
+            canViewManifest={canViewManifest}
+          />
+        </TabsContent>
+      ) : null}
     </Tabs>
   )
 }

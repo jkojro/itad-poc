@@ -14,6 +14,17 @@ const events = [
   { id: 'itad.manifest.imported', label: 'ITAD Manifest Imported', entity: 'manifest_import', category: 'lifecycle' },
   // Payload: { jobId, itemId, serialNormalized, reason, actorUserId, tenantId, organizationId }; no source data.
   { id: 'itad.manifest.item_deleted', label: 'ITAD Manifest Item Deleted', entity: 'manifest_item', category: 'lifecycle' },
+  // Receiving (all payloads also carry jobId, actorUserId, tenantId, organizationId; never source data).
+  // itad.asset.received: { assetId, scanId, result }.
+  { id: 'itad.asset.received', label: 'ITAD Asset Received', entity: 'asset', category: 'lifecycle', clientBroadcast: true },
+  // itad.asset.updated: { assetId }; itad.asset.deleted: { assetId, reason }.
+  { id: 'itad.asset.updated', label: 'ITAD Asset Updated', entity: 'asset', category: 'lifecycle', clientBroadcast: true },
+  { id: 'itad.asset.deleted', label: 'ITAD Asset Deleted', entity: 'asset', category: 'lifecycle', clientBroadcast: true },
+  // itad.intake_scan.duplicate_detected: { scanId, assetId }; .resolved: { scanId, resolution };
+  // .flagged_different_device: { scanId, assetId } (input for the exceptions epic).
+  { id: 'itad.intake_scan.duplicate_detected', label: 'ITAD Duplicate Scan Detected', entity: 'intake_scan', category: 'lifecycle', clientBroadcast: true },
+  { id: 'itad.intake_scan.resolved', label: 'ITAD Duplicate Scan Resolved', entity: 'intake_scan', category: 'lifecycle', clientBroadcast: true },
+  { id: 'itad.intake_scan.flagged_different_device', label: 'ITAD Duplicate Scan Flagged As Different Device', entity: 'intake_scan', category: 'lifecycle' },
 ] as const
 
 export const eventsConfig = createModuleEvents({
