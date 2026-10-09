@@ -70,6 +70,8 @@ export type ManifestItemRow = {
   importId: string
   importFileName: string
   createdAt: string
+  reconciliation: 'matched' | 'missing'
+  assetId: string | null
 }
 
 export const MANIFEST_TARGET_FIELD_IDS = ['serial', 'customerAssetTag', 'manufacturer', 'model'] as const

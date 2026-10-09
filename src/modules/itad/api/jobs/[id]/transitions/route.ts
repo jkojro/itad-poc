@@ -17,7 +17,8 @@ import {
   type ItadJobTransitionResult,
 } from '../../../../commands/transitions'
 import { ITAD_JOB_STATUSES } from '../../../../domain/job-types'
-import { isCompanyInScope } from '../../../../module-integrations/customers'
+import type { EntityManager } from '@mikro-orm/postgresql'
+import { buildConditionDeps } from '../../../../services/job-condition-evaluator'
 import { ITAD_JOB_CONDITIONS, ITAD_JOB_CONDITION_KEYS, evaluateConditions } from '../../../../domain/job-conditions'
 import { ITAD_JOB_ACTIONS, ITAD_JOB_TRANSITIONS, availableActions, resolveTargetStatus } from '../../../../domain/job-state-machine'
 import {
@@ -50,7 +51,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
     ])
     const queryEngine = route.container.resolve<QueryEngine>('queryEngine')
     const scope = { tenantId: route.tenantId, organizationId: job.organizationId }
-    const deps = { isCustomerValid: (customerId: string) => isCompanyInScope(queryEngine, scope, customerId) }
+    const em = route.container.resolve<EntityManager>('em').fork()
+    const deps = buildConditionDeps({ em, queryEngine, scope })
 
     const actions = []
     for (const action of availableActions(job)) {

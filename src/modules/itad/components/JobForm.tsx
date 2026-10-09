@@ -401,6 +401,9 @@ export function JobDetailForm({ id }: { id: string }) {
         successRedirect={successRedirect}
         deleteRedirect={deleteRedirect}
         isLoading={loading}
+        // The detail page is read first and edited on purpose: no autofocus, so returning to
+        // the Overview tab does not put the cursor into "Name" (accidental edits).
+        disableInitialFocus
         loadingMessage={t('itad.jobs.form.loading', 'Loading job…')}
         readOnly={terminal}
         onSubmit={async (values) => {

@@ -12,6 +12,7 @@ const ASSET_ERROR_MESSAGES: Record<ItadAssetErrorCode, string> = {
   note_required: 'Enter a note (3–1000 characters) saying where the device is',
   reason_required: 'Enter a reason (3–1000 characters)',
   field_not_writable: 'The serial number and status cannot be changed; remove the asset and scan again',
+  serial_too_short: 'Enter at least 3 characters of the serial number',
 }
 
 export async function assetError(

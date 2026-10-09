@@ -2,7 +2,6 @@ import type { EntityManager } from '@mikro-orm/postgresql'
 import { z } from 'zod'
 import type { CommandHandler } from '@open-mercato/shared/lib/commands'
 import { registerCommand } from '@open-mercato/shared/lib/commands'
-import { withAtomicFlush } from '@open-mercato/shared/lib/commands/flush'
 import { enforceCommandOptimisticLock } from '@open-mercato/shared/lib/crud/optimistic-lock-command'
 import { resolveTranslations } from '@open-mercato/shared/lib/i18n/server'
 import type { QueryEngine } from '@open-mercato/shared/lib/query/types'
@@ -10,11 +9,12 @@ import { createLogger } from '@open-mercato/shared/lib/logger'
 import { ItadJob, ItadJobConditionConfirmation, ItadJobStatusTransition } from '../data/entities'
 import type { ItadJobStatus } from '../domain/job-types'
 import { emitItadEvent } from '../events'
-import { isCompanyInScope } from '../module-integrations/customers'
+import { buildConditionDeps } from '../services/job-condition-evaluator'
 import { decideTransition, type TransitionRejection } from '../domain/job-conditions'
 import { isTerminalStatus } from '../domain/job-editability'
 import { ITAD_JOB_ACTIONS, type ItadJobAction } from '../domain/job-state-machine'
 import { itadJobError } from '../lib/errors'
+import { lockJob } from './job-lock'
 import { emitJobEffects, ensureScope, loadJob } from './jobs'
 
 const logger = createLogger('itad').child({ component: 'transition' })
@@ -64,9 +64,10 @@ async function throwRejection(rejection: TransitionRejection): Promise<never> {
 }
 
 /**
- * Applies one guarded status change (spec "Transition table"). Lock check, conditions,
- * status-derived fields, the history row and its confirmations commit in one
- * transaction; events and CRUD side effects run after commit. Not undoable: corrections
+ * Applies one guarded status change (spec "Transition table"). The job row is locked;
+ * the version check, conditions (evaluated with that transaction's facts), status-derived
+ * fields, the history row and its confirmations commit in one transaction; events and
+ * CRUD side effects run after commit. Not undoable: corrections
  * use the explicit backward transitions.
  *
  * The caller (route) has already checked `itad.jobs.transition` and, when confirmations
@@ -81,92 +82,97 @@ const transitionJobCommand: CommandHandler<ItadJobTransitionInput, ItadJobTransi
     const actorUserId = ctx.auth?.sub ?? null
     if (!actorUserId) throw new Error('[internal] Transition requires an authenticated actor')
     const em = ctx.container.resolve<EntityManager>('em').fork()
-    const job = await loadJob(em, scope, input.id)
-
-    enforceCommandOptimisticLock({
-      resourceKind: ITAD_JOB_LOCK_RESOURCE_KIND,
-      resourceId: job.id,
-      current: job.updatedAt,
-      request: ctx.request ?? null,
-    })
-    if (isTerminalStatus(job.status)) {
-      const { translate } = await resolveTranslations()
-      throw itadJobError(409, 'terminal', translate('itad.jobs.errors.terminal', 'Completed or cancelled jobs cannot be changed'))
-    }
-
+    // 404 for a job outside the scope before any lock is taken.
+    await loadJob(em, scope, input.id)
     const queryEngine = ctx.container.resolve<QueryEngine>('queryEngine')
-    const decision = await decideTransition({
-      job,
-      action: input.action,
-      reason: input.reason,
-      confirmations: (input.confirmations ?? []).map((entry) => ({ condition: entry.condition, comment: entry.comment ?? null })),
-      deps: { isCustomerValid: (customerId) => isCompanyInScope(queryEngine, scope, customerId) },
-    })
-    if (!decision.ok) return throwRejection(decision.rejection)
-
-    const from = job.status
-    const to = decision.target
-    const reason = typeof input.reason === 'string' && input.reason.trim() ? input.reason.trim() : null
     const now = new Date()
-    const holder: { transition?: ItadJobStatusTransition } = {}
+    const holder: {
+      job?: ItadJob
+      from?: ItadJobStatus
+      to?: ItadJobStatus
+      transition?: ItadJobStatusTransition
+      confirmations?: Array<{ condition: string; comment: string }>
+    } = {}
 
-    await withAtomicFlush(
-      em,
-      [
-        () => {
-          if (input.action === 'hold') {
-            job.statusBeforeHold = from
-            job.heldAt = now
-            job.heldByUserId = actorUserId
-            job.holdReason = reason
-          } else if (from === 'on_hold') {
-            job.statusBeforeHold = null
-            job.heldAt = null
-            job.heldByUserId = null
-            job.holdReason = null
-          }
-          if (to === 'receiving' && !job.startedAt) job.startedAt = now
-          if (to === 'completed') job.completedAt = now
-          job.status = to
-          job.updatedAt = now
-        },
-        () => {
-          const transition = em.create(ItadJobStatusTransition, {
+    // Manifest spec "Concurrency": the job row is locked first and the conditions are
+    // evaluated inside the same transaction, so a scan, duplicate or manifest change
+    // cannot slip in between `receivingComplete` being checked and the status change.
+    await em.transactional(async (tx) => {
+      const job = await lockJob(tx, scope, input.id)
+      enforceCommandOptimisticLock({
+        resourceKind: ITAD_JOB_LOCK_RESOURCE_KIND,
+        resourceId: job.id,
+        current: job.updatedAt,
+        request: ctx.request ?? null,
+      })
+      if (isTerminalStatus(job.status)) {
+        const { translate } = await resolveTranslations()
+        throw itadJobError(409, 'terminal', translate('itad.jobs.errors.terminal', 'Completed or cancelled jobs cannot be changed'))
+      }
+
+      const decision = await decideTransition({
+        job,
+        action: input.action,
+        reason: input.reason,
+        confirmations: (input.confirmations ?? []).map((entry) => ({ condition: entry.condition, comment: entry.comment ?? null })),
+        deps: buildConditionDeps({ em: tx, queryEngine, scope }),
+      })
+      if (!decision.ok) return await throwRejection(decision.rejection)
+
+      const from = job.status
+      const to = decision.target
+      const reason = typeof input.reason === 'string' && input.reason.trim() ? input.reason.trim() : null
+      if (input.action === 'hold') {
+        job.statusBeforeHold = from
+        job.heldAt = now
+        job.heldByUserId = actorUserId
+        job.holdReason = reason
+      } else if (from === 'on_hold') {
+        job.statusBeforeHold = null
+        job.heldAt = null
+        job.heldByUserId = null
+        job.holdReason = null
+      }
+      if (to === 'receiving' && !job.startedAt) job.startedAt = now
+      if (to === 'completed') job.completedAt = now
+      job.status = to
+      job.updatedAt = now
+
+      const transition = tx.create(ItadJobStatusTransition, {
+        tenantId: scope.tenantId,
+        organizationId: scope.organizationId,
+        job,
+        action: input.action,
+        fromStatus: from,
+        toStatus: to,
+        reason,
+        actorUserId,
+        createdAt: now,
+      })
+      tx.persist(transition)
+      for (const confirmation of decision.confirmations) {
+        tx.persist(
+          tx.create(ItadJobConditionConfirmation, {
             tenantId: scope.tenantId,
             organizationId: scope.organizationId,
             job,
-            action: input.action,
-            fromStatus: from,
-            toStatus: to,
-            reason,
-            actorUserId,
-            createdAt: now,
-          })
-          em.persist(transition)
-          holder.transition = transition
-        },
-        () => {
-          const transition = holder.transition
-          if (!transition) throw new Error('[internal] Transition row missing')
-          for (const confirmation of decision.confirmations) {
-            em.persist(
-              em.create(ItadJobConditionConfirmation, {
-                tenantId: scope.tenantId,
-                organizationId: scope.organizationId,
-                job,
-                transition,
-                condition: confirmation.condition,
-                comment: confirmation.comment,
-                confirmedByUserId: actorUserId,
-                confirmedAt: now,
-              }),
-            )
-          }
-        },
-      ],
-      { transaction: true, label: 'itad.jobs.transition' },
-    )
+            transition,
+            condition: confirmation.condition,
+            comment: confirmation.comment,
+            confirmedByUserId: actorUserId,
+            confirmedAt: now,
+          }),
+        )
+      }
+      await tx.flush()
+      Object.assign(holder, { job, from, to, transition, confirmations: decision.confirmations })
+    })
 
+    const job = holder.job
+    const from = holder.from
+    const to = holder.to
+    if (!job || !from || !to) throw new Error('[internal] Transition was not applied')
+    const decision = { confirmations: holder.confirmations ?? [] }
     const transition = holder.transition
     if (!transition) throw new Error('[internal] Transition row missing')
     const transitionId = String(transition.id)

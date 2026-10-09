@@ -32,6 +32,8 @@ import { SourceDataDialog } from './JobManifestPanel'
 import type { ManifestItemRow } from './manifest-types'
 import type { AssetRow, ScanListItem, ScanOutcome, ScanResponse } from './receiving-types'
 import type { ItadJobListItem } from './types'
+import type { FilterValues } from '@open-mercato/ui/backend/FilterBar'
+import { ReconciliationBadge, reconciliationLabel, useInvalidateReconciliation, useReconciliation } from './reconciliation-ui'
 
 type Translate = ReturnType<typeof useT>
 
@@ -463,6 +465,11 @@ function buildAssetColumns(t: Translate): ColumnDef<AssetRow>[] {
     { id: 'customerAssetTag', accessorKey: 'customerAssetTag', header: t('itad.manifest.field.customerAssetTag', 'Customer asset tag'), cell: ({ row }) => row.original.customerAssetTag ?? '—' },
     { id: 'manufacturer', accessorKey: 'manufacturer', header: t('itad.manifest.field.manufacturer', 'Manufacturer'), cell: ({ row }) => row.original.manufacturer ?? '—' },
     { id: 'model', accessorKey: 'model', header: t('itad.manifest.field.model', 'Model'), cell: ({ row }) => row.original.model ?? '—' },
+    {
+      id: 'reconciliation',
+      header: t('itad.reconciliation.column', 'Reconciliation'),
+      cell: ({ row }) => <ReconciliationBadge t={t} state={row.original.reconciliation} />,
+    },
     { id: 'dataBearing', header: t('itad.receiving.dataBearing.label', 'Carries data'), cell: ({ row }) => dataBearingLabel(t, row.original.dataBearing) },
     {
       id: 'receivedAt',
@@ -496,23 +503,24 @@ export function JobReceivingPanel({
   const [editAsset, setEditAsset] = React.useState<AssetRow | null>(null)
   const [removeAsset, setRemoveAsset] = React.useState<AssetRow | null>(null)
   const [sourceItem, setSourceItem] = React.useState<ManifestItemRow | null>(null)
+  const [filterValues, setFilterValues] = React.useState<FilterValues>({})
+  const reconciliationFilter = typeof filterValues.reconciliation === 'string' ? filterValues.reconciliation : ''
+  const reconciliation = useReconciliation(job.id)
+  const invalidateReconciliation = useInvalidateReconciliation(job.id)
   const columns = React.useMemo(() => buildAssetColumns(t), [t])
   const base = `/api/itad/jobs/${encodeURIComponent(job.id)}`
   const active = isReceivingActive(job)
 
   const assetsQuery = useQuery<{ items: AssetRow[]; total: number }>({
-    queryKey: ['itad-assets', job.id, page, search],
+    queryKey: ['itad-assets', job.id, page, search, reconciliationFilter],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) })
       if (search.trim()) params.set('search', search.trim())
+      if (reconciliationFilter) params.set('reconciliation', reconciliationFilter)
       return readApiResultOrThrow(`${base}/assets?${params.toString()}`, undefined, {
         errorMessage: t('itad.receiving.assets.error', 'Could not load the received assets'),
       })
     },
-  })
-  const receivedQuery = useQuery<{ total: number }>({
-    queryKey: ['itad-assets', job.id, 'count'],
-    queryFn: async () => readApiResultOrThrow(`${base}/assets?pageSize=1`, undefined),
   })
   const duplicatesQuery = useQuery<{ items: ScanListItem[]; total: number }>({
     queryKey: ['itad-scans', job.id, 'pending'],
@@ -525,7 +533,21 @@ export function JobReceivingPanel({
   const refresh = React.useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['itad-assets', job.id] })
     void queryClient.invalidateQueries({ queryKey: ['itad-scans', job.id] })
-  }, [job.id, queryClient])
+    invalidateReconciliation()
+  }, [invalidateReconciliation, job.id, queryClient])
+
+  const filters = React.useMemo(
+    () => [
+      {
+        id: 'reconciliation',
+        label: t('itad.reconciliation.column', 'Reconciliation'),
+        type: 'select' as const,
+        options: (['matched', 'unexpected'] as const).map((state) => ({ value: state, label: reconciliationLabel(t, state) })),
+      },
+    ],
+    [t],
+  )
+  const counts = reconciliation.data
 
   const openSourceData = async (asset: AssetRow) => {
     if (!asset.manifestItemId) return
@@ -540,19 +562,24 @@ export function JobReceivingPanel({
   return (
     <section className="space-y-4 rounded-lg border bg-card p-4" aria-label={t('itad.receiving.title', 'Receiving')}>
       <SectionHeader title={t('itad.receiving.title', 'Receiving')} />
-      <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-        <div>
-          <dt className="text-muted-foreground">{t('itad.receiving.counters.expected', 'Expected (manifest)')}</dt>
-          <dd className="text-lg font-medium">{job.expectedAssetCount}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">{t('itad.receiving.counters.received', 'Received')}</dt>
-          <dd className="text-lg font-medium">{receivedQuery.data?.total ?? '—'}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">{t('itad.receiving.counters.pendingDuplicates', 'Duplicates to resolve')}</dt>
-          <dd className="text-lg font-medium">{duplicatesQuery.data?.total ?? '—'}</dd>
-        </div>
+      <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:grid-cols-6" aria-live="polite">
+        {[
+          ['expected', t('itad.receiving.counters.expected', 'Expected (manifest)'), counts?.expectedAssetCount],
+          ['received', t('itad.receiving.counters.received', 'Received'), counts?.receivedAssetCount],
+          ['matched', reconciliationLabel(t, 'matched'), counts?.matched],
+          ['missing', reconciliationLabel(t, 'missing'), counts?.missing],
+          ['unexpected', reconciliationLabel(t, 'unexpected'), counts?.unexpected],
+          [
+            'duplicates',
+            t('itad.receiving.counters.pendingDuplicates', 'Duplicates to resolve'),
+            counts ? counts.pendingDuplicates + counts.differentDeviceUnresolved : undefined,
+          ],
+        ].map(([id, label, value]) => (
+          <div key={String(id)}>
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="text-lg font-medium">{value ?? '—'}</dd>
+          </div>
+        ))}
       </dl>
 
       {active ? (
@@ -616,11 +643,21 @@ export function JobReceivingPanel({
             setPage(1)
           }}
           searchAlign="right"
+          filters={filters}
+          filterValues={filterValues}
+          onFiltersApply={(values: FilterValues) => {
+            setFilterValues(values)
+            setPage(1)
+          }}
+          onFiltersClear={() => {
+            setFilterValues({})
+            setPage(1)
+          }}
           entityId={ITAD_ASSET_ENTITY_ID}
           extensionTableId="itad.assets.job"
           emptyState={(
             <p className="py-8 text-center text-sm text-muted-foreground">
-              {search.trim()
+              {search.trim() || reconciliationFilter
                 ? t('itad.receiving.assets.noMatches', 'No received devices match the search.')
                 : t('itad.receiving.assets.empty', 'No devices received yet.')}
             </p>

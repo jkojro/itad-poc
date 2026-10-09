@@ -1,7 +1,7 @@
 # ITAD Manifest & Reconciliation
 
 **Date**: 2026-10-05
-**Status**: Ready for implementation
+**Status**: Implemented — all four phases verified (2026-10-09)
 
 > Spec 2 of the app-owned `itad` module (after `2026-10-02-itad-jobs.md`). It adds entities to the same module and switches the `receivingComplete` condition from manual confirmation to data, as foreseen by the jobs spec ("Conditions"). The job lifecycle, transition table and transition command contract are unchanged. Module structure rules: `src/modules/itad/AGENTS.md`.
 
@@ -628,7 +628,7 @@ Design choices confirmed by the user (2026-10-05):
 | 1 — Manifest import (CSV) | verified (2026-10-05) | see Phase 1 progress |
 | 2 — XLSX and manifest corrections | verified (2026-10-08) | see Phase 2 progress |
 | 3 — Receiving scans | verified (2026-10-09) | see Phase 3 progress |
-| 4 — Reconciliation and `receivingComplete` | not started | — |
+| 4 — Reconciliation and `receivingComplete` | verified (2026-10-09) | see Phase 4 progress |
 
 ### Phase 1 progress
 
@@ -731,6 +731,35 @@ Design choices confirmed by the user (2026-10-05):
 - **Gates:** `yarn generate`, `yarn typecheck`, `yarn lint` (0 errors), `yarn ds:check` (300 files) and `yarn test` (177 passed) all pass. The build passed in the ephemeral environment.
 - **UI checked:** Polish, Receiving tab at 1280 px light and 390 px dark.
 
+### Phase 4 progress
+
+- **Step 1 — domain:**
+  - `domain/reconciliation.ts`: `classifyManifestItem`, `classifyAsset`, `receivingCompleteBlocker` (order: `manifestMissing` → `differentDeviceUnresolved` → `duplicatesPending`) and `summarizeReconciliation`.
+  - `receivingComplete` in `domain/job-conditions.ts` is now `source: 'data', manualAllowed: false`; `ConditionJob.id` and `ConditionDeps.loadReceivingFacts` were added.
+  - Unit tests TEST-104, plus the condition tests moved to `start_closeout`/`allAssetsProcessed` for the manual-confirmation rules.
+- **Step 2 — transition command:**
+  - `services/job-condition-evaluator.ts` (`buildConditionDeps`) is used by the transition command and the transitions read model.
+  - The command now locks the job row and evaluates conditions inside the same transaction. Previously it evaluated before the transaction (`withAtomicFlush`).
+  - Jobs-spec tests rewritten: TC-ITAD-009/011/106 reach `processing` via `__integration__/itad-flow-fixtures.ts` (real manifest + scan); TC-ITAD-010/015 exercise manual confirmations on `start_closeout`.
+- **Step 3 — reconciliation read side:**
+  - `services/reconciliation-reader.ts` (`loadReceivingFacts`, `loadReconciliationSummary`, `countActiveAssets`) and `GET …/reconciliation` (`itad.jobs.view`).
+  - A `reconciliation` field and filter on manifest items (`matched|missing`) and assets (`matched|unexpected`).
+  - Counters and filters in both tabs; the status panel shows the reconciliation line while (held in) receiving and names the blocking detail on the disabled action.
+- **Step 4 — lookup:**
+  - Migration `Migration20261009093339_itad` (index `itad_assets_serial_lookup_idx`, `text_pattern_ops`). Reviewed and applied to dev (user approval 2026-10-09).
+  - `GET /api/itad/assets` (exact or prefix, at least 3 characters, exact matches first, readable organizations only).
+  - Page `/backend/itad/assets` ("ITAD → ITAD Assets") linking to the job's Receiving tab.
+- **Step 5 — acceptance:**
+  - TC-ITAD-113 (TEST-112, the brief's E2E: 9 matched, ABC010 missing, XYZ999 unexpected, `start_processing` with no confirmation).
+  - TC-ITAD-114 (TEST-113), TC-ITAD-115 (TEST-115 + lookup scope/features), TC-ITAD-116 (UI: status line, blocked reason, Manifest reconciliation badges, lookup page; console check).
+  - Full TC-ITAD suite: 32/32 in three consecutive runs on a fresh ephemeral build.
+- **Gates:** `yarn generate`, `yarn typecheck`, `yarn lint` (0 errors), `yarn ds:check` (309 files) and `yarn test` (185 passed) all pass. The build passed in the ephemeral environment.
+- **UI checked:** Polish, status panel at 1280 px light, lookup page at 1280 px light and 390 px dark.
+- **Fixes during verification:**
+  - TC-ITAD-116 used an ambiguous `searchbox` locator; there are two on the page at desktop width (header and table), so it now uses the field's placeholder.
+  - The page icon `scan-barcode` is not in the lucide registry and was replaced with `package-search`.
+  - Found in user testing: returning from the Manifest or Receiving tab to Overview focused the job form's "Name" field, because `CrudForm` autofocuses on mount and the tab remounts it. The job detail form now passes `disableInitialFocus`; the create form keeps autofocus. TC-ITAD-116 asserts "Name" is not focused after returning to Overview.
+
 ## Changelog
 
 | Date | Change |
@@ -744,3 +773,4 @@ Design choices confirmed by the user (2026-10-05):
 | 2026-10-08 | Phase 2 implemented and verified (XLSX import with sheets and warnings, manifest item removal, manifest changes in the job history, TC-ITAD-105…107) |
 | 2026-10-09 | Phase 2 fix: XLSX files with prefixed SpreadsheetML namespace (`<x:…>`, .NET exporters) are normalized before `exceljs` loads them; `jszip` 3.10.2 declared as a direct dependency; regression tests added; history badge no longer nested in a `p` (hydration error) |
 | 2026-10-09 | Phase 3 implemented and verified (assets, intake scans, duplicate resolution and different-device flag, asset edit/void, Receiving tab, TC-ITAD-108…112) |
+| 2026-10-09 | Phase 4 implemented and verified (reconciliation, `receivingComplete` from data under the job lock, cross-job serial lookup, TC-ITAD-113…116); jobs spec amended. Epic 2 complete |

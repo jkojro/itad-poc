@@ -372,6 +372,12 @@ export class ItadManifestItem {
   name: 'itad_assets_scope_job_idx',
   properties: ['tenantId', 'organizationId', 'job', 'deletedAt'],
 })
+// Cross-job serial lookup (exact or prefix) within one organization (manifest spec REQ-107).
+@Index({
+  name: 'itad_assets_serial_lookup_idx',
+  expression:
+    'create index "itad_assets_serial_lookup_idx" on "itad_assets" ("tenant_id", "organization_id", "serial_normalized" text_pattern_ops) where "deleted_at" is null',
+})
 @Index({
   name: 'itad_assets_serial_unique',
   expression:

@@ -2,7 +2,6 @@ import { expect, test } from '@playwright/test'
 import { apiRequest, getAuthToken } from '@open-mercato/core/helpers/integration/api'
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
 import {
-  CONFIRM,
   advanceToReceiving,
   createSchedulableJob,
   errorCode,
@@ -11,6 +10,7 @@ import {
   transitionOk,
   uniqueSuffix,
 } from './itad-job-fixtures'
+import { advanceToProcessing } from './itad-flow-fixtures'
 
 /**
  * TC-ITAD-011 (spec TEST-008, REQ-006, REQ-008): hold stores and resume restores the
@@ -68,8 +68,7 @@ test.describe('TC-ITAD-011: hold, resume, cancel and backward moves', () => {
       expect(await transitionOk(request, token, back.id, { action: 'unschedule', reason: 'rework order' })).toBe('draft')
 
       // Non-draft delete is refused; processing can still be cancelled.
-      await advanceToReceiving(request, token, back.id)
-      await transitionOk(request, token, back.id, { action: 'start_processing', confirmations: [CONFIRM('receivingComplete')] })
+      await advanceToProcessing(request, token, back.id)
       const remove = await apiRequest(request, 'DELETE', '/api/itad/jobs', { token, data: { id: back.id } })
       expect(remove.status()).toBe(409)
       expect(await errorCode(remove)).toBe('itad.jobs.errors.delete_not_draft')

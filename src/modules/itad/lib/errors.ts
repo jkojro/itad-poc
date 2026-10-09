@@ -89,6 +89,7 @@ export type ItadAssetErrorCode =
   | 'note_required'
   | 'reason_required'
   | 'field_not_writable'
+  | 'serial_too_short'
 
 /** Coded receiving/asset error; same body shape as `itadJobError`, with the asset key prefix. */
 export function itadAssetError(

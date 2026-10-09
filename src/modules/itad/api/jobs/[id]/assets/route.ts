@@ -6,6 +6,7 @@ import type { OpenApiRouteDoc } from '@open-mercato/shared/lib/openapi'
 import type { QueryEngine } from '@open-mercato/shared/lib/query/types'
 import { itadAssetListSchema } from '../../../../data/validators'
 import { ITAD_ASSET_STATUSES } from '../../../../domain/job-types'
+import { ASSET_RECONCILIATION, classifyAsset } from '../../../../domain/reconciliation'
 import { normalizeSerial } from '../../../../domain/serial'
 import {
   itadRouteErrorResponse,
@@ -52,6 +53,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
       where.push('a."id" = ?')
       values.push(query.id)
     }
+    if (query.reconciliation) {
+      const matchingItem = `select 1 from "itad_manifest_items" mi
+        where mi."tenant_id" = a."tenant_id" and mi."organization_id" = a."organization_id" and mi."job_id" = a."job_id"
+          and mi."serial_normalized" = a."serial_normalized" and mi."deleted_at" is null`
+      where.push(query.reconciliation === 'matched' ? `exists (${matchingItem})` : `not exists (${matchingItem})`)
+    }
     if (query.search) {
       const text = `%${escapeLikePattern(query.search)}%`
       where.push(`(a."serial_normalized" like ? or a."customer_asset_tag" ilike ? or a."manufacturer" ilike ? or a."model" ilike ?)`)
@@ -89,6 +96,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
         dataBearing: row.data_bearing,
         status: row.status,
         manifestItemId: row.manifest_item_id,
+        reconciliation: classifyAsset(Boolean(row.manifest_item_id)),
         receivedAt: new Date(row.received_at).toISOString(),
         receivedBy: { id: row.received_by_user_id, name: names.get(row.received_by_user_id) ?? null },
         updatedAt: new Date(row.updated_at).toISOString(),
@@ -128,6 +136,7 @@ export const openApi: OpenApiRouteDoc = {
                 dataBearing: z.boolean().nullable(),
                 status: z.enum(ITAD_ASSET_STATUSES),
                 manifestItemId: z.string().uuid().nullable(),
+                reconciliation: z.enum(ASSET_RECONCILIATION),
                 receivedAt: z.string(),
                 receivedBy: z.object({ id: z.string().uuid(), name: z.string().nullable() }),
                 updatedAt: z.string(),

@@ -1,10 +1,18 @@
 import { describe, expect, it } from '@jest/globals'
 import { decideTransition, type ConditionDeps, type ConditionJob } from '../job-conditions'
+import type { ReceivingFacts } from '../reconciliation'
 
-const validCustomer: ConditionDeps = { isCustomerValid: async () => true }
-const invalidCustomer: ConditionDeps = { isCustomerValid: async () => false }
+const readyToProcess: ReceivingFacts = { activeManifestItems: 10, pendingDuplicates: 0, differentDeviceUnresolved: 0 }
+const deps = (overrides: Partial<ConditionDeps> = {}, facts: ReceivingFacts = readyToProcess): ConditionDeps => ({
+  isCustomerValid: async () => true,
+  loadReceivingFacts: async () => facts,
+  ...overrides,
+})
+const validCustomer = deps()
+const invalidCustomer = deps({ isCustomerValid: async () => false })
 
 const job = (overrides: Partial<ConditionJob> = {}): ConditionJob => ({
+  id: '22222222-2222-4222-8222-222222222222',
   status: 'draft',
   customerId: '11111111-1111-4111-8111-111111111111',
   name: 'Bank refresh',
@@ -41,21 +49,21 @@ describe('decideTransition (spec TEST-002)', () => {
   })
 
   it('requires a confirmation for a manual condition', async () => {
-    const decision = await decideTransition({ job: job({ status: 'receiving' }), action: 'start_processing', deps: validCustomer })
-    expect(decision).toMatchObject({ ok: false, rejection: { code: 'condition_unmet', conditions: ['receivingComplete'] } })
+    const decision = await decideTransition({ job: job({ status: 'processing' }), action: 'start_closeout', deps: validCustomer })
+    expect(decision).toMatchObject({ ok: false, rejection: { code: 'condition_unmet', conditions: ['allAssetsProcessed'] } })
   })
 
   it('accepts a valid manual confirmation and returns it trimmed', async () => {
     const decision = await decideTransition({
-      job: job({ status: 'receiving' }),
-      action: 'start_processing',
-      confirmations: [{ condition: 'receivingComplete', comment: '  manifest reconciled  ' }],
+      job: job({ status: 'processing' }),
+      action: 'start_closeout',
+      confirmations: [{ condition: 'allAssetsProcessed', comment: '  all erased  ' }],
       deps: validCustomer,
     })
     expect(decision).toMatchObject({
       ok: true,
-      target: 'processing',
-      confirmations: [{ condition: 'receivingComplete', comment: 'manifest reconciled' }],
+      target: 'closeout_review',
+      confirmations: [{ condition: 'allAssetsProcessed', comment: 'all erased' }],
     })
   })
 
@@ -70,15 +78,15 @@ describe('decideTransition (spec TEST-002)', () => {
   })
 
   it.each([
-    ['duplicate', [{ condition: 'receivingComplete', comment: 'one' }, { condition: 'receivingComplete', comment: 'two' }], 'confirmation_duplicate'],
-    ['not required by the action', [{ condition: 'allAssetsProcessed', comment: 'done' }], 'confirmation_not_required'],
+    ['duplicate', [{ condition: 'allAssetsProcessed', comment: 'one' }, { condition: 'allAssetsProcessed', comment: 'two' }], 'confirmation_duplicate'],
+    ['not required by the action', [{ condition: 'noBlockingExceptions', comment: 'done' }], 'confirmation_not_required'],
     ['unknown condition', [{ condition: 'madeUp', comment: 'done' }], 'confirmation_not_required'],
-    ['missing comment', [{ condition: 'receivingComplete', comment: '' }], 'comment_required'],
-    ['too short comment', [{ condition: 'receivingComplete', comment: 'ok' }], 'comment_required'],
+    ['missing comment', [{ condition: 'allAssetsProcessed', comment: '' }], 'comment_required'],
+    ['too short comment', [{ condition: 'allAssetsProcessed', comment: 'ok' }], 'comment_required'],
   ])('rejects a %s confirmation', async (_label, confirmations, code) => {
     const decision = await decideTransition({
-      job: job({ status: 'receiving' }),
-      action: 'start_processing',
+      job: job({ status: 'processing' }),
+      action: 'start_closeout',
       confirmations,
       deps: validCustomer,
     })
@@ -97,5 +105,31 @@ describe('decideTransition (spec TEST-002)', () => {
       const given = await decideTransition({ job: job({ status }), action, reason: 'pickup failed', deps: validCustomer })
       expect(given.ok).toBe(true)
     }
+  })
+
+  describe('receivingComplete from data (manifest spec TEST-104)', () => {
+    const startProcessing = (facts: ReceivingFacts, confirmations?: Array<{ condition: string; comment: string }>) =>
+      decideTransition({ job: job({ status: 'receiving' }), action: 'start_processing', confirmations, deps: deps({}, facts) })
+
+    it('lets receiving finish with missing and unexpected devices once the manifest is there and duplicates are closed', async () => {
+      expect(await startProcessing(readyToProcess)).toMatchObject({ ok: true, target: 'processing', confirmations: [] })
+    })
+
+    it.each([
+      ['no manifest', { activeManifestItems: 0, pendingDuplicates: 0, differentDeviceUnresolved: 0 }, 'manifestMissing'],
+      ['a pending duplicate', { activeManifestItems: 3, pendingDuplicates: 1, differentDeviceUnresolved: 0 }, 'duplicatesPending'],
+      ['a different-device duplicate', { activeManifestItems: 3, pendingDuplicates: 0, differentDeviceUnresolved: 1 }, 'differentDeviceUnresolved'],
+    ])('blocks with %s', async (_label, facts, detail) => {
+      const decision = await startProcessing(facts)
+      expect(decision).toMatchObject({ ok: false, rejection: { code: 'condition_unmet', conditions: ['receivingComplete'] } })
+      expect(decision.evaluations).toEqual([
+        { key: 'receivingComplete', state: 'unmet', detailKey: `itad.jobs.conditions.detail.${detail}` },
+      ])
+    })
+
+    it('rejects a manual confirmation of receivingComplete', async () => {
+      const decision = await startProcessing(readyToProcess, [{ condition: 'receivingComplete', comment: 'counted by hand' }])
+      expect(decision).toMatchObject({ ok: false, rejection: { code: 'confirmation_not_allowed', condition: 'receivingComplete' } })
+    })
   })
 })

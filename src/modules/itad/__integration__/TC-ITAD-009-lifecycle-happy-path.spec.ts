@@ -11,12 +11,14 @@ import {
   transitionOk,
   uniqueSuffix,
 } from './itad-job-fixtures'
+import { receiveOneDevice } from './itad-flow-fixtures'
 
 type HistoryItem = { action: string; from: string; to: string; actor: { name: string | null }; confirmations: Array<{ condition: string; comment: string }> }
 
 /**
  * TC-ITAD-009 (spec TEST-006): a job goes draft → completed through every happy-path
- * transition; manual conditions are confirmed by an admin; startedAt/completedAt are set;
+ * transition; `receivingComplete` is met from data (manifest + scan, manifest spec
+ * Phase 4) and the remaining manual conditions are confirmed by an admin; startedAt/completedAt are set;
  * the history holds every step with its confirmations; the completed job is terminal.
  */
 test.describe('TC-ITAD-009: ITAD job lifecycle happy path', () => {
@@ -35,9 +37,8 @@ test.describe('TC-ITAD-009: ITAD job lifecycle happy path', () => {
       const startedAt = (await getJob(request, token, id))?.startedAt
       expect(typeof startedAt).toBe('string')
 
-      expect(
-        await transitionOk(request, token, id, { action: 'start_processing', confirmations: [CONFIRM('receivingComplete')] }),
-      ).toBe('processing')
+      await receiveOneDevice(request, token, id)
+      expect(await transitionOk(request, token, id, { action: 'start_processing' })).toBe('processing')
       expect(
         await transitionOk(request, token, id, { action: 'start_closeout', confirmations: [CONFIRM('allAssetsProcessed')] }),
       ).toBe('closeout_review')
@@ -61,9 +62,8 @@ test.describe('TC-ITAD-009: ITAD job lifecycle happy path', () => {
         'complete', 'start_closeout', 'start_processing', 'start_receiving', 'dispatch', 'schedule',
       ])
       expect(items[0].confirmations.map((entry) => entry.condition).sort()).toEqual(['noBlockingExceptions', 'requiredDocumentsComplete'])
-      expect(items[2].confirmations).toEqual([
-        expect.objectContaining({ condition: 'receivingComplete', comment: 'QA confirmed receivingComplete' }),
-      ])
+      // receivingComplete is a data condition: start_processing carries no manual confirmation.
+      expect(items[2].confirmations).toEqual([])
       // Names are decrypted display values, never stored ciphertext (`iv:data:tag:v1`).
       for (const item of items) {
         expect(typeof item.actor.name).toBe('string')

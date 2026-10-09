@@ -120,3 +120,29 @@ export async function deleteAsset(
     data: { reason },
   })
 }
+
+export type ReconciliationBody = {
+  expectedAssetCount: number
+  receivedAssetCount: number
+  matched: number
+  missing: number
+  unexpected: number
+  pendingDuplicates: number
+  differentDeviceUnresolved: number
+  hasManifest: boolean
+}
+
+export async function getReconciliation(request: APIRequestContext, token: string, jobId: string): Promise<ReconciliationBody> {
+  const response = await getReceiving(request, token, jobId, '/reconciliation')
+  expect(response.status()).toBe(200)
+  return (await readJsonSafe<ReconciliationBody>(response))!
+}
+
+export type ConditionView = { key: string; state: string; detailKey: string | null; canConfirm: boolean }
+
+/** The `receivingComplete` condition as the transitions read model shows it for `start_processing`. */
+export async function receivingCompleteView(request: APIRequestContext, token: string, jobId: string): Promise<ConditionView | undefined> {
+  const response = await getReceiving(request, token, jobId, '/transitions')
+  const body = await readJsonSafe<{ actions: Array<{ id: string; conditions: ConditionView[] }> }>(response)
+  return body?.actions.find((action) => action.id === 'start_processing')?.conditions.find((condition) => condition.key === 'receivingComplete')
+}
