@@ -24,6 +24,7 @@ import { useT } from '@open-mercato/shared/lib/i18n/context'
 import { MANIFEST_DELETE_REASON_MIN, canChangeManifest, effectiveJobStatus } from '../domain/manifest-rules'
 import { ITAD_MANIFEST_ITEM_ENTITY_ID } from '../lib/constants'
 import { ITAD_JOB_STATUS_FALLBACK_LABELS, itadJobStatusLabelKey } from './job-status'
+import { dataBearingLabel } from './data-bearing-ui'
 import { ManifestImportDialog } from './ManifestImportDialog'
 import {
   MANIFEST_FIELD_FALLBACK_LABELS,
@@ -58,6 +59,12 @@ function buildItemColumns(t: Translate): ColumnDef<ManifestItemRow>[] {
     { id: 'customerAssetTag', accessorKey: 'customerAssetTag', header: label('customerAssetTag'), cell: ({ row }) => row.original.customerAssetTag ?? '—' },
     { id: 'manufacturer', accessorKey: 'manufacturer', header: label('manufacturer'), cell: ({ row }) => row.original.manufacturer ?? '—' },
     { id: 'model', accessorKey: 'model', header: label('model'), cell: ({ row }) => row.original.model ?? '—' },
+    {
+      id: 'dataBearing',
+      header: label('dataBearing'),
+      // `null` here means the file gave no value, not an undecided device.
+      cell: ({ row }) => (row.original.dataBearing === null ? '—' : dataBearingLabel(t, row.original.dataBearing)),
+    },
     {
       id: 'reconciliation',
       header: t('itad.reconciliation.column', 'Reconciliation'),

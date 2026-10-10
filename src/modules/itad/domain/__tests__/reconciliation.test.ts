@@ -9,7 +9,7 @@ describe('reconciliation (manifest spec TEST-104)', () => {
 
   it('summarizes the acceptance scenario: 10 expected, 9 matched, 1 missing, 1 unexpected', () => {
     expect(
-      summarizeReconciliation({ activeManifestItems: 10, activeAssets: 10, matched: 9, pendingDuplicates: 0, differentDeviceUnresolved: 0 }),
+      summarizeReconciliation({ activeManifestItems: 10, activeAssets: 10, matched: 9, pendingDuplicates: 0, differentDeviceUnresolved: 0, dataBearingUndecided: 0 }),
     ).toEqual({
       expectedAssetCount: 10,
       receivedAssetCount: 10,
@@ -18,14 +18,17 @@ describe('reconciliation (manifest spec TEST-104)', () => {
       unexpected: 1,
       pendingDuplicates: 0,
       differentDeviceUnresolved: 0,
+      dataBearingUndecided: 0,
       hasManifest: true,
     })
   })
 
   it('names what blocks receiving completion, most fundamental first', () => {
-    expect(receivingCompleteBlocker({ activeManifestItems: 0, pendingDuplicates: 2, differentDeviceUnresolved: 1 })).toBe('manifestMissing')
-    expect(receivingCompleteBlocker({ activeManifestItems: 5, pendingDuplicates: 2, differentDeviceUnresolved: 1 })).toBe('differentDeviceUnresolved')
-    expect(receivingCompleteBlocker({ activeManifestItems: 5, pendingDuplicates: 2, differentDeviceUnresolved: 0 })).toBe('duplicatesPending')
-    expect(receivingCompleteBlocker({ activeManifestItems: 5, pendingDuplicates: 0, differentDeviceUnresolved: 0 })).toBeNull()
+    expect(receivingCompleteBlocker({ activeManifestItems: 0, pendingDuplicates: 2, differentDeviceUnresolved: 1, dataBearingUndecided: 0 })).toBe('manifestMissing')
+    expect(receivingCompleteBlocker({ activeManifestItems: 5, pendingDuplicates: 2, differentDeviceUnresolved: 1, dataBearingUndecided: 0 })).toBe('differentDeviceUnresolved')
+    expect(receivingCompleteBlocker({ activeManifestItems: 5, pendingDuplicates: 2, differentDeviceUnresolved: 0, dataBearingUndecided: 3 })).toBe('duplicatesPending')
+    // Sanitization spec REQ-305: checked after duplicates, so a duplicate is resolved before it is classified.
+    expect(receivingCompleteBlocker({ activeManifestItems: 5, pendingDuplicates: 0, differentDeviceUnresolved: 0, dataBearingUndecided: 3 })).toBe('dataBearingUndecided')
+    expect(receivingCompleteBlocker({ activeManifestItems: 5, pendingDuplicates: 0, differentDeviceUnresolved: 0, dataBearingUndecided: 0 })).toBeNull()
   })
 })

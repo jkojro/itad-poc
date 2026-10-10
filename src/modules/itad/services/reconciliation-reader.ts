@@ -15,6 +15,7 @@ type CountRow = {
   matched: string | number
   pending_duplicates: string | number
   different_device_unresolved: string | number
+  data_bearing_undecided: string | number
 }
 
 const ACTIVE_ITEMS = `select count(*) from "itad_manifest_items" m
@@ -31,6 +32,10 @@ const PENDING_DUPLICATES = (flagged: boolean) => `select count(*) from "itad_int
     and s."result" = 'duplicate' and s."resolved_at" is null
     and s."flagged_different_device_at" is ${flagged ? 'not null' : 'null'}`
 
+const DATA_BEARING_UNDECIDED = `select count(*) from "itad_assets" a
+  where a."tenant_id" = ? and a."organization_id" = ? and a."job_id" = ? and a."deleted_at" is null
+    and a."data_bearing" is null`
+
 async function loadCounts(em: EntityManager, scope: ReconciliationScope, jobId: string, withAssets: boolean): Promise<CountRow> {
   const params = [scope.tenantId, scope.organizationId, jobId]
   const row = await em.execute<CountRow>(
@@ -38,8 +43,9 @@ async function loadCounts(em: EntityManager, scope: ReconciliationScope, jobId: 
             ${withAssets ? `(${ACTIVE_ASSETS})` : '0'} as "active_assets",
             ${withAssets ? `(${MATCHED})` : '0'} as "matched",
             (${PENDING_DUPLICATES(false)}) as "pending_duplicates",
-            (${PENDING_DUPLICATES(true)}) as "different_device_unresolved"`,
-    withAssets ? [...params, ...params, ...params, ...params, ...params] : [...params, ...params, ...params],
+            (${PENDING_DUPLICATES(true)}) as "different_device_unresolved",
+            (${DATA_BEARING_UNDECIDED}) as "data_bearing_undecided"`,
+    withAssets ? [...params, ...params, ...params, ...params, ...params, ...params] : [...params, ...params, ...params, ...params],
     'get',
   )
   return row
@@ -52,6 +58,7 @@ export async function loadReceivingFacts(em: EntityManager, scope: Reconciliatio
     activeManifestItems: Number(row.active_manifest_items),
     pendingDuplicates: Number(row.pending_duplicates),
     differentDeviceUnresolved: Number(row.different_device_unresolved),
+    dataBearingUndecided: Number(row.data_bearing_undecided),
   }
 }
 
@@ -68,6 +75,7 @@ export async function loadReconciliationSummary(
     matched: Number(row.matched),
     pendingDuplicates: Number(row.pending_duplicates),
     differentDeviceUnresolved: Number(row.different_device_unresolved),
+    dataBearingUndecided: Number(row.data_bearing_undecided),
   })
 }
 

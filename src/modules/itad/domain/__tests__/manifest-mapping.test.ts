@@ -69,6 +69,12 @@ describe('mapping (TEST-103)', () => {
     expect(suggestMapping(['Serial Number', 'Device Model'])).toEqual({ serial: 'Serial Number', model: 'Device Model' })
   })
 
+  it('suggests the data-bearing column, but never a plain "Storage" capacity column (sanitization spec TEST-301)', () => {
+    expect(suggestMapping(['SN', 'Contains data'])).toEqual({ serial: 'SN', dataBearing: 'Contains data' })
+    expect(suggestMapping(['SN', 'Nośnik danych'])).toEqual({ serial: 'SN', dataBearing: 'Nośnik danych' })
+    expect(suggestMapping(['SN', 'Storage'])).toEqual({ serial: 'SN' })
+  })
+
   it('validates the mapping against the columns', () => {
     const columns = ['SN', 'Model']
     expect(validateMapping({}, columns)).toBe('serial_required')
@@ -107,6 +113,27 @@ describe('evaluateManifestRows (TEST-103)', () => {
       ],
     })
     expect(evaluation.counts).toEqual({ valid: 1, invalid: 0, skippedExisting: 0, blankIgnored: 0 })
+  })
+
+  it('reads the data-bearing column; an unrecognized value is a warning and no value (sanitization spec TEST-301)', () => {
+    const evaluation = evaluateManifestRows({
+      table: table(row('SN', 'Data'), row('A1', 'yes'), row('A2', 'NIE'), row('A3', ''), row('A4', 'maybe')),
+      mapping: { serial: 'SN', dataBearing: 'Data' },
+      existingSerials: new Set(),
+    })
+    expect(evaluation.rows.map((r) => [r.serial, r.state, r.dataBearing])).toEqual([
+      ['A1', 'valid', true],
+      ['A2', 'valid', false],
+      ['A3', 'valid', null],
+      ['A4', 'valid', null],
+    ])
+    expect(evaluation.warnings).toEqual([{ row: 5, code: 'data_bearing_unrecognized', column: 'Data' }])
+  })
+
+  it('leaves dataBearing empty when the column is not mapped', () => {
+    const evaluation = evaluateManifestRows({ table: table(row('SN', 'Data'), row('A1', 'yes')), mapping: { serial: 'SN' }, existingSerials: new Set() })
+    expect(evaluation.rows[0].dataBearing).toBeNull()
+    expect(evaluation.warnings).toEqual([])
   })
 
   it('marks missing and too long serials and too long fields', () => {

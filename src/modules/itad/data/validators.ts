@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ITAD_JOB_STATUSES } from '../domain/job-types'
+import { ITAD_ASSET_STATUSES, ITAD_JOB_STATUSES } from '../domain/job-types'
 
 export const itadJobStatusSchema = z.enum(ITAD_JOB_STATUSES)
 
@@ -38,6 +38,9 @@ const expectedAssetEstimateSchema = z.preprocess(
   z.number().int().min(0).nullable(),
 )
 
+/** Tri-state; an empty form value means "no default". */
+const defaultDataBearingSchema = z.preprocess((value) => (value === '' ? null : value), z.boolean().nullable())
+
 const scheduledPickupAtSchema = z.preprocess(
   emptyToNull,
   z
@@ -52,6 +55,7 @@ export const itadJobCreateSchema = z.object({
   customerReference: customerReferenceSchema.optional(),
   expectedAssetEstimate: expectedAssetEstimateSchema.optional(),
   scheduledPickupAt: scheduledPickupAtSchema.optional(),
+  defaultDataBearing: defaultDataBearingSchema.optional(),
 })
 
 export const itadJobUpdateSchema = z.object({
@@ -61,6 +65,7 @@ export const itadJobUpdateSchema = z.object({
   customerReference: customerReferenceSchema.optional(),
   expectedAssetEstimate: expectedAssetEstimateSchema.optional(),
   scheduledPickupAt: scheduledPickupAtSchema.optional(),
+  defaultDataBearing: defaultDataBearingSchema.optional(),
 })
 
 export const itadJobListSchema = z.object({
@@ -89,6 +94,7 @@ export const itadManifestMappingSchema = z.object({
   customerAssetTag: optionalColumnSchema,
   manufacturer: optionalColumnSchema,
   model: optionalColumnSchema,
+  dataBearing: optionalColumnSchema,
 })
 
 export type ItadManifestMappingInput = z.infer<typeof itadManifestMappingSchema>
@@ -161,6 +167,22 @@ export const itadAssetUpdateSchema = z.object({
 
 export type ItadAssetUpdateInput = z.infer<typeof itadAssetUpdateSchema>
 
+export const ITAD_CLASSIFY_MAX_ASSETS = 500
+
+/** Durable input of `itad.assets.classify` (single or bulk; all-or-nothing). */
+export const itadAssetClassifySchema = z.object({
+  jobId: z.string().uuid(),
+  assetIds: z
+    .array(z.string().uuid())
+    .min(1)
+    .max(ITAD_CLASSIFY_MAX_ASSETS)
+    .refine((ids) => new Set(ids).size === ids.length, { message: 'Duplicate asset ids' }),
+  dataBearing: z.boolean(),
+  reason: z.string().max(1000).nullable().optional(),
+})
+
+export type ItadAssetClassifyInput = z.infer<typeof itadAssetClassifySchema>
+
 export const itadAssetDeleteSchema = z.object({
   jobId: z.string().uuid(),
   assetId: z.string().uuid(),
@@ -175,6 +197,8 @@ export const itadAssetListSchema = z.object({
   search: z.string().trim().max(200).optional(),
   id: z.string().uuid().optional(),
   reconciliation: z.enum(['matched', 'unexpected']).optional(),
+  dataBearing: z.enum(['unknown', 'true', 'false']).optional(),
+  status: z.enum(ITAD_ASSET_STATUSES).optional(),
 })
 
 /** Cross-job serial lookup: exact or prefix match on the normalized serial. */

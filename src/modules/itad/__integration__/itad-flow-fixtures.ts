@@ -8,10 +8,20 @@ import { scanOk } from './itad-receiving-fixtures'
  * Phase 4), a job reaches `processing` only with a manifest and no open duplicates.
  */
 
-/** Imports a one-device manifest into a job in `receiving` and scans that device. */
+/**
+ * Imports a one-device manifest into a job in `receiving` and scans that device. The
+ * manifest says the device carries no data, so receiving can complete (sanitization
+ * spec REQ-305) and the device stays out of sanitization.
+ */
 export async function receiveOneDevice(request: APIRequestContext, token: string, jobId: string): Promise<string> {
   const serial = `FLOW-${uniqueSuffix().slice(-8).toUpperCase()}`
-  await importManifestOk(request, token, jobId, { name: `flow-${serial}.csv`, content: csv([['Serial'], [serial]]) }, { serial: 'Serial' })
+  await importManifestOk(
+    request,
+    token,
+    jobId,
+    { name: `flow-${serial}.csv`, content: csv([['Serial', 'Carries data'], [serial, 'no']]) },
+    { serial: 'Serial', dataBearing: 'Carries data' },
+  )
   await scanOk(request, token, jobId, serial)
   return serial
 }

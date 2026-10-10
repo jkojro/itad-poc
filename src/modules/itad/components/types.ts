@@ -21,6 +21,8 @@ export type ItadJobListItem = {
   /** Derived: active (received) assets of the job. */
   receivedAssetCount: number
   scheduledPickupAt: string | null
+  /** Applied to later scans when the manifest gives no value; `null` = no default. */
+  defaultDataBearing: boolean | null
   startedAt: string | null
   completedAt: string | null
   createdAt: string | null

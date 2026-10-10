@@ -25,6 +25,11 @@ const events = [
   { id: 'itad.intake_scan.duplicate_detected', label: 'ITAD Duplicate Scan Detected', entity: 'intake_scan', category: 'lifecycle', clientBroadcast: true },
   { id: 'itad.intake_scan.resolved', label: 'ITAD Duplicate Scan Resolved', entity: 'intake_scan', category: 'lifecycle', clientBroadcast: true },
   { id: 'itad.intake_scan.flagged_different_device', label: 'ITAD Duplicate Scan Flagged As Different Device', entity: 'intake_scan', category: 'lifecycle' },
+  // Sanitization (sanitization spec "Events"; payloads carry jobId, tenantId, organizationId, never source data).
+  // itad.asset.sanitization_required: { assetId, dataBearingSource, actorUserId }; once per asset (first entry).
+  { id: 'itad.asset.sanitization_required', label: 'ITAD Asset Sanitization Required', entity: 'asset', category: 'lifecycle', clientBroadcast: true },
+  // itad.asset.data_bearing_changed: { assetId, from, to, source, actorUserId, reason }.
+  { id: 'itad.asset.data_bearing_changed', label: 'ITAD Asset Data-Bearing Classification Changed', entity: 'asset', category: 'lifecycle', clientBroadcast: true },
 ] as const
 
 export const eventsConfig = createModuleEvents({

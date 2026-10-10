@@ -36,7 +36,7 @@ test.describe('TC-ITAD-012: field editability follows the status matrix', () => 
       expect((await put({ expectedAssetEstimate: 487 })).status()).toBe(200)
 
       await transitionOk(request, token, jobId, { action: 'hold', reason: 'truck delayed' })
-      expect((await getJob(request, token, jobId))?.editableFields).toEqual(['name', 'customerReference', 'expectedAssetEstimate'])
+      expect((await getJob(request, token, jobId))?.editableFields).toEqual(['name', 'customerReference', 'expectedAssetEstimate', 'defaultDataBearing'])
       expect((await put({ expectedAssetEstimate: 480 })).status()).toBe(200)
       await transitionOk(request, token, jobId, { action: 'resume' })
 

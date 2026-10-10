@@ -2,7 +2,7 @@ import { describe, expect, it } from '@jest/globals'
 import { decideTransition, type ConditionDeps, type ConditionJob } from '../job-conditions'
 import type { ReceivingFacts } from '../reconciliation'
 
-const readyToProcess: ReceivingFacts = { activeManifestItems: 10, pendingDuplicates: 0, differentDeviceUnresolved: 0 }
+const readyToProcess: ReceivingFacts = { activeManifestItems: 10, pendingDuplicates: 0, differentDeviceUnresolved: 0, dataBearingUndecided: 0 }
 const deps = (overrides: Partial<ConditionDeps> = {}, facts: ReceivingFacts = readyToProcess): ConditionDeps => ({
   isCustomerValid: async () => true,
   loadReceivingFacts: async () => facts,
@@ -116,9 +116,10 @@ describe('decideTransition (spec TEST-002)', () => {
     })
 
     it.each([
-      ['no manifest', { activeManifestItems: 0, pendingDuplicates: 0, differentDeviceUnresolved: 0 }, 'manifestMissing'],
-      ['a pending duplicate', { activeManifestItems: 3, pendingDuplicates: 1, differentDeviceUnresolved: 0 }, 'duplicatesPending'],
-      ['a different-device duplicate', { activeManifestItems: 3, pendingDuplicates: 0, differentDeviceUnresolved: 1 }, 'differentDeviceUnresolved'],
+      ['no manifest', { activeManifestItems: 0, pendingDuplicates: 0, differentDeviceUnresolved: 0, dataBearingUndecided: 0 }, 'manifestMissing'],
+      ['a pending duplicate', { activeManifestItems: 3, pendingDuplicates: 1, differentDeviceUnresolved: 0, dataBearingUndecided: 0 }, 'duplicatesPending'],
+      ['a different-device duplicate', { activeManifestItems: 3, pendingDuplicates: 0, differentDeviceUnresolved: 1, dataBearingUndecided: 0 }, 'differentDeviceUnresolved'],
+      ['an asset not yet classified as carrying data or not', { activeManifestItems: 3, pendingDuplicates: 0, differentDeviceUnresolved: 0, dataBearingUndecided: 2 }, 'dataBearingUndecided'],
     ])('blocks with %s', async (_label, facts, detail) => {
       const decision = await startProcessing(facts)
       expect(decision).toMatchObject({ ok: false, rejection: { code: 'condition_unmet', conditions: ['receivingComplete'] } })
