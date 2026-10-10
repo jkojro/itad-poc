@@ -1,5 +1,13 @@
 import { Entity, Index, ManyToOne, PrimaryKey, Property, Unique } from '@mikro-orm/decorators/legacy'
-import type { ItadAssetStatus, ItadJobStatus, ItadScanResolution, ItadScanResult } from '../domain/job-types'
+import type { ItadDataBearingSource } from '../domain/data-bearing'
+import type {
+  ItadAssetHistoryStatus,
+  ItadAssetStatus,
+  ItadAssetTransitionAction,
+  ItadJobStatus,
+  ItadScanResolution,
+  ItadScanResult,
+} from '../domain/job-types'
 import type { ManifestFieldMapping, RowWarningCode, SourceDataEntry } from '../domain/manifest-mapping'
 
 /**
@@ -65,6 +73,13 @@ export class ItadJob {
 
   @Property({ name: 'expected_asset_estimate', type: 'integer', nullable: true })
   expectedAssetEstimate?: number | null
+
+  /**
+   * `dataBearing` applied to devices scanned after it is set when the manifest gives no
+   * value (sanitization spec REQ-303). `null` = no default.
+   */
+  @Property({ name: 'default_data_bearing', type: 'boolean', nullable: true })
+  defaultDataBearing?: boolean | null
 
   @Property({ name: 'scheduled_pickup_at', type: Date, nullable: true })
   scheduledPickupAt?: Date | null
@@ -339,6 +354,10 @@ export class ItadManifestItem {
   @Property({ type: 'text', nullable: true })
   model?: string | null
 
+  /** Explicit "carries data" value from a mapped column; `null` = the file gave none. */
+  @Property({ name: 'data_bearing', type: 'boolean', nullable: true })
+  dataBearing?: boolean | null
+
   @Property({ name: 'source_data', type: 'jsonb' })
   sourceData!: SourceDataEntry[]
 
@@ -379,6 +398,11 @@ export class ItadManifestItem {
     'create index "itad_assets_serial_lookup_idx" on "itad_assets" ("tenant_id", "organization_id", "serial_normalized" text_pattern_ops) where "deleted_at" is null',
 })
 @Index({
+  name: 'itad_assets_scope_job_status_idx',
+  expression:
+    'create index "itad_assets_scope_job_status_idx" on "itad_assets" ("tenant_id", "organization_id", "job_id", "status") where "deleted_at" is null',
+})
+@Index({
   name: 'itad_assets_serial_unique',
   expression:
     'create unique index "itad_assets_serial_unique" on "itad_assets" ("tenant_id", "organization_id", "job_id", "serial_normalized") where "deleted_at" is null',
@@ -411,12 +435,29 @@ export class ItadAsset {
   @Property({ type: 'text', nullable: true })
   model?: string | null
 
-  /** `null` = not yet determined whether the device carries data (spec Q9). */
+  /**
+   * `null` = not yet determined whether the device carries data. Resolved once at the
+   * scan and owned by the asset from then on (sanitization spec "Snapshot rule").
+   */
   @Property({ name: 'data_bearing', type: 'boolean', nullable: true })
   dataBearing?: boolean | null
 
+  @Property({ name: 'data_bearing_source', type: 'text', nullable: true })
+  dataBearingSource?: ItadDataBearingSource | null
+
+  /** `null` when decided by the system at the scan. */
+  @Property({ name: 'data_bearing_decided_by_user_id', type: 'uuid', nullable: true })
+  dataBearingDecidedByUserId?: string | null
+
+  @Property({ name: 'data_bearing_decided_at', type: Date, nullable: true })
+  dataBearingDecidedAt?: Date | null
+
   @Property({ type: 'text', default: 'received' })
   status: ItadAssetStatus = 'received'
+
+  /** First entry into `sanitization_required`; guards the one-time event. */
+  @Property({ name: 'sanitization_required_at', type: Date, nullable: true })
+  sanitizationRequiredAt?: Date | null
 
   @Property({ name: 'received_at', type: Date })
   receivedAt!: Date
@@ -512,4 +553,57 @@ export class ItadIntakeScan {
 
   @Property({ name: 'flagged_different_device_note', type: 'text', nullable: true })
   flaggedDifferentDeviceNote?: string | null
+}
+
+/**
+ * Append-only history of an asset's status and `dataBearing` decisions (sanitization
+ * spec "ItadAssetStatusTransition"). Statuses come from `ITAD_ASSET_HISTORY_STATUSES`, so
+ * the transition state `sanitization_failed` may appear here and nowhere else.
+ * `fromStatus` is `null` for the decision made at the scan; `actorUserId` is `null`
+ * when the system decided.
+ */
+@Entity({ tableName: 'itad_asset_status_transitions' })
+@Index({
+  name: 'itad_asset_status_transitions_asset_idx',
+  properties: ['tenantId', 'organizationId', 'asset', 'createdAt'],
+})
+export class ItadAssetStatusTransition {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  @ManyToOne(() => ItadAsset, { fieldName: 'asset_id' })
+  asset!: ItadAsset
+
+  @Property({ type: 'text' })
+  action!: ItadAssetTransitionAction
+
+  @Property({ name: 'from_status', type: 'text', nullable: true })
+  fromStatus?: ItadAssetHistoryStatus | null
+
+  @Property({ name: 'to_status', type: 'text' })
+  toStatus!: ItadAssetHistoryStatus
+
+  @Property({ name: 'data_bearing_from', type: 'boolean', nullable: true })
+  dataBearingFrom?: boolean | null
+
+  @Property({ name: 'data_bearing_to', type: 'boolean', nullable: true })
+  dataBearingTo?: boolean | null
+
+  @Property({ type: 'text', nullable: true })
+  reason?: string | null
+
+  @Property({ name: 'actor_user_id', type: 'uuid', nullable: true })
+  actorUserId?: string | null
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
 }

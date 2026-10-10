@@ -60,6 +60,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         customerAssetTag: row.customerAssetTag,
         manufacturer: row.manufacturer,
         model: row.model,
+        dataBearing: row.dataBearing,
         errors: row.errors,
       })),
       errors: (evaluation?.errors ?? []).slice(0, MANIFEST_LIMITS.maxReportedErrors),
@@ -77,6 +78,7 @@ const mappingSchema = z.object({
   customerAssetTag: z.string().optional(),
   manufacturer: z.string().optional(),
   model: z.string().optional(),
+  dataBearing: z.string().optional(),
 })
 const issueSchema = z.object({ row: z.number().int(), code: z.string(), column: z.string().optional() })
 
@@ -102,6 +104,7 @@ export const manifestPreviewResponseSchema = z.object({
       customerAssetTag: z.string().nullable(),
       manufacturer: z.string().nullable(),
       model: z.string().nullable(),
+      dataBearing: z.boolean().nullable(),
       errors: z.array(z.string()),
     }),
   ),

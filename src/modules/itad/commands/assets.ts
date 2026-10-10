@@ -5,19 +5,22 @@ import { isUniqueViolation, notFound } from '@open-mercato/shared/lib/crud/error
 import { enforceCommandOptimisticLock } from '@open-mercato/shared/lib/crud/optimistic-lock-command'
 import { resolveTranslations } from '@open-mercato/shared/lib/i18n/server'
 import { createLogger } from '@open-mercato/shared/lib/logger'
-import { ItadAsset, ItadIntakeScan, ItadManifestItem, type ItadJob } from '../data/entities'
+import { ItadAsset, ItadAssetStatusTransition, ItadIntakeScan, ItadManifestItem, type ItadJob } from '../data/entities'
 import {
   ITAD_ASSET_SYSTEM_FIELDS,
+  itadAssetClassifySchema,
   itadAssetDeleteSchema,
   itadAssetScanSchema,
   itadAssetUpdateSchema,
   itadScanActionSchema,
+  type ItadAssetClassifyInput,
   type ItadAssetDeleteInput,
   type ItadAssetScanInput,
   type ItadAssetUpdateInput,
   type ItadScanActionInput,
 } from '../data/validators'
-import type { ItadScanResult } from '../domain/job-types'
+import { decideClassification, resolveDataBearing, type ItadDataBearingSource } from '../domain/data-bearing'
+import type { ItadAssetStatus, ItadScanResult } from '../domain/job-types'
 import {
   canFlagDifferentDevice,
   canResolveAsSameDevice,
@@ -68,6 +71,9 @@ export type ItadScanResponseAsset = {
   customerAssetTag: string | null
   manufacturer: string | null
   model: string | null
+  dataBearing: boolean | null
+  dataBearingSource: ItadDataBearingSource | null
+  status: ItadAssetStatus
   deleted: boolean
 }
 
@@ -79,6 +85,8 @@ export type ItadAssetScanResult = {
   scan: { id: string; rawSerial: string; scannedAt: string }
   asset: ItadScanResponseAsset
   manifestItem: { id: string; serial: string } | null
+  /** The new asset entered sanitization for the first time (event after commit). */
+  sanitizationRequired: boolean
 }
 
 function toResponseAsset(asset: ItadAsset): ItadScanResponseAsset {
@@ -88,6 +96,9 @@ function toResponseAsset(asset: ItadAsset): ItadScanResponseAsset {
     customerAssetTag: asset.customerAssetTag ?? null,
     manufacturer: asset.manufacturer ?? null,
     model: asset.model ?? null,
+    dataBearing: asset.dataBearing ?? null,
+    dataBearingSource: asset.dataBearingSource ?? null,
+    status: asset.status,
     deleted: Boolean(asset.deletedAt),
   }
 }
@@ -121,6 +132,11 @@ const scanCommand: CommandHandler<ItadAssetScanInput, ItadAssetScanResult> = {
           : await tx.findOne(ItadManifestItem, { ...where, serialNormalized: serial.normalized } as FilterQuery<ItadManifestItem>)
         const result = decideScanResult({ activeAssetExists: Boolean(existing), manifestItemExists: Boolean(manifestItem) })
         const now = new Date()
+        // Snapshot rule: resolved once here and owned by the asset from then on.
+        const decided = existing
+          ? null
+          : resolveDataBearing({ manifestValue: manifestItem?.dataBearing, jobDefault: job.defaultDataBearing })
+        const initialStatus: ItadAssetStatus = decided?.dataBearing === true ? 'sanitization_required' : 'received'
         const asset =
           existing ??
           tx.create(ItadAsset, {
@@ -132,8 +148,12 @@ const scanCommand: CommandHandler<ItadAssetScanInput, ItadAssetScanResult> = {
             customerAssetTag: manifestItem?.customerAssetTag ?? null,
             manufacturer: manifestItem?.manufacturer ?? null,
             model: manifestItem?.model ?? null,
-            dataBearing: null,
-            status: 'received',
+            dataBearing: decided?.dataBearing ?? null,
+            dataBearingSource: decided?.source ?? null,
+            dataBearingDecidedByUserId: null,
+            dataBearingDecidedAt: decided?.source ? now : null,
+            status: initialStatus,
+            sanitizationRequiredAt: initialStatus === 'sanitization_required' ? now : null,
             receivedAt: now,
             receivedByUserId: actorUserId,
             createdAt: now,
@@ -153,6 +173,24 @@ const scanCommand: CommandHandler<ItadAssetScanInput, ItadAssetScanResult> = {
           scannedAt: now,
         })
         tx.persist(scan)
+        if (decided?.source) {
+          tx.persist(
+            tx.create(ItadAssetStatusTransition, {
+              tenantId: scope.tenantId,
+              organizationId: scope.organizationId,
+              job,
+              asset,
+              action: 'classify',
+              fromStatus: null,
+              toStatus: initialStatus,
+              dataBearingFrom: null,
+              dataBearingTo: decided.dataBearing,
+              reason: null,
+              actorUserId: null,
+              createdAt: now,
+            }),
+          )
+        }
         await tx.flush()
         return {
           jobId: job.id,
@@ -162,6 +200,7 @@ const scanCommand: CommandHandler<ItadAssetScanInput, ItadAssetScanResult> = {
           scan: { id: scan.id, rawSerial: scan.rawSerial, scannedAt: now.toISOString() },
           asset: toResponseAsset(asset),
           manifestItem: manifestItem ? { id: manifestItem.id, serial: manifestItem.serial } : null,
+          sanitizationRequired: !existing && initialStatus === 'sanitization_required',
         }
       })
     } catch (err) {
@@ -175,6 +214,13 @@ const scanCommand: CommandHandler<ItadAssetScanInput, ItadAssetScanResult> = {
       await emitAfterCommit('itad.intake_scan.duplicate_detected', { ...base, scanId: outcome.scan.id, assetId: outcome.asset.id }, true)
     } else {
       await emitAfterCommit('itad.asset.received', { ...base, assetId: outcome.asset.id, scanId: outcome.scan.id, result: outcome.result })
+    }
+    if (outcome.sanitizationRequired) {
+      await emitAfterCommit(
+        'itad.asset.sanitization_required',
+        { ...base, assetId: outcome.asset.id, dataBearingSource: outcome.asset.dataBearingSource },
+        true,
+      )
     }
     return outcome
   },
@@ -353,6 +399,84 @@ function assetSnapshot(asset: ItadAsset): Record<string, unknown> {
   }
 }
 
+/** One applied `dataBearing` change, for the post-commit events. */
+type ClassificationChange = {
+  assetId: string
+  from: boolean | null
+  to: boolean
+  source: ItadDataBearingSource
+  /** First entry into `sanitization_required` (the one-time event). */
+  sanitizationRequired: boolean
+}
+
+/**
+ * Applies a classification decided by `decideClassification` inside the caller's
+ * transaction: value, source, decider, status, and one history row. Returns `null` for
+ * a no-op (the value the asset already has).
+ */
+function applyClassification(
+  tx: EntityManager,
+  input: {
+    job: ItadJob
+    asset: ItadAsset
+    target: boolean
+    toStatus: ItadAsset['status']
+    source: ItadDataBearingSource
+    actorUserId: string
+    reason: string | null
+    now: Date
+  },
+): ClassificationChange {
+  const { job, asset, target, toStatus, source, actorUserId, reason, now } = input
+  const from = asset.dataBearing ?? null
+  const fromStatus = asset.status
+  const sanitizationRequired = toStatus === 'sanitization_required' && !asset.sanitizationRequiredAt
+  asset.dataBearing = target
+  asset.dataBearingSource = source
+  asset.dataBearingDecidedByUserId = actorUserId
+  asset.dataBearingDecidedAt = now
+  asset.status = toStatus
+  if (sanitizationRequired) asset.sanitizationRequiredAt = now
+  asset.updatedAt = now
+  tx.persist(
+    tx.create(ItadAssetStatusTransition, {
+      tenantId: asset.tenantId,
+      organizationId: asset.organizationId,
+      job,
+      asset,
+      action: 'classify',
+      fromStatus,
+      toStatus,
+      dataBearingFrom: from,
+      dataBearingTo: target,
+      reason,
+      actorUserId,
+      createdAt: now,
+    }),
+  )
+  return { assetId: asset.id, from, to: target, source, sanitizationRequired }
+}
+
+async function emitClassificationEvents(
+  changes: ClassificationChange[],
+  base: { jobId: string; actorUserId: string; tenantId: string; organizationId: string },
+  reason: string | null,
+): Promise<void> {
+  for (const change of changes) {
+    await emitAfterCommit('itad.asset.data_bearing_changed', {
+      ...base,
+      assetId: change.assetId,
+      from: change.from,
+      to: change.to,
+      source: change.source,
+      reason,
+    })
+    if (change.sanitizationRequired) {
+      await emitAfterCommit('itad.asset.sanitization_required', { ...base, assetId: change.assetId, dataBearingSource: change.source }, true)
+    }
+  }
+}
+
 /** Edits an asset's descriptive fields while receiving; optimistic lock on the asset's `updatedAt`. */
 const updateAssetCommand: CommandHandler<ItadAssetUpdateInput, ItadAssetChangeResult> = {
   id: 'itad.assets.update',
@@ -376,13 +500,37 @@ const updateAssetCommand: CommandHandler<ItadAssetUpdateInput, ItadAssetChangeRe
         current: asset.updatedAt,
         request: ctx.request ?? null,
       })
+      const now = new Date()
+      let change: ClassificationChange | null = null
+      if (input.dataBearing !== undefined && input.dataBearing !== (asset.dataBearing ?? null)) {
+        // The edit dialog's "Carries data" goes through the classification rules.
+        if (input.dataBearing === null) return await assetError(400, 'data_bearing_cannot_be_unset')
+        const decision = decideClassification({
+          jobStatus: job.status,
+          asset: { status: asset.status, dataBearing: asset.dataBearing ?? null },
+          target: input.dataBearing,
+        })
+        if (decision.kind === 'refused') return await assetError(409, decision.code)
+        if (decision.kind === 'change') {
+          change = applyClassification(tx, {
+            job,
+            asset,
+            target: input.dataBearing,
+            toStatus: decision.toStatus,
+            source: 'manual',
+            actorUserId,
+            reason: null,
+            now,
+          })
+        }
+      }
       if (input.customerAssetTag !== undefined) asset.customerAssetTag = input.customerAssetTag
       if (input.manufacturer !== undefined) asset.manufacturer = input.manufacturer
       if (input.model !== undefined) asset.model = input.model
-      if (input.dataBearing !== undefined) asset.dataBearing = input.dataBearing
-      asset.updatedAt = new Date()
+      asset.updatedAt = now
       await tx.flush()
       return {
+        change,
         jobId: job.id,
         assetId: asset.id,
         tenantId: scope.tenantId,
@@ -391,14 +539,11 @@ const updateAssetCommand: CommandHandler<ItadAssetUpdateInput, ItadAssetChangeRe
         snapshot: assetSnapshot(asset),
       }
     })
-    await emitAfterCommit('itad.asset.updated', {
-      jobId: result.jobId,
-      assetId: result.assetId,
-      actorUserId,
-      tenantId: result.tenantId,
-      organizationId: result.organizationId,
-    })
-    return result
+    const base = { jobId: result.jobId, actorUserId, tenantId: result.tenantId, organizationId: result.organizationId }
+    await emitAfterCommit('itad.asset.updated', { ...base, assetId: result.assetId })
+    if (result.change) await emitClassificationEvents([result.change], base, null)
+    const { change: _change, ...publicResult } = result
+    return publicResult
   },
   buildLog: async ({ result }) => {
     const { translate } = await resolveTranslations()
@@ -483,8 +628,115 @@ const deleteAssetCommand: CommandHandler<ItadAssetDeleteInput, ItadAssetChangeRe
   },
 }
 
+export type ItadAssetClassifyResult = {
+  jobId: string
+  tenantId: string
+  organizationId: string
+  dataBearing: boolean
+  changedAssetIds: string[]
+  unchangedAssetIds: string[]
+}
+
+/**
+ * Decides `dataBearing` for one or many assets of a job at once (sanitization spec
+ * REQ-304, "Classification changes"). All-or-nothing under the job row lock: when any
+ * selected asset is missing or refused, nothing changes and the error lists them.
+ * Assets that already have the value are left untouched (no history row, no event).
+ * Phase 1: only while the job is in receiving.
+ */
+const classifyAssetsCommand: CommandHandler<ItadAssetClassifyInput, ItadAssetClassifyResult> = {
+  id: 'itad.assets.classify',
+  isUndoable: false,
+  async execute(rawInput, ctx) {
+    const input = itadAssetClassifySchema.parse(rawInput)
+    const reason = resolveNote(input.reason, false)
+    if (reason === false) return await assetError(400, 'reason_required')
+    const { scope, actorUserId, em } = await resolveActor(ctx)
+    await loadJob(em, scope, input.jobId)
+
+    const outcome = await em.transactional(async (tx) => {
+      const job = await lockJob(tx, scope, input.jobId)
+      await assertAssetsEditable(job)
+      const assets = await tx.find(ItadAsset, {
+        id: { $in: input.assetIds },
+        tenantId: scope.tenantId,
+        organizationId: scope.organizationId,
+        job: job.id,
+        deletedAt: null,
+      } as FilterQuery<ItadAsset>)
+      if (assets.length !== input.assetIds.length) {
+        const found = new Set(assets.map((asset) => asset.id))
+        return await assetError(409, 'assets_not_found', undefined, { assetIds: input.assetIds.filter((id) => !found.has(id)) })
+      }
+      const decisions = assets.map((asset) => ({
+        asset,
+        decision: decideClassification({
+          jobStatus: job.status,
+          asset: { status: asset.status, dataBearing: asset.dataBearing ?? null },
+          target: input.dataBearing,
+        }),
+      }))
+      const refused = decisions.filter((entry) => entry.decision.kind === 'refused')
+      if (refused.length > 0) {
+        const first = refused[0].decision as Extract<(typeof decisions)[number]['decision'], { kind: 'refused' }>
+        return await assetError(409, first.code, undefined, { assetIds: refused.map((entry) => entry.asset.id) })
+      }
+      const now = new Date()
+      const changes: ClassificationChange[] = []
+      const unchanged: string[] = []
+      for (const { asset, decision } of decisions) {
+        if (decision.kind !== 'change') {
+          unchanged.push(asset.id)
+          continue
+        }
+        changes.push(
+          applyClassification(tx, {
+            job,
+            asset,
+            target: input.dataBearing,
+            toStatus: decision.toStatus,
+            source: 'bulk',
+            actorUserId,
+            reason,
+            now,
+          }),
+        )
+      }
+      await tx.flush()
+      return { job, changes, unchanged }
+    })
+
+    const base = { jobId: outcome.job.id, actorUserId, tenantId: scope.tenantId, organizationId: scope.organizationId }
+    await emitClassificationEvents(outcome.changes, base, reason)
+    return {
+      jobId: outcome.job.id,
+      tenantId: scope.tenantId,
+      organizationId: scope.organizationId,
+      dataBearing: input.dataBearing,
+      changedAssetIds: outcome.changes.map((change) => change.assetId),
+      unchangedAssetIds: outcome.unchanged,
+    }
+  },
+  buildLog: async ({ result }) => {
+    const { translate } = await resolveTranslations()
+    return {
+      actionLabel: translate('itad.audit.assets.classify', 'Classify ITAD assets as carrying data or not'),
+      resourceKind: 'itad.job',
+      resourceId: result.jobId,
+      tenantId: result.tenantId,
+      organizationId: result.organizationId,
+      snapshotAfter: {
+        dataBearing: result.dataBearing,
+        changedCount: result.changedAssetIds.length,
+        unchangedCount: result.unchangedAssetIds.length,
+      },
+    }
+  },
+}
+
 registerCommand(scanCommand)
 registerCommand(resolveDuplicateCommand)
 registerCommand(flagDifferentDeviceCommand)
 registerCommand(updateAssetCommand)
 registerCommand(deleteAssetCommand)
+registerCommand(classifyAssetsCommand)

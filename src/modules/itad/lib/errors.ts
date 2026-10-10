@@ -90,6 +90,10 @@ export type ItadAssetErrorCode =
   | 'reason_required'
   | 'field_not_writable'
   | 'serial_too_short'
+  | 'sanitization_in_progress'
+  | 'sanitization_not_possible'
+  | 'data_bearing_cannot_be_unset'
+  | 'assets_not_found'
 
 /** Coded receiving/asset error; same body shape as `itadJobError`, with the asset key prefix. */
 export function itadAssetError(
@@ -97,8 +101,11 @@ export function itadAssetError(
   code: ItadAssetErrorCode,
   message: string,
   fieldErrors?: Record<string, string>,
+  /** Extra body fields, e.g. `assetIds` blocking a bulk request. */
+  details?: Record<string, unknown>,
 ): CrudHttpError {
   return new CrudHttpError(status, {
+    ...(details ?? {}),
     error: message,
     code: `${ITAD_ASSET_ERROR_PREFIX}${code}`,
     ...(fieldErrors ? { fieldErrors } : {}),

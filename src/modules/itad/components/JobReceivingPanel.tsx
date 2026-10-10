@@ -2,7 +2,8 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy'
-import { DataTable } from '@open-mercato/ui/backend/DataTable'
+import { DataTable, type BulkAction, type BulkActionExecuteResult } from '@open-mercato/ui/backend/DataTable'
+import { useConfirmDialog } from '@open-mercato/ui/backend/confirm-dialog'
 import { RowActions } from '@open-mercato/ui/backend/RowActions'
 import { SectionHeader } from '@open-mercato/ui/backend/SectionHeader'
 import { CrudForm, type CrudField } from '@open-mercato/ui/backend/CrudForm'
@@ -29,6 +30,7 @@ import { useT } from '@open-mercato/shared/lib/i18n/context'
 import { isReceivingActive, RECEIVING_NOTE_MIN } from '../domain/receiving-rules'
 import { ITAD_ASSET_ENTITY_ID } from '../lib/constants'
 import { SourceDataDialog } from './JobManifestPanel'
+import { ASSET_STATUS_VARIANTS, assetStatusLabel, dataBearingLabel, dataBearingSourceLabel } from './data-bearing-ui'
 import type { ManifestItemRow } from './manifest-types'
 import type { AssetRow, ScanListItem, ScanOutcome, ScanResponse } from './receiving-types'
 import type { ItadJobListItem } from './types'
@@ -62,11 +64,6 @@ function formatDateTime(value: string | null): string {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString()
 }
 
-function dataBearingLabel(t: Translate, value: boolean | null): string {
-  if (value === true) return t('itad.receiving.dataBearing.yes', 'Yes')
-  if (value === false) return t('itad.receiving.dataBearing.no', 'No')
-  return t('itad.receiving.dataBearing.unknown', 'Not determined')
-}
 
 type RecentScan = { key: string; serial: string; outcome: ScanOutcome | null; detail: string; error?: string }
 
@@ -322,14 +319,21 @@ function EditAssetDialog({ jobId, asset, onClose, onSaved }: { jobId: string; as
         id: 'dataBearing',
         label: t('itad.receiving.dataBearing.label', 'Carries data'),
         type: 'select',
+        // Once decided, the value can switch between Yes and No but not go back to undetermined.
         options: [
-          { value: 'unknown', label: t('itad.receiving.dataBearing.unknown', 'Not determined') },
+          ...(asset?.dataBearing == null
+            ? [{ value: 'unknown', label: t('itad.receiving.dataBearing.unknown', 'Not determined') }]
+            : []),
           { value: 'yes', label: t('itad.receiving.dataBearing.yes', 'Yes') },
           { value: 'no', label: t('itad.receiving.dataBearing.no', 'No') },
         ],
+        description: t(
+          'itad.receiving.dataBearing.hint',
+          'Yes sends the device to sanitization; No keeps it on the normal path.',
+        ),
       },
     ],
-    [t],
+    [asset?.dataBearing, t],
   )
   return (
     <Dialog open={asset !== null} onOpenChange={(open) => { if (!open) onClose() }}>
@@ -470,7 +474,30 @@ function buildAssetColumns(t: Translate): ColumnDef<AssetRow>[] {
       header: t('itad.reconciliation.column', 'Reconciliation'),
       cell: ({ row }) => <ReconciliationBadge t={t} state={row.original.reconciliation} />,
     },
-    { id: 'dataBearing', header: t('itad.receiving.dataBearing.label', 'Carries data'), cell: ({ row }) => dataBearingLabel(t, row.original.dataBearing) },
+    {
+      id: 'dataBearing',
+      header: t('itad.receiving.dataBearing.label', 'Carries data'),
+      cell: ({ row }) => (
+        <span>
+          {dataBearingLabel(t, row.original.dataBearing)}
+          {row.original.dataBearingSource ? (
+            <>
+              {' '}
+              <span className="text-xs text-muted-foreground">({dataBearingSourceLabel(t, row.original.dataBearingSource)})</span>
+            </>
+          ) : null}
+        </span>
+      ),
+    },
+    {
+      id: 'status',
+      header: t('itad.assets.status.column', 'Status'),
+      cell: ({ row }) => (
+        <StatusBadge variant={ASSET_STATUS_VARIANTS[row.original.status]} dot>
+          {assetStatusLabel(t, row.original.status)}
+        </StatusBadge>
+      ),
+    },
     {
       id: 'receivedAt',
       header: t('itad.receiving.assets.receivedAt', 'Received'),
@@ -505,6 +532,8 @@ export function JobReceivingPanel({
   const [sourceItem, setSourceItem] = React.useState<ManifestItemRow | null>(null)
   const [filterValues, setFilterValues] = React.useState<FilterValues>({})
   const reconciliationFilter = typeof filterValues.reconciliation === 'string' ? filterValues.reconciliation : ''
+  const dataBearingFilter = typeof filterValues.dataBearing === 'string' ? filterValues.dataBearing : ''
+  const { confirm, ConfirmDialogElement } = useConfirmDialog()
   const reconciliation = useReconciliation(job.id)
   const invalidateReconciliation = useInvalidateReconciliation(job.id)
   const columns = React.useMemo(() => buildAssetColumns(t), [t])
@@ -512,11 +541,12 @@ export function JobReceivingPanel({
   const active = isReceivingActive(job)
 
   const assetsQuery = useQuery<{ items: AssetRow[]; total: number }>({
-    queryKey: ['itad-assets', job.id, page, search, reconciliationFilter],
+    queryKey: ['itad-assets', job.id, page, search, reconciliationFilter, dataBearingFilter],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) })
       if (search.trim()) params.set('search', search.trim())
       if (reconciliationFilter) params.set('reconciliation', reconciliationFilter)
+      if (dataBearingFilter) params.set('dataBearing', dataBearingFilter)
       return readApiResultOrThrow(`${base}/assets?${params.toString()}`, undefined, {
         errorMessage: t('itad.receiving.assets.error', 'Could not load the received assets'),
       })
@@ -544,8 +574,61 @@ export function JobReceivingPanel({
         type: 'select' as const,
         options: (['matched', 'unexpected'] as const).map((state) => ({ value: state, label: reconciliationLabel(t, state) })),
       },
+      {
+        id: 'dataBearing',
+        label: t('itad.receiving.dataBearing.label', 'Carries data'),
+        type: 'select' as const,
+        options: [
+          { value: 'unknown', label: dataBearingLabel(t, null) },
+          { value: 'true', label: dataBearingLabel(t, true) },
+          { value: 'false', label: dataBearingLabel(t, false) },
+        ],
+      },
     ],
     [t],
+  )
+
+  /** Bulk classification (sanitization spec REQ-304): all-or-nothing, confirmed with the count. */
+  const classifySelected = React.useCallback(
+    async (rows: AssetRow[], dataBearing: boolean): Promise<BulkActionExecuteResult | false> => {
+      const confirmed = await confirm({
+        title: dataBearing
+          ? t('itad.receiving.classify.confirmYes', 'Mark {count} devices as carrying data?', { count: rows.length })
+          : t('itad.receiving.classify.confirmNo', 'Mark {count} devices as not carrying data?', { count: rows.length }),
+        description: dataBearing
+          ? t('itad.receiving.classify.confirmYesHint', 'They will require sanitization before the job can be closed.')
+          : t('itad.receiving.classify.confirmNoHint', 'They stay on the normal path without sanitization.'),
+      })
+      if (!confirmed) return false
+      const call = await apiCall<{ changedAssetIds: string[]; error?: string; assetIds?: string[] }>(`${base}/assets/classify`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ assetIds: rows.map((row) => row.id), dataBearing }),
+      })
+      refresh()
+      if (!call.ok) {
+        const blocking = new Set(call.result?.assetIds ?? [])
+        const serials = rows.filter((row) => blocking.has(row.id)).map((row) => row.serial)
+        const reason = call.result?.error ?? t('itad.receiving.classify.error', 'Could not classify the selected devices')
+        return { ok: false, message: serials.length ? `${reason}: ${serials.join(', ')}` : reason }
+      }
+      return {
+        ok: true,
+        affectedCount: call.result?.changedAssetIds.length ?? 0,
+        message: t('itad.receiving.classify.done', '{count} devices classified', { count: call.result?.changedAssetIds.length ?? 0 }),
+      }
+    },
+    [base, confirm, refresh, t],
+  )
+  const bulkActions = React.useMemo<BulkAction<AssetRow>[]>(
+    () =>
+      active && canReceive
+        ? [
+            { id: 'itad.assets.classify.yes', label: t('itad.receiving.classify.markYes', 'Mark as carrying data'), onExecute: (rows) => classifySelected(rows, true) },
+            { id: 'itad.assets.classify.no', label: t('itad.receiving.classify.markNo', 'Mark as not carrying data'), onExecute: (rows) => classifySelected(rows, false) },
+          ]
+        : [],
+    [active, canReceive, classifySelected, t],
   )
   const counts = reconciliation.data
 
@@ -562,7 +645,7 @@ export function JobReceivingPanel({
   return (
     <section className="space-y-4 rounded-lg border bg-card p-4" aria-label={t('itad.receiving.title', 'Receiving')}>
       <SectionHeader title={t('itad.receiving.title', 'Receiving')} />
-      <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:grid-cols-6" aria-live="polite">
+      <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-7" aria-live="polite">
         {[
           ['expected', t('itad.receiving.counters.expected', 'Expected (manifest)'), counts?.expectedAssetCount],
           ['received', t('itad.receiving.counters.received', 'Received'), counts?.receivedAssetCount],
@@ -574,6 +657,7 @@ export function JobReceivingPanel({
             t('itad.receiving.counters.pendingDuplicates', 'Duplicates to resolve'),
             counts ? counts.pendingDuplicates + counts.differentDeviceUnresolved : undefined,
           ],
+          ['dataBearingUndecided', t('itad.receiving.counters.dataBearingUndecided', 'Carries data: not determined'), counts?.dataBearingUndecided],
         ].map(([id, label, value]) => (
           <div key={String(id)}>
             <dt className="text-muted-foreground">{label}</dt>
@@ -655,9 +739,10 @@ export function JobReceivingPanel({
           }}
           entityId={ITAD_ASSET_ENTITY_ID}
           extensionTableId="itad.assets.job"
+          bulkActions={bulkActions}
           emptyState={(
             <p className="py-8 text-center text-sm text-muted-foreground">
-              {search.trim() || reconciliationFilter
+              {search.trim() || reconciliationFilter || dataBearingFilter
                 ? t('itad.receiving.assets.noMatches', 'No received devices match the search.')
                 : t('itad.receiving.assets.empty', 'No devices received yet.')}
             </p>
@@ -697,6 +782,7 @@ export function JobReceivingPanel({
       <EditAssetDialog jobId={job.id} asset={editAsset} onClose={() => setEditAsset(null)} onSaved={refresh} />
       <RemoveAssetDialog jobId={job.id} asset={removeAsset} onClose={() => setRemoveAsset(null)} onRemoved={refresh} />
       <SourceDataDialog item={sourceItem} onClose={() => setSourceItem(null)} />
+      {ConfirmDialogElement}
     </section>
   )
 }

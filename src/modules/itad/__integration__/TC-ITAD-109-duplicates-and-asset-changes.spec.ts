@@ -74,7 +74,7 @@ test.describe('TC-ITAD-109: duplicate resolution and asset corrections', () => {
       const edited = await updateAsset(request, adminToken, jobId, asset.id, { model: 'ThinkPad X1', dataBearing: true }, asset.updatedAt)
       expect(edited.status()).toBe(200)
       const [afterEdit] = (await listAssets(request, adminToken, jobId)).items
-      expect(afterEdit).toMatchObject({ model: 'ThinkPad X1', dataBearing: true, serial: `D1-${tag}` })
+      expect(afterEdit).toMatchObject({ model: 'ThinkPad X1', dataBearing: true, dataBearingSource: 'manual', status: 'sanitization_required', serial: `D1-${tag}` })
 
       // Voiding needs itad.assets.manage.
       const roleName = `qa_itad_receiver_${suffix.replace(/[^a-z0-9]/gi, '_')}`

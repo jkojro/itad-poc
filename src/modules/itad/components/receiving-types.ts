@@ -1,3 +1,6 @@
+import type { ItadDataBearingSource } from '../domain/data-bearing'
+import type { ItadAssetStatus } from '../domain/job-types'
+
 /** Client shapes of the receiving API responses (see the route `openApi` schemas). */
 export type ScanOutcome = 'MATCHED' | 'UNEXPECTED' | 'DUPLICATE'
 
@@ -10,6 +13,9 @@ export type ScanResponse = {
     customerAssetTag: string | null
     manufacturer: string | null
     model: string | null
+    dataBearing: boolean | null
+    dataBearingSource: ItadDataBearingSource | null
+    status: ItadAssetStatus
     deleted: boolean
   }
   manifestItem: { id: string; serial: string } | null
@@ -42,7 +48,8 @@ export type AssetRow = {
   manufacturer: string | null
   model: string | null
   dataBearing: boolean | null
-  status: string
+  dataBearingSource: ItadDataBearingSource | null
+  status: ItadAssetStatus
   manifestItemId: string | null
   reconciliation: 'matched' | 'unexpected'
   receivedAt: string

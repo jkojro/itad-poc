@@ -53,6 +53,7 @@ export const openApi: OpenApiRouteDoc = {
             unexpected: z.number().int(),
             pendingDuplicates: z.number().int(),
             differentDeviceUnresolved: z.number().int(),
+            dataBearingUndecided: z.number().int(),
             hasManifest: z.boolean(),
           }),
         },

@@ -42,6 +42,7 @@ const held_by_user_id = 'held_by_user_id'
 const hold_reason = 'hold_reason'
 const expected_asset_estimate = 'expected_asset_estimate'
 const scheduled_pickup_at = 'scheduled_pickup_at'
+const default_data_bearing = 'default_data_bearing'
 const started_at = 'started_at'
 const completed_at = 'completed_at'
 const created_at = 'created_at'
@@ -64,6 +65,7 @@ type JobRow = {
   hold_reason: string | null
   expected_asset_estimate: number | string | null
   scheduled_pickup_at: Date | string | null
+  default_data_bearing: boolean | null
   started_at: Date | string | null
   completed_at: Date | string | null
   created_at: Date | string
@@ -164,6 +166,7 @@ export const { metadata, GET, POST, PUT, DELETE } = makeCrudRoute({
       hold_reason,
       expected_asset_estimate,
       scheduled_pickup_at,
+      default_data_bearing,
       started_at,
       completed_at,
       created_at,
@@ -214,6 +217,7 @@ export const { metadata, GET, POST, PUT, DELETE } = makeCrudRoute({
       expectedAssetCount: 0,
       receivedAssetCount: 0,
       scheduledPickupAt: toIso(item.scheduled_pickup_at),
+      defaultDataBearing: typeof item.default_data_bearing === 'boolean' ? item.default_data_bearing : null,
       startedAt: toIso(item.started_at),
       completedAt: toIso(item.completed_at),
       createdAt: toIso(item.created_at),
@@ -264,6 +268,7 @@ const itadJobListItemSchema = z.object({
   expectedAssetCount: z.number().int(),
   receivedAssetCount: z.number().int(),
   scheduledPickupAt: z.string().nullable(),
+  defaultDataBearing: z.boolean().nullable(),
   startedAt: z.string().nullable(),
   completedAt: z.string().nullable(),
   createdAt: z.string().nullable(),
