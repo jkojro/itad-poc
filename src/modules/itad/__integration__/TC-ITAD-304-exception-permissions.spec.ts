@@ -13,11 +13,12 @@ import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/h
 import { getTokenContext } from '@open-mercato/core/helpers/integration/generalFixtures'
 import { createSchedulableJob, postTransition, uniqueSuffix } from './itad-job-fixtures'
 import { approveRetry, currentAssets, processingJobWithDataBearingAssets, recordResult, startRunOk } from './itad-sanitization-fixtures'
-import { getExceptions, listExceptions } from './itad-exception-fixtures'
+import { assignExceptionApi, getExceptions, listExceptions, resolveExceptionApi } from './itad-exception-fixtures'
 
 /**
- * TC-ITAD-304 (exceptions spec TEST-406, Phase 1 part; AC-407): `itad.exceptions.view`
- * reads exceptions; without it the list is 403; a sanitization manager without
+ * TC-ITAD-304 (exceptions spec TEST-406; AC-407): `itad.exceptions.view` reads
+ * exceptions; without it the list is 403; sanitization execute alone cannot assign or
+ * resolve; a sanitization manager without
  * `itad.exceptions.manage` cannot approve the retry (403, nothing changes); another
  * organization gets 404.
  */
@@ -55,6 +56,12 @@ test.describe('TC-ITAD-304: exception permissions', () => {
       expect((await listExceptions(request, employeeToken, jobId)).items.map((entry) => entry.type)).toEqual(['sanitization_failed'])
       const noView = await tokenWith('exc_none', ['itad.jobs.view', 'itad.assets.view'])
       expect((await getExceptions(request, noView, jobId)).status()).toBe(403)
+
+      // Sanitization execute alone grants no exception management (E4-042).
+      const technician = await tokenWith('san_exec', ['itad.jobs.view', 'itad.assets.view', 'itad.sanitization.view', 'itad.sanitization.execute', 'itad.exceptions.view'])
+      const failed = (await listExceptions(request, adminToken, jobId, 'status=open')).items[0]
+      expect((await assignExceptionApi(request, technician, jobId, failed, null)).status()).toBe(403)
+      expect((await resolveExceptionApi(request, technician, jobId, failed, 'not_shipped', 'Not allowed')).status()).toBe(403)
 
       // A sanitization manager without exceptions.manage cannot approve the retry (Q6).
       const sanitizationManager = await tokenWith('san_mgr', [

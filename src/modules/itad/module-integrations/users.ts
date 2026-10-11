@@ -42,3 +42,50 @@ export async function loadUserDisplayNames(
   }
   return names
 }
+
+export type OrganizationUser = { id: string; name: string | null; email: string | null }
+
+const ORGANIZATION_USER_SCAN_LIMIT = 500
+
+/**
+ * Active human users of one organization (exceptions spec Q12: any of them may be an
+ * assignee). Soft-deleted users are excluded by the engine. `name` / `email` are
+ * encrypted at rest, so `search` is matched after decryption, in memory.
+ */
+export async function listOrganizationUsers(
+  queryEngine: QueryEngine,
+  scope: { tenantId: string; organizationId: string },
+  options: { search?: string; limit?: number; ids?: string[] } = {},
+): Promise<OrganizationUser[]> {
+  const result = await queryEngine.query<UserRow & { kind?: string | null }>('auth:user', {
+    tenantId: scope.tenantId,
+    organizationId: scope.organizationId,
+    fields: ['id', 'name', 'email', 'kind', 'tenant_id', 'organization_id'],
+    filters: {
+      organization_id: scope.organizationId,
+      ...(options.ids ? { id: { $in: options.ids } } : {}),
+    },
+    page: { page: 1, pageSize: ORGANIZATION_USER_SCAN_LIMIT },
+  })
+  const needle = options.search?.trim().toLocaleLowerCase() ?? ''
+  const users = result.items
+    .filter((row) => typeof row.id === 'string' && (row.kind ?? 'human') === 'human')
+    .map((row) => ({
+      id: row.id,
+      name: typeof row.name === 'string' && row.name.trim() ? row.name.trim() : null,
+      email: typeof row.email === 'string' ? row.email : null,
+    }))
+    .filter((user) => !needle || `${user.name ?? ''} ${user.email ?? ''}`.toLocaleLowerCase().includes(needle))
+    .sort((a, b) => (a.name ?? a.email ?? '').localeCompare(b.name ?? b.email ?? ''))
+  return users.slice(0, options.limit ?? 20)
+}
+
+/** Whether `userId` is an active human user of the organization. */
+export async function isOrganizationUser(
+  queryEngine: QueryEngine,
+  scope: { tenantId: string; organizationId: string },
+  userId: string,
+): Promise<boolean> {
+  const users = await listOrganizationUsers(queryEngine, scope, { ids: [userId], limit: 1 })
+  return users.length === 1
+}

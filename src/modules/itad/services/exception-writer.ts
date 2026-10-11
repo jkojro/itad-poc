@@ -198,3 +198,29 @@ export async function materializeReceivingExceptions(
   }
   return changes
 }
+
+/** Assigns, reassigns or unassigns an OPEN exception, with a history row (E4-022). */
+export function assignException(
+  tx: EntityManager,
+  input: { exception: ItadException; assignedToUserId: string | null; actorUserId: string; now: Date },
+): boolean {
+  const { exception, assignedToUserId, actorUserId, now } = input
+  const previous = exception.assignedToUserId ?? null
+  if (previous === assignedToUserId) return false
+  exception.assignedToUserId = assignedToUserId
+  exception.updatedAt = now
+  tx.persist(
+    tx.create(ItadExceptionEvent, {
+      tenantId: exception.tenantId,
+      organizationId: exception.organizationId,
+      job: exception.job,
+      exception,
+      kind: assignedToUserId ? 'assigned' : 'unassigned',
+      assignedToUserId,
+      previousAssignedToUserId: previous,
+      actorUserId,
+      createdAt: now,
+    }),
+  )
+  return true
+}

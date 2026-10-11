@@ -94,6 +94,7 @@ export type ItadAssetErrorCode =
   | 'sanitization_not_possible'
   | 'data_bearing_cannot_be_unset'
   | 'assets_not_found'
+  | 'scan_not_flagged'
 
 /** Coded receiving/asset error; same body shape as `itadJobError`, with the asset key prefix. */
 export function itadAssetError(
@@ -137,4 +138,18 @@ export function itadSanitizationError(
     error: message,
     code: `${ITAD_SANITIZATION_ERROR_PREFIX}${code}`,
   })
+}
+
+export const ITAD_EXCEPTION_ERROR_PREFIX = 'itad.exceptions.errors.'
+
+export type ItadExceptionErrorCode =
+  | 'exception_resolved'
+  | 'resolve_through_domain_action'
+  | 'outcome_invalid'
+  | 'reason_required'
+  | 'assignee_invalid'
+
+/** Coded exception-workflow error; same body shape as the other itad errors. */
+export function itadExceptionError(status: 400 | 409, code: ItadExceptionErrorCode, message: string): CrudHttpError {
+  return new CrudHttpError(status, { error: message, code: `${ITAD_EXCEPTION_ERROR_PREFIX}${code}` })
 }

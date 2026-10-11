@@ -14,11 +14,13 @@ import {
   itadAssetScanSchema,
   itadAssetUpdateSchema,
   itadScanActionSchema,
+  itadSetAsideDuplicateSchema,
   type ItadAssetClassifyInput,
   type ItadAssetDeleteInput,
   type ItadAssetScanInput,
   type ItadAssetUpdateInput,
   type ItadScanActionInput,
+  type ItadSetAsideDuplicateInput,
 } from '../data/validators'
 import {
   classificationRequiredFeature,
@@ -30,6 +32,7 @@ import type { ItadAssetStatus, ItadScanResult } from '../domain/job-types'
 import {
   canFlagDifferentDevice,
   canResolveAsSameDevice,
+  canSetAsideSecondDevice,
   decideScanResult,
   isReceivingActive,
   resolveNote,
@@ -807,9 +810,90 @@ const classifyAssetsCommand: CommandHandler<ItadAssetClassifyInput, ItadAssetCla
   },
 }
 
+/**
+ * Closes a duplicate flagged as a different device: the second physical unit is set aside
+ * and gets no asset (exceptions spec Q3, REQ-408). The scan is resolved as
+ * `different_device_set_aside` (so receiving can complete) and its DUPLICATE_SERIAL
+ * exception as `second_device_set_aside`, in one transaction. The route requires
+ * `itad.exceptions.manage`.
+ */
+const setAsideDuplicateCommand: CommandHandler<ItadSetAsideDuplicateInput, ItadScanActionResult> = {
+  id: 'itad.assets.set_aside_duplicate',
+  isUndoable: false,
+  async execute(rawInput, ctx) {
+    const input = itadSetAsideDuplicateSchema.parse(rawInput)
+    const reason = resolveNote(input.reason, true)
+    if (reason === false) return await assetError(400, 'reason_required')
+    const { scope, actorUserId, em } = await resolveActor(ctx)
+    await loadJob(em, scope, input.jobId)
+    const outcome = await em.transactional(async (tx) => {
+      const job = await lockJob(tx, scope, input.jobId)
+      await assertReceiving(job)
+      const scan = await tx.findOne(
+        ItadIntakeScan,
+        { id: input.scanId, tenantId: scope.tenantId, organizationId: scope.organizationId, job: job.id } as FilterQuery<ItadIntakeScan>,
+      )
+      if (!scan) {
+        const { translate } = await resolveTranslations()
+        throw notFound(translate('itad.assets.errors.scan_not_found', 'Scan not found'))
+      }
+      if (!canSetAsideSecondDevice(scan)) return await assetError(409, 'scan_not_flagged')
+      const now = new Date()
+      scan.resolution = 'different_device_set_aside'
+      scan.resolutionNote = reason
+      scan.resolvedAt = now
+      scan.resolvedByUserId = actorUserId
+      const exceptionChanges = await resolveOpenExceptions(tx, {
+        job,
+        where: { intakeScan: scan.id },
+        outcome: 'second_device_set_aside',
+        reason,
+        actorUserId,
+        now,
+      })
+      await tx.flush()
+      return {
+        result: {
+          jobId: job.id,
+          scanId: scan.id,
+          assetId: String(scan.asset.id),
+          tenantId: scope.tenantId,
+          organizationId: scope.organizationId,
+          note: reason,
+        },
+        exceptionChanges,
+      }
+    })
+    await emitExceptionChanges(outcome.exceptionChanges, actorUserId)
+    await emitAfterCommit('itad.intake_scan.resolved', {
+      jobId: outcome.result.jobId,
+      scanId: outcome.result.scanId,
+      resolution: 'different_device_set_aside',
+      actorUserId,
+      tenantId: outcome.result.tenantId,
+      organizationId: outcome.result.organizationId,
+    })
+    return outcome.result
+  },
+  buildLog: async ({ result }) => {
+    const { translate } = await resolveTranslations()
+    return {
+      actionLabel: translate('itad.audit.assets.setAsideDuplicate', 'Set aside the second device of a duplicate scan'),
+      resourceKind: 'itad.intake_scan',
+      resourceId: result.scanId,
+      parentResourceKind: 'itad.job',
+      parentResourceId: result.jobId,
+      tenantId: result.tenantId,
+      organizationId: result.organizationId,
+      snapshotAfter: { scanId: result.scanId, resolution: 'different_device_set_aside', reason: result.note },
+    }
+  },
+}
+
 registerCommand(scanCommand)
 registerCommand(resolveDuplicateCommand)
 registerCommand(flagDifferentDeviceCommand)
 registerCommand(updateAssetCommand)
 registerCommand(deleteAssetCommand)
 registerCommand(classifyAssetsCommand)
+registerCommand(setAsideDuplicateCommand)
