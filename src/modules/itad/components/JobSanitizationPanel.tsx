@@ -635,10 +635,13 @@ export function JobSanitizationPanel({
   job,
   canExecute,
   canManage,
+  canResolveExceptions = false,
 }: {
   job: ItadJobListItem
   canExecute: boolean
   canManage: boolean
+  /** The retry also resolves the SANITIZATION_FAILED exception (exceptions spec Q6). */
+  canResolveExceptions?: boolean
 }) {
   const t = useT()
   const queryClient = useQueryClient()
@@ -821,7 +824,7 @@ export function JobSanitizationPanel({
                     },
                   ]
                 : []),
-              ...(processing && canManage && row.status === 'review_required'
+              ...(processing && canManage && canResolveExceptions && row.status === 'review_required'
                 ? [{ id: 'itad.sanitization.retry', label: t('itad.sanitization.actions.retry', 'Approve retry'), onSelect: () => setReasonAction({ kind: 'retry', asset: row }) }]
                 : []),
               ...(reclassifiable && canManage && !open

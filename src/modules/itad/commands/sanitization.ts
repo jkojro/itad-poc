@@ -3,7 +3,8 @@ import { LockMode } from '@mikro-orm/core'
 import type { EntityManager, FilterQuery } from '@mikro-orm/postgresql'
 import type { CommandHandler, CommandRuntimeContext } from '@open-mercato/shared/lib/commands'
 import { registerCommand } from '@open-mercato/shared/lib/commands'
-import { isUniqueViolation, notFound } from '@open-mercato/shared/lib/crud/errors'
+import { forbidden, isUniqueViolation, notFound } from '@open-mercato/shared/lib/crud/errors'
+import type { RbacService } from '@open-mercato/core/modules/auth/services/rbacService'
 import { enforceCommandOptimisticLock } from '@open-mercato/shared/lib/crud/optimistic-lock-command'
 import { resolveTranslations } from '@open-mercato/shared/lib/i18n/server'
 import { createLogger } from '@open-mercato/shared/lib/logger'
@@ -36,7 +37,9 @@ import { emitItadEvent, type ItadEventId } from '../events'
 import { ITAD_JOB_ENTITY_ID } from '../lib/constants'
 import { sanitizationError } from '../lib/sanitization-errors'
 import { EVIDENCE_ATTACHMENT_PARTITION, resolveAttachmentService } from '../module-integrations/attachments'
+import { openException, resolveOpenExceptions, type ExceptionChange } from '../services/exception-writer'
 import { recordAssetSteps } from '../services/sanitization-writer'
+import { emitExceptionChanges } from './exception-effects'
 import { ITAD_ASSET_LOCK_RESOURCE_KIND } from './assets'
 import { lockJob } from './job-lock'
 import { ensureScope, loadJob, type JobScope } from './jobs'
@@ -262,9 +265,13 @@ const recordResultCommand: CommandHandler<ItadSanitizationResultInput, ItadRunCh
         actorUserId,
         now,
       })
+      // Exceptions spec E4-013: every FAIL run opens its own SANITIZATION_FAILED exception.
+      const change = input.result === 'FAIL' ? await openException(tx, { job, source: { type: 'sanitization_failed', run, asset }, now }) : null
       await tx.flush()
-      return runChangeResult(scope, job, run, asset)
+      return { ...runChangeResult(scope, job, run, asset), exceptionChanges: change ? [change] : [] }
     })
+    const { exceptionChanges, ...publicResult } = result
+    await emitExceptionChanges(exceptionChanges, actorUserId)
     const passed = input.result === 'PASS'
     await emitAfterCommit(
       passed ? 'itad.sanitization.run_passed' : 'itad.sanitization.run_failed',
@@ -278,7 +285,7 @@ const recordResultCommand: CommandHandler<ItadSanitizationResultInput, ItadRunCh
       },
       !passed,
     )
-    return result
+    return publicResult
   },
   buildLog: runLog('itad.audit.sanitization.recordResult', 'Record ITAD sanitization result'),
 }
@@ -356,6 +363,17 @@ const approveRetryCommand: CommandHandler<ItadSanitizationRetryInput, ItadRetryR
     if (reason === false) return await sanitizationError(400, 'reason_required')
     const { scope, actorUserId, em } = await resolveActor(ctx)
     await loadJob(em, scope, input.jobId)
+    // Exceptions spec Q6: the retry also resolves the SANITIZATION_FAILED exception, so it
+    // needs `itad.exceptions.manage` besides the route's `itad.sanitization.manage`.
+    const rbac = ctx.container.resolve<RbacService>('rbacService')
+    const mayResolve = await rbac.userHasAllFeatures(actorUserId, ['itad.exceptions.manage'], {
+      tenantId: scope.tenantId,
+      organizationId: scope.organizationId,
+    })
+    if (!mayResolve) {
+      const { translate } = await resolveTranslations()
+      throw forbidden(translate('itad.sanitization.errors.retry_needs_exceptions', 'Approving a retry also resolves the exception; it needs the exception management permission'))
+    }
 
     const result = await em.transactional(async (tx) => {
       const job = await lockJob(tx, scope, input.jobId)
@@ -363,6 +381,14 @@ const approveRetryCommand: CommandHandler<ItadSanitizationRetryInput, ItadRetryR
       lockAsset(ctx, asset)
       const decision = await decideOrThrow(job, asset, 'approve_retry')
       const now = new Date()
+      const exceptionChanges = await resolveOpenExceptions(tx, {
+        job,
+        where: { asset: asset.id, type: 'sanitization_failed' },
+        outcome: 'retry_approved',
+        reason,
+        actorUserId,
+        now,
+      })
       recordAssetSteps(tx, {
         job,
         asset,
@@ -382,8 +408,10 @@ const approveRetryCommand: CommandHandler<ItadSanitizationRetryInput, ItadRetryR
         assetId: asset.id,
         assetStatus: asset.status,
         updatedAt: asset.updatedAt.toISOString(),
+        exceptionChanges,
       }
     })
+    await emitExceptionChanges(result.exceptionChanges, actorUserId)
     await emitAfterCommit('itad.asset.sanitization_retry_approved', {
       jobId: result.jobId,
       assetId: result.assetId,
@@ -392,7 +420,8 @@ const approveRetryCommand: CommandHandler<ItadSanitizationRetryInput, ItadRetryR
       tenantId: result.tenantId,
       organizationId: result.organizationId,
     })
-    return result
+    const { exceptionChanges: _exceptionChanges, ...publicResult } = result
+    return publicResult
   },
   buildLog: async ({ result }) => {
     const { translate } = await resolveTranslations()
@@ -648,6 +677,7 @@ const bulkRecordResultCommand: CommandHandler<ItadSanitizationBulkResultInput, I
       if (withoutRun.length > 0) return await sanitizationError(409, 'asset_transition_not_allowed', { blockingAssetIds: withoutRun })
       const now = new Date()
       const runs: ItadBulkRunResult['runs'] = []
+      const exceptionChanges: ExceptionChange[] = []
       for (const asset of assets) {
         const run = runByAsset.get(asset.id)!
         run.result = input.result
@@ -667,11 +697,16 @@ const bulkRecordResultCommand: CommandHandler<ItadSanitizationBulkResultInput, I
           actorUserId,
           now,
         })
+        if (input.result === 'FAIL') {
+          const change = await openException(tx, { job, source: { type: 'sanitization_failed', run, asset }, now })
+          if (change) exceptionChanges.push(change)
+        }
         runs.push({ runId: run.id, assetId: asset.id })
       }
       await tx.flush()
-      return { jobId: job.id, tenantId: scope.tenantId, organizationId: scope.organizationId, bulkBatchId: null, runs }
+      return { jobId: job.id, tenantId: scope.tenantId, organizationId: scope.organizationId, bulkBatchId: null, runs, exceptionChanges }
     })
+    await emitExceptionChanges(result.exceptionChanges, actorUserId)
     const passed = input.result === 'PASS'
     for (const run of result.runs) {
       await emitAfterCommit(
@@ -680,7 +715,8 @@ const bulkRecordResultCommand: CommandHandler<ItadSanitizationBulkResultInput, I
         !passed,
       )
     }
-    return result
+    const { exceptionChanges: _bulkExceptionChanges, ...publicBulk } = result
+    return publicBulk
   },
   buildLog: bulkLog('itad.audit.sanitization.bulkResult', 'Record ITAD sanitization results in bulk'),
 }

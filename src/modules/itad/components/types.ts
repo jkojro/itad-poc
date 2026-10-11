@@ -22,6 +22,8 @@ export type ItadJobListItem = {
   receivedAssetCount: number
   /** Derived: active data-bearing assets not yet sanitized (sanitization spec Q14). */
   sanitizationPendingCount: number
+  /** Derived: OPEN exceptions of the job (exceptions spec). */
+  openExceptionCount: number
   scheduledPickupAt: string | null
   /** Applied to later scans when the manifest gives no value; `null` = no default. */
   defaultDataBearing: boolean | null

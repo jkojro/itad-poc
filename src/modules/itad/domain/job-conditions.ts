@@ -1,4 +1,5 @@
 import type { ItadJobStatus } from './job-types'
+import type { ExceptionFacts } from './exceptions'
 import { receivingCompleteBlocker, type ReceivingFacts } from './reconciliation'
 import {
   ITAD_JOB_TRANSITIONS,
@@ -42,6 +43,8 @@ export type ConditionDeps = {
   loadReceivingFacts: (jobId: string) => Promise<ReceivingFacts>
   /** Processing facts of the job (sanitization spec Q14); read inside the caller's transaction. */
   loadProcessingFacts: (jobId: string) => Promise<ProcessingFacts>
+  /** Open exceptions of the job (exceptions spec E4-031); read inside the caller's transaction. */
+  loadExceptionFacts: (jobId: string) => Promise<ExceptionFacts>
 }
 
 export type ProcessingFacts = {
@@ -112,7 +115,19 @@ export const ITAD_JOB_CONDITIONS: Record<ItadJobConditionKey, ConditionDefinitio
         : { key: 'allAssetsProcessed', state: 'confirmation_required' }
     },
   },
-  noBlockingExceptions: manualCondition('noBlockingExceptions'),
+  // Exceptions spec E4-031: met exactly when no exception of the job is OPEN; it can no
+  // longer be confirmed by hand.
+  noBlockingExceptions: {
+    key: 'noBlockingExceptions',
+    source: 'data',
+    manualAllowed: false,
+    evaluate: async (job, deps) => {
+      const facts = await deps.loadExceptionFacts(job.id)
+      return facts.openExceptions > 0
+        ? { key: 'noBlockingExceptions', state: 'unmet', detailKey: 'itad.jobs.conditions.detail.openExceptions' }
+        : { key: 'noBlockingExceptions', state: 'met' }
+    },
+  },
   requiredDocumentsComplete: manualCondition('requiredDocumentsComplete'),
 }
 

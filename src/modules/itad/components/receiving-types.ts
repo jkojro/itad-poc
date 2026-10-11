@@ -52,6 +52,7 @@ export type AssetRow = {
   status: ItadAssetStatus
   manifestItemId: string | null
   reconciliation: 'matched' | 'unexpected'
+  openExceptionCount: number
   receivedAt: string
   receivedBy: { id: string; name: string | null }
   updatedAt: string

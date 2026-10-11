@@ -1,5 +1,11 @@
 import { Entity, Index, ManyToOne, PrimaryKey, Property, Unique } from '@mikro-orm/decorators/legacy'
 import type { ItadDataBearingSource } from '../domain/data-bearing'
+import type {
+  ItadExceptionEventKind,
+  ItadExceptionOutcome,
+  ItadExceptionStatus,
+  ItadExceptionType,
+} from '../domain/exceptions'
 import type { ItadRunResult, ItadSanitizationMethod, ItadVerificationMethod } from '../domain/sanitization-state-machine'
 import type {
   ItadAssetHistoryStatus,
@@ -720,6 +726,122 @@ export class ItadSanitizationEvidence {
 
   @Property({ name: 'added_by_user_id', type: 'uuid' })
   addedByUserId!: string
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
+}
+
+/**
+ * One operational exception (exceptions spec "Exception record"): one row per source
+ * occurrence, identified by `sourceKey` (unique per organization in every status).
+ * Created by the system in the transaction of the domain fact; resolved once, never
+ * deleted. Source data stays on the source record (run, scan, item, asset).
+ */
+@Entity({ tableName: 'itad_exceptions' })
+@Unique({ name: 'itad_exceptions_source_unique', properties: ['tenantId', 'organizationId', 'sourceKey'] })
+@Index({ name: 'itad_exceptions_job_idx', properties: ['tenantId', 'organizationId', 'job', 'status', 'type'] })
+@Index({
+  name: 'itad_exceptions_asset_idx',
+  expression:
+    'create index "itad_exceptions_asset_idx" on "itad_exceptions" ("tenant_id", "organization_id", "asset_id") where "asset_id" is not null',
+})
+export class ItadException {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  @Property({ type: 'text' })
+  type!: ItadExceptionType
+
+  @Property({ type: 'text', default: 'open' })
+  status: ItadExceptionStatus = 'open'
+
+  @Property({ name: 'source_key', type: 'text' })
+  sourceKey!: string
+
+  @ManyToOne(() => ItadAsset, { fieldName: 'asset_id', nullable: true })
+  asset?: ItadAsset | null
+
+  @ManyToOne(() => ItadManifestItem, { fieldName: 'manifest_item_id', nullable: true })
+  manifestItem?: ItadManifestItem | null
+
+  @ManyToOne(() => ItadIntakeScan, { fieldName: 'intake_scan_id', nullable: true })
+  intakeScan?: ItadIntakeScan | null
+
+  @ManyToOne(() => ItadSanitizationRun, { fieldName: 'sanitization_run_id', nullable: true })
+  sanitizationRun?: ItadSanitizationRun | null
+
+  /** Display snapshot of the serial (item or asset). */
+  @Property({ type: 'text' })
+  serial!: string
+
+  @Property({ name: 'assigned_to_user_id', type: 'uuid', nullable: true })
+  assignedToUserId?: string | null
+
+  @Property({ name: 'resolution_outcome', type: 'text', nullable: true })
+  resolutionOutcome?: ItadExceptionOutcome | null
+
+  @Property({ name: 'resolution_reason', type: 'text', nullable: true })
+  resolutionReason?: string | null
+
+  @Property({ name: 'resolved_by_user_id', type: 'uuid', nullable: true })
+  resolvedByUserId?: string | null
+
+  @Property({ name: 'resolved_at', type: Date, nullable: true })
+  resolvedAt?: Date | null
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
+
+  /** Optimistic-lock version for assign / resolve. */
+  @Property({ name: 'updated_at', type: Date, onUpdate: () => new Date() })
+  updatedAt: Date = new Date()
+}
+
+/** Append-only history of an exception (E4-052). `actorUserId` is `null` for the system. */
+@Entity({ tableName: 'itad_exception_events' })
+@Index({ name: 'itad_exception_events_exception_idx', properties: ['tenantId', 'organizationId', 'exception', 'createdAt'] })
+export class ItadExceptionEvent {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  @ManyToOne(() => ItadException, { fieldName: 'exception_id' })
+  exception!: ItadException
+
+  @Property({ type: 'text' })
+  kind!: ItadExceptionEventKind
+
+  @Property({ name: 'assigned_to_user_id', type: 'uuid', nullable: true })
+  assignedToUserId?: string | null
+
+  @Property({ name: 'previous_assigned_to_user_id', type: 'uuid', nullable: true })
+  previousAssignedToUserId?: string | null
+
+  @Property({ type: 'text', nullable: true })
+  outcome?: ItadExceptionOutcome | null
+
+  @Property({ type: 'text', nullable: true })
+  reason?: string | null
+
+  @Property({ name: 'actor_user_id', type: 'uuid', nullable: true })
+  actorUserId?: string | null
 
   @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
   createdAt: Date = new Date()

@@ -20,8 +20,9 @@ import {
  * TC-ITAD-210 — Epic 3 E2E acceptance (sanitization spec TEST-310): a laptop job with
  * the default "carries data"; the manifest marks one device as not data-bearing; all
  * devices plus one unexpected are scanned and nothing is left to classify; in processing
- * one device fails, gets a manager retry and passes, the rest pass in bulk; closeout is
- * then accepted and the job completes.
+ * one device fails, gets a manager retry and passes, the rest pass in bulk; closeout review
+ * is reached. Since the exceptions spec, the unexpected device is an open exception that
+ * blocks `complete` (resolution: exceptions TEST-410).
  */
 test.describe('TC-ITAD-210: Epic 3 acceptance — from scan to sanitized closeout', () => {
   test('laptop job end to end', async ({ request }) => {
@@ -72,18 +73,19 @@ test.describe('TC-ITAD-210: Epic 3 acceptance — from scan to sanitized closeou
       expect(counts).toEqual({ required: 0, inProgress: 0, sanitized: 10, reviewRequired: 0 })
       expect((await assetSanitization(request, token, jobId, first.id)).runs.map((run) => run.result)).toEqual(['PASS', 'FAIL'])
 
-      // Closeout and completion.
+      // Closeout review is reached once every data-bearing device is sanitized.
       expect(await transitionOk(request, token, jobId, { action: 'start_closeout', confirmations: [CONFIRM('allAssetsProcessed')] })).toBe('closeout_review')
-      expect(
-        await transitionOk(request, token, jobId, {
-          action: 'complete',
-          confirmations: [CONFIRM('noBlockingExceptions'), CONFIRM('requiredDocumentsComplete')],
-        }),
-      ).toBe('completed')
-      const history = await apiRequest(request, 'GET', `/api/itad/jobs/${jobId}/history`, { token })
-      const items = (await readJsonSafe<{ items: Array<{ action: string }> }>(history))?.items ?? []
-      expect(items.slice(0, 3).map((item) => item.action)).toEqual(['complete', 'start_closeout', 'start_processing'])
-      jobId = null
+      // Since the exceptions spec the unexpected device is an OPEN UNEXPECTED_ASSET exception,
+      // and the FAIL was resolved by the retry; `complete` waits for the open one.
+      const exceptions = await apiRequest(request, 'GET', `/api/itad/jobs/${jobId}/exceptions`, { token })
+      const list = (await readJsonSafe<{ items: Array<{ type: string; status: string; serial: string; resolutionOutcome: string | null }> }>(exceptions))?.items ?? []
+      expect(list.map((entry) => [entry.type, entry.status, entry.resolutionOutcome]).sort()).toEqual([
+        ['sanitization_failed', 'resolved', 'retry_approved'],
+        ['unexpected_asset', 'open', null],
+      ])
+      const blocked = await postTransition(request, token, jobId, { action: 'complete', confirmations: [CONFIRM('requiredDocumentsComplete')] })
+      expect(blocked.status()).toBe(400)
+      expect(await readJsonSafe(blocked)).toMatchObject({ code: 'itad.jobs.errors.condition_unmet', conditions: ['noBlockingExceptions'] })
     } finally {
       if (jobId) await postTransition(request, token, jobId, { action: 'cancel', reason: 'QA cleanup' }).catch(() => undefined)
       await deleteEntityIfExists(request, token, '/api/customers/companies', companyId)

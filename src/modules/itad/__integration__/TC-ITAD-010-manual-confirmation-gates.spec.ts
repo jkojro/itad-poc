@@ -90,7 +90,7 @@ test.describe('TC-ITAD-010: manual confirmation and transition permissions', () 
 
       const unrelated = await postTransition(request, adminToken, jobId, {
         action: 'start_closeout',
-        confirmations: [CONFIRM('allAssetsProcessed'), CONFIRM('noBlockingExceptions')],
+        confirmations: [CONFIRM('allAssetsProcessed'), CONFIRM('requiredDocumentsComplete')],
       })
       expect(unrelated.status()).toBe(400)
       expect(await errorCode(unrelated)).toBe('itad.jobs.errors.confirmation_not_required')

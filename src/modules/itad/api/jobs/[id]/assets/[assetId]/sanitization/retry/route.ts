@@ -8,7 +8,8 @@ import { runGuardedCommand } from '../../../../../../../lib/command-route'
 import { itadRouteErrorResponse, loadReadableJob, resolveItadRouteContext } from '../../../../../../../lib/route-context'
 
 export const metadata = {
-  POST: { requireAuth: true, requireFeatures: ['itad.sanitization.manage'] },
+  // Approving a retry also resolves the SANITIZATION_FAILED exception (exceptions spec Q6).
+  POST: { requireAuth: true, requireFeatures: ['itad.sanitization.manage', 'itad.exceptions.manage'] },
 }
 
 const paramsSchema = z.object({ id: z.string().uuid(), assetId: z.string().uuid() })
@@ -44,7 +45,7 @@ export const openApi: OpenApiRouteDoc = {
     POST: {
       summary: 'Approve a sanitization retry after a failed run',
       description:
-        'Moves an asset from `review_required` back to `sanitization_required` with a reason (3–1000 characters). The failed run stays in the history.',
+        'Moves an asset from `review_required` back to `sanitization_required` with a reason (3–1000 characters) and resolves its open SANITIZATION_FAILED exception as `retry_approved`. The failed run stays in the history. Needs `itad.sanitization.manage` and `itad.exceptions.manage`.',
       requestBody: { contentType: 'application/json', schema: bodySchema },
       responses: [
         { status: 200, description: 'Retry approved', schema: z.object({ assetStatus: z.literal('sanitization_required'), updatedAt: z.string() }) },
@@ -52,7 +53,7 @@ export const openApi: OpenApiRouteDoc = {
       errors: [
         { status: 400, description: 'Reason missing or invalid', schema: errorSchema },
         { status: 401, description: 'Unauthorized', schema: errorSchema },
-        { status: 403, description: 'Missing itad.sanitization.manage', schema: errorSchema },
+        { status: 403, description: 'Missing itad.sanitization.manage or itad.exceptions.manage', schema: errorSchema },
         { status: 404, description: 'Job or asset not found in scope', schema: errorSchema },
         { status: 409, description: 'Job not in processing, asset not in review, or a stale version', schema: errorSchema },
       ],

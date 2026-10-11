@@ -12,6 +12,7 @@ const deps = (
   isCustomerValid: async () => true,
   loadReceivingFacts: async () => facts,
   loadProcessingFacts: async () => processing,
+  loadExceptionFacts: async () => ({ openExceptions: 0 }),
   ...overrides,
 })
 const validCustomer = deps()
@@ -73,19 +74,44 @@ describe('decideTransition (spec TEST-002)', () => {
     })
   })
 
-  it('needs every condition of complete confirmed', async () => {
-    const partial = await decideTransition({
+  it('needs the documents confirmation of complete; exceptions come from data (exceptions spec E4-031)', async () => {
+    const partial = await decideTransition({ job: job({ status: 'closeout_review' }), action: 'complete', deps: validCustomer })
+    expect(partial).toMatchObject({ ok: false, rejection: { code: 'condition_unmet', conditions: ['requiredDocumentsComplete'] } })
+    const confirmed = await decideTransition({
+      job: job({ status: 'closeout_review' }),
+      action: 'complete',
+      confirmations: [{ condition: 'requiredDocumentsComplete', comment: 'all documents filed' }],
+      deps: validCustomer,
+    })
+    expect(confirmed).toMatchObject({ ok: true, target: 'completed' })
+  })
+
+  it('blocks complete while an exception is open; a manual confirmation is not allowed', async () => {
+    const withOpen = deps({ loadExceptionFacts: async () => ({ openExceptions: 2 }) })
+    const blocked = await decideTransition({
+      job: job({ status: 'closeout_review' }),
+      action: 'complete',
+      confirmations: [{ condition: 'requiredDocumentsComplete', comment: 'all documents filed' }],
+      deps: withOpen,
+    })
+    expect(blocked).toMatchObject({ ok: false, rejection: { code: 'condition_unmet', conditions: ['noBlockingExceptions'] } })
+    expect(blocked.evaluations).toContainEqual({
+      key: 'noBlockingExceptions',
+      state: 'unmet',
+      detailKey: 'itad.jobs.conditions.detail.openExceptions',
+    })
+    const manual = await decideTransition({
       job: job({ status: 'closeout_review' }),
       action: 'complete',
       confirmations: [{ condition: 'noBlockingExceptions', comment: 'none open' }],
       deps: validCustomer,
     })
-    expect(partial).toMatchObject({ ok: false, rejection: { code: 'condition_unmet', conditions: ['requiredDocumentsComplete'] } })
+    expect(manual).toMatchObject({ ok: false, rejection: { code: 'confirmation_not_allowed', condition: 'noBlockingExceptions' } })
   })
 
   it.each([
     ['duplicate', [{ condition: 'allAssetsProcessed', comment: 'one' }, { condition: 'allAssetsProcessed', comment: 'two' }], 'confirmation_duplicate'],
-    ['not required by the action', [{ condition: 'noBlockingExceptions', comment: 'done' }], 'confirmation_not_required'],
+    ['not required by the action', [{ condition: 'requiredDocumentsComplete', comment: 'done' }], 'confirmation_not_required'],
     ['unknown condition', [{ condition: 'madeUp', comment: 'done' }], 'confirmation_not_required'],
     ['missing comment', [{ condition: 'allAssetsProcessed', comment: '' }], 'comment_required'],
     ['too short comment', [{ condition: 'allAssetsProcessed', comment: 'ok' }], 'comment_required'],

@@ -11,6 +11,8 @@ import type { ItadJobStatus } from '../domain/job-types'
 import { emitItadEvent } from '../events'
 import { buildConditionDeps } from '../services/job-condition-evaluator'
 import { abortOpenRunsOfCancelledJob, type AbortedRun } from '../services/sanitization-writer'
+import { materializeReceivingExceptions, resolveOpenExceptions, type ExceptionChange } from '../services/exception-writer'
+import { emitExceptionChanges } from './exception-effects'
 import { JOB_CANCELLED_ABORT_REASON } from '../domain/sanitization-state-machine'
 import { decideTransition, type TransitionRejection } from '../domain/job-conditions'
 import { isTerminalStatus } from '../domain/job-editability'
@@ -95,6 +97,7 @@ const transitionJobCommand: CommandHandler<ItadJobTransitionInput, ItadJobTransi
       transition?: ItadJobStatusTransition
       confirmations?: Array<{ condition: string; comment: string }>
       abortedRuns?: AbortedRun[]
+      exceptionChanges?: ExceptionChange[]
     } = {}
 
     // Manifest spec "Concurrency": the job row is locked first and the conditions are
@@ -140,6 +143,14 @@ const transitionJobCommand: CommandHandler<ItadJobTransitionInput, ItadJobTransi
       if (to === 'completed') job.completedAt = now
       // Sanitization spec "Job cancelled": open runs end as ABORTED in this transaction.
       const abortedRuns = to === 'cancelled' ? await abortOpenRunsOfCancelledJob(tx, { job, actorUserId, now }) : []
+      // Exceptions spec: missing / unexpected become exceptions once, when the job leaves
+      // receiving (E4-010, E4-011); a cancelled job closes its open exceptions (Q9).
+      const exceptionChanges =
+        input.action === 'start_processing'
+          ? await materializeReceivingExceptions(tx, { job, now })
+          : to === 'cancelled'
+            ? await resolveOpenExceptions(tx, { job, outcome: 'job_cancelled', reason, actorUserId, now })
+            : []
       job.status = to
       job.updatedAt = now
 
@@ -170,7 +181,7 @@ const transitionJobCommand: CommandHandler<ItadJobTransitionInput, ItadJobTransi
         )
       }
       await tx.flush()
-      Object.assign(holder, { job, from, to, transition, confirmations: decision.confirmations, abortedRuns })
+      Object.assign(holder, { job, from, to, transition, confirmations: decision.confirmations, abortedRuns, exceptionChanges })
     })
 
     const job = holder.job
@@ -184,6 +195,7 @@ const transitionJobCommand: CommandHandler<ItadJobTransitionInput, ItadJobTransi
 
     // After commit: CRUD side effects (index, cache, `itad.job.updated`) and domain events.
     await emitJobEffects(ctx, 'updated', job, scope)
+    await emitExceptionChanges(holder.exceptionChanges ?? [], actorUserId)
     try {
       await emitItadEvent(
         'itad.job.status_changed',

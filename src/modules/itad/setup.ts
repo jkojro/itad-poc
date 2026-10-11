@@ -12,6 +12,7 @@ export const setup: ModuleSetupConfig = {
       'itad.assets.view',
       'itad.assets.receive',
       'itad.sanitization.view',
+      'itad.exceptions.view',
     ],
   },
 }
