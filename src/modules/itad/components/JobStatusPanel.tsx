@@ -199,6 +199,11 @@ export function JobStatusPanel({ job, onChanged }: { job: ItadJobListItem; onCha
         </StatusBadge>
       </div>
       {effectiveJobStatus(job) === 'receiving' ? <ReceivingSummary jobId={job.id} t={t} /> : null}
+      {job.openExceptionCount > 0 && job.status !== 'completed' && job.status !== 'cancelled' ? (
+        <p className="text-sm text-muted-foreground">
+          {t('itad.exceptions.openSummary', 'Open exceptions: {count}', { count: job.openExceptionCount })}
+        </p>
+      ) : null}
       {['processing', 'closeout_review'].includes(effectiveJobStatus(job)) && job.sanitizationPendingCount > 0 ? (
         <p className="text-sm text-muted-foreground">
           {t('itad.sanitization.pendingSummary', 'Sanitization: {count} devices are not sanitized yet', { count: job.sanitizationPendingCount })}

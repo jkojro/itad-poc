@@ -334,7 +334,7 @@ All strings use i18n in 5 locales (Polish wording "wyjątek", "zlecenie"). Statu
 | Phase | Status | Evidence |
 |---|---|---|
 | 1 — Records, creation, domain-action resolution, closeout gate | done (2026-10-11) | Migration `Migration20261011084132_itad` (tables + backfill) reviewed and applied to dev: 13 exceptions backfilled (1 duplicate, 5 missing, 7 unexpected); role ACLs synced. `yarn generate`, typecheck, lint (0 errors), ds:check (343 files), unit tests 238/238 (TEST-401 + condition rules), build in the ephemeral environment. Integration: TC-ITAD-301 (TEST-402 API, AC-401–403, AC-406), TC-ITAD-302 (TEST-404 same-device, AC-404), TC-ITAD-303 (TEST-405, AC-405), TC-ITAD-304 (TEST-406 Phase 1 part, AC-407); TC-ITAD-009/010/210 adjusted. Full TC-ITAD regression 47/47 twice. |
-| 2 — Manager resolution, assignment, set-aside, Exceptions tab | not started | |
+| 2 — Manager resolution, assignment, set-aside, Exceptions tab | done (2026-10-11) | No migration. `yarn generate`, typecheck, lint (0 errors), ds:check (352 files), unit tests 238/238, build in the ephemeral environment. Integration: TC-ITAD-305 (TEST-402 completion, TEST-403), TC-ITAD-306 (TEST-404 set-aside), TC-ITAD-307 (TEST-407, assignment), TC-ITAD-304 extended (TEST-406), TC-ITAD-308 (TEST-409 tab part); TC-ITAD-210 now resolves its UNEXPECTED exception and completes. Full TC-ITAD regression 51/51 twice. |
 | 3 — Asset detail and timeline | not started | |
 
 Phase 1 notes:
@@ -342,6 +342,11 @@ Phase 1 notes:
 - `start_processing` materializes missing / unexpected in two set-based queries plus one key lookup (no per-row queries).
 - TC-ITAD-210 (Epic 3 E2E) now stops at `complete` refused by its open UNEXPECTED exception; TEST-410 covers completion after resolution.
 - The "linked exception id" on duplicate scan responses is not added: the Exceptions list already filters by asset and shows `intakeScanId`.
+
+Phase 2 notes:
+- The assignee list reads `auth:user` of the selected organization through the query engine (soft-deleted excluded). Search runs after decryption, in memory, over at most 500 users; that is enough for the PoC.
+- "Set aside 2nd device" is offered in the Exceptions tab and also next to a flagged duplicate in the Receiving tab (managers only).
+- The Exceptions tab offers each domain action itself ("Same device", "Approve retry"). The retry reads the device version first, because it is a sanitization action with an optimistic lock.
 
 ## Implementation Phases
 

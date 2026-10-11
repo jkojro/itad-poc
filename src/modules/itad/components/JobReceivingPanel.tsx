@@ -520,6 +520,7 @@ export function JobReceivingPanel({
   canManage,
   canViewManifest,
   canManageSanitization = false,
+  canManageExceptions = false,
 }: {
   job: ItadJobListItem
   canReceive: boolean
@@ -527,6 +528,8 @@ export function JobReceivingPanel({
   canViewManifest: boolean
   /** After receiving, a manager may still correct the classification with a reason (Q12). */
   canManageSanitization?: boolean
+  /** A manager may set aside the second unit of a different-device duplicate (exceptions spec Q3). */
+  canManageExceptions?: boolean
 }) {
   const t = useT()
   const queryClient = useQueryClient()
@@ -541,6 +544,7 @@ export function JobReceivingPanel({
   const dataBearingFilter = typeof filterValues.dataBearing === 'string' ? filterValues.dataBearing : ''
   const { confirm, ConfirmDialogElement } = useConfirmDialog()
   const [managerClassify, setManagerClassify] = React.useState<{ rows: AssetRow[]; dataBearing: boolean } | null>(null)
+  const [setAsideScan, setSetAsideScan] = React.useState<ScanListItem | null>(null)
   const reconciliation = useReconciliation(job.id)
   const invalidateReconciliation = useInvalidateReconciliation(job.id)
   const columns = React.useMemo(() => buildAssetColumns(t), [t])
@@ -742,6 +746,10 @@ export function JobReceivingPanel({
                       <Button type="button" variant="outline" size="sm" onClick={() => setDuplicateAction({ scan, action: 'flag' })}>
                         {t('itad.receiving.duplicates.differentDevice', 'Different device')}
                       </Button>
+                    ) : canManageExceptions ? (
+                      <Button type="button" variant="outline" size="sm" onClick={() => setSetAsideScan(scan)}>
+                        {t('itad.exceptions.actions.setAside', 'Set aside 2nd device')}
+                      </Button>
                     ) : null}
                   </div>
                 ) : null}
@@ -821,6 +829,25 @@ export function JobReceivingPanel({
       <RemoveAssetDialog jobId={job.id} asset={removeAsset} onClose={() => setRemoveAsset(null)} onRemoved={refresh} />
       <SourceDataDialog item={sourceItem} onClose={() => setSourceItem(null)} />
       {ConfirmDialogElement}
+      <ReasonDialog
+        open={setAsideScan !== null}
+        title={t('itad.exceptions.setAside.title', 'Set aside the second device {serial}?', { serial: setAsideScan?.asset.serial ?? '' })}
+        description={t('itad.exceptions.setAside.description', 'The second physical unit with this serial gets no asset; the duplicate and its exception are closed.')}
+        submitLabel={t('itad.exceptions.actions.setAsideFull', 'Set aside')}
+        onSubmit={async (reason) => {
+          if (!setAsideScan) return null
+          const call = await apiCall<{ error?: string }>(`${base}/scans/${encodeURIComponent(setAsideScan.id)}/set-aside`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ reason }),
+          })
+          if (!call.ok) return call.result?.error ?? t('itad.exceptions.errors.generic', 'Could not save')
+          flash(t('itad.exceptions.flash.setAside', 'Second device {serial} set aside', { serial: setAsideScan.asset.serial }), 'success')
+          refresh()
+          return null
+        }}
+        onClose={() => setSetAsideScan(null)}
+      />
       <ReasonDialog
         open={managerClassify !== null}
         title={

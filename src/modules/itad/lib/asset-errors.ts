@@ -17,6 +17,7 @@ const ASSET_ERROR_MESSAGES: Record<ItadAssetErrorCode, string> = {
   sanitization_not_possible: 'In closeout review a device can no longer be marked as carrying data, because sanitization is possible only in processing',
   data_bearing_cannot_be_unset: 'Once decided, "Carries data" can be changed to Yes or No, not back to Not determined',
   assets_not_found: 'Some selected assets no longer exist in this job. Refresh the list',
+  scan_not_flagged: 'Only a duplicate flagged as a different device can be set aside',
 }
 
 export async function assetError(

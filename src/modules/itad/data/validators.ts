@@ -314,3 +314,30 @@ export const itadExceptionListSchema = z.object({
   assignedTo: z.union([z.enum(['me', 'unassigned']), z.string().uuid()]).optional(),
   assetId: z.string().uuid().optional(),
 })
+
+/** Durable input of `itad.exceptions.assign` (`null` unassigns). */
+export const itadExceptionAssignSchema = z.object({
+  jobId: z.string().uuid(),
+  exceptionId: z.string().uuid(),
+  assignedToUserId: z.string().uuid().nullable(),
+})
+export type ItadExceptionAssignInput = z.infer<typeof itadExceptionAssignSchema>
+
+/** Durable input of `itad.exceptions.resolve` (MISSING / UNEXPECTED only). */
+export const itadExceptionResolveSchema = z.object({
+  jobId: z.string().uuid(),
+  exceptionId: z.string().uuid(),
+  outcome: z.string().max(64),
+  reason: z.string().max(1000).nullable().optional(),
+})
+export type ItadExceptionResolveInput = z.infer<typeof itadExceptionResolveSchema>
+
+/** Durable input of `itad.assets.set_aside_duplicate`. */
+export const itadSetAsideDuplicateSchema = z.object({
+  jobId: z.string().uuid(),
+  scanId: z.string().uuid(),
+  reason: z.string().max(1000).nullable().optional(),
+})
+export type ItadSetAsideDuplicateInput = z.infer<typeof itadSetAsideDuplicateSchema>
+
+export const itadAssigneeSearchSchema = z.object({ search: z.string().trim().max(200).optional() })

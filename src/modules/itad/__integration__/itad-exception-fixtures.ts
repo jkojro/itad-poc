@@ -58,3 +58,49 @@ export async function exceptionDetail(
   expect(response.status()).toBe(200)
   return (await readJsonSafe(response))!
 }
+
+const LOCK = 'x-om-ext-optimistic-lock-expected-updated-at'
+
+export async function assignExceptionApi(
+  request: APIRequestContext,
+  token: string,
+  jobId: string,
+  exception: { id: string; updatedAt: string },
+  assignedToUserId: string | null,
+) {
+  return request.fetch(`${BASE_URL}/api/itad/jobs/${encodeURIComponent(jobId)}/exceptions/${encodeURIComponent(exception.id)}/assign`, {
+    method: 'POST',
+    headers: { ...headers(token), 'Content-Type': 'application/json', [LOCK]: exception.updatedAt },
+    data: { assignedToUserId },
+  })
+}
+
+export async function resolveExceptionApi(
+  request: APIRequestContext,
+  token: string,
+  jobId: string,
+  exception: { id: string; updatedAt: string },
+  outcome: string,
+  reason: string | null,
+) {
+  return request.fetch(`${BASE_URL}/api/itad/jobs/${encodeURIComponent(jobId)}/exceptions/${encodeURIComponent(exception.id)}/resolve`, {
+    method: 'POST',
+    headers: { ...headers(token), 'Content-Type': 'application/json', [LOCK]: exception.updatedAt },
+    data: { outcome, reason },
+  })
+}
+
+export async function setAsideDuplicate(request: APIRequestContext, token: string, jobId: string, scanId: string, reason: string | null) {
+  return request.fetch(`${BASE_URL}/api/itad/jobs/${encodeURIComponent(jobId)}/scans/${encodeURIComponent(scanId)}/set-aside`, {
+    method: 'POST',
+    headers: { ...headers(token), 'Content-Type': 'application/json' },
+    data: { reason },
+  })
+}
+
+export async function getAssignees(request: APIRequestContext, token: string, search = '') {
+  return request.fetch(`${BASE_URL}/api/itad/exceptions/assignees${search ? `?search=${encodeURIComponent(search)}` : ''}`, {
+    method: 'GET',
+    headers: headers(token),
+  })
+}

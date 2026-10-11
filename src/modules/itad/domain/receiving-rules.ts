@@ -46,6 +46,14 @@ export function canResolveAsSameDevice(scan: DuplicateScanState): boolean {
   return scan.result === 'duplicate' && !scan.resolvedAt
 }
 
+/**
+ * Only a duplicate flagged as a different device and still unresolved can be closed as
+ * "second device set aside" (exceptions spec Q3).
+ */
+export function canSetAsideSecondDevice(scan: DuplicateScanState): boolean {
+  return scan.result === 'duplicate' && !scan.resolvedAt && Boolean(scan.flaggedDifferentDeviceAt)
+}
+
 /** Only a pending, not yet flagged duplicate can be flagged as a different device. */
 export function canFlagDifferentDevice(scan: DuplicateScanState): boolean {
   return scan.result === 'duplicate' && !scan.resolvedAt && !scan.flaggedDifferentDeviceAt
