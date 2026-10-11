@@ -402,14 +402,21 @@ All strings use i18n in 5 locales. Every surface covers loading, empty, error an
 | Phase | Status | Evidence |
 |---|---|---|
 | 1 — Classification and receiving gate | done (2026-10-09) | Migration `Migration20261009153019_itad` reviewed and applied to dev. `yarn generate`, typecheck, lint (0 errors), ds:check (313 files), unit tests 220/220 (TEST-301, TEST-302 classification part, TEST-303 receiving part), build in the ephemeral environment. Integration: TC-ITAD-201 (TEST-304), TC-ITAD-202 (TEST-305 receiving part), TC-ITAD-203 (TEST-311 receiving part); TC-ITAD-001/012/109/113/114 and the flow fixture adjusted to the new field and gate. Full TC-ITAD regression 35/35. |
-| 2 — Runs | not started | |
+| 2 — Runs | done (2026-10-11) | Migration `Migration20261011043159_itad` reviewed and applied to dev; role ACLs synced. `yarn generate`, typecheck, lint (0 errors), ds:check (332 files), unit tests 230/230 (TEST-302), build in the ephemeral environment. Integration: TC-ITAD-204 (TEST-306), TC-ITAD-205 (TEST-307), TC-ITAD-206 (TEST-305 processing and closeout part), TC-ITAD-207 (TEST-311 single actions); TC-ITAD-202 adjusted. Full TC-ITAD regression 39/39 twice; TC-ITAD-204 5/5 repeated. |
 | 3 — Bulk and closeout gate | not started | |
 
 Phase 1 notes:
 - `itad_asset_status_transitions` ships in Phase 1 (scan decisions with `actor_user_id = null`, classifications with the user).
 - The asset edit keeps "Not determined" only while the value is undetermined; a decided value cannot be unset (400 `data_bearing_cannot_be_unset`).
 - Classification source: the asset edit records `manual`, the classify endpoint (bulk action) records `bulk`.
-- Outside receiving the classify endpoint returns 409 `assets_locked` until Phase 2 adds the manager rules.
+- Outside receiving the classify endpoint returned 409 `assets_locked` until Phase 2 added the manager rules.
+
+Phase 2 notes:
+- The classify route requires only `itad.assets.view`; the command reads the job status under the lock and checks `itad.assets.receive` (receiving) or `itad.sanitization.manage` plus a reason (processing, closeout review), so a concurrent status change cannot bypass the rule.
+- Classification source: a single selected asset records `manual`, several at once `bulk`.
+- Steps of one action get `createdAt` 1 ms apart, so a FAIL always lists `sanitization_failed` before `review_required`.
+- The evidence route already accepts 1–200 `runIds`; Phase 3 adds the bulk UI on top of it.
+- Manager re-classification is available in the Receiving tab (bulk, with a reason; `true` only in processing) and per row in the Sanitization tab ("Mark as not carrying data").
 
 ## Implementation Phases
 

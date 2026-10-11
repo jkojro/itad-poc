@@ -17,8 +17,8 @@ import {
 /**
  * TC-ITAD-202 (sanitization spec TEST-305, receiving part): undecided devices block
  * receiving (`dataBearingUndecided`) until classified; bulk classification is
- * all-or-nothing; a decided value cannot go back to undetermined; classification is
- * refused once the job left receiving (Phase 1).
+ * all-or-nothing; a decided value cannot go back to undetermined; after receiving the
+ * receiving role can no longer classify.
  */
 test.describe('TC-ITAD-202: bulk classification and the receiving gate', () => {
   test('classify undecided devices, then start processing', async ({ request }) => {
@@ -82,10 +82,9 @@ test.describe('TC-ITAD-202: bulk classification and the receiving gate', () => {
       expect(await receivingCompleteView(request, token, jobId)).toMatchObject({ state: 'met' })
       expect(await transitionOk(request, token, jobId, { action: 'start_processing' })).toBe('processing')
 
-      // Phase 1: classification after receiving is refused (manager rules arrive with Phase 2).
-      const late = await classifyAssets(request, token, jobId, [assets[2].id], true, 'Found an SSD')
-      expect(late.status()).toBe(409)
-      expect((await readJsonSafe<{ code?: string }>(late))?.code).toBe('itad.assets.errors.assets_locked')
+      // After receiving the receiving role may no longer classify (manager rules: TC-ITAD-206).
+      const late = await classifyAssets(request, employeeToken, jobId, [assets[2].id], true, 'Found an SSD')
+      expect(late.status()).toBe(403)
     } finally {
       if (jobId) await postTransition(request, token, jobId, { action: 'cancel', reason: 'QA cleanup' }).catch(() => undefined)
       await deleteEntityIfExists(request, token, '/api/customers/companies', companyId)

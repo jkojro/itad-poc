@@ -11,6 +11,7 @@ export const setup: ModuleSetupConfig = {
       'itad.manifest.manage',
       'itad.assets.view',
       'itad.assets.receive',
+      'itad.sanitization.view',
     ],
   },
 }

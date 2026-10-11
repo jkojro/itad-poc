@@ -30,6 +30,7 @@ import { useT } from '@open-mercato/shared/lib/i18n/context'
 import { isReceivingActive, RECEIVING_NOTE_MIN } from '../domain/receiving-rules'
 import { ITAD_ASSET_ENTITY_ID } from '../lib/constants'
 import { SourceDataDialog } from './JobManifestPanel'
+import { ReasonDialog } from './ReasonDialog'
 import { ASSET_STATUS_VARIANTS, assetStatusLabel, dataBearingLabel, dataBearingSourceLabel } from './data-bearing-ui'
 import type { ManifestItemRow } from './manifest-types'
 import type { AssetRow, ScanListItem, ScanOutcome, ScanResponse } from './receiving-types'
@@ -516,11 +517,14 @@ export function JobReceivingPanel({
   canReceive,
   canManage,
   canViewManifest,
+  canManageSanitization = false,
 }: {
   job: ItadJobListItem
   canReceive: boolean
   canManage: boolean
   canViewManifest: boolean
+  /** After receiving, a manager may still correct the classification with a reason (Q12). */
+  canManageSanitization?: boolean
 }) {
   const t = useT()
   const queryClient = useQueryClient()
@@ -534,6 +538,7 @@ export function JobReceivingPanel({
   const reconciliationFilter = typeof filterValues.reconciliation === 'string' ? filterValues.reconciliation : ''
   const dataBearingFilter = typeof filterValues.dataBearing === 'string' ? filterValues.dataBearing : ''
   const { confirm, ConfirmDialogElement } = useConfirmDialog()
+  const [managerClassify, setManagerClassify] = React.useState<{ rows: AssetRow[]; dataBearing: boolean } | null>(null)
   const reconciliation = useReconciliation(job.id)
   const invalidateReconciliation = useInvalidateReconciliation(job.id)
   const columns = React.useMemo(() => buildAssetColumns(t), [t])
@@ -620,16 +625,47 @@ export function JobReceivingPanel({
     },
     [base, confirm, refresh, t],
   )
-  const bulkActions = React.useMemo<BulkAction<AssetRow>[]>(
-    () =>
-      active && canReceive
-        ? [
-            { id: 'itad.assets.classify.yes', label: t('itad.receiving.classify.markYes', 'Mark as carrying data'), onExecute: (rows) => classifySelected(rows, true) },
-            { id: 'itad.assets.classify.no', label: t('itad.receiving.classify.markNo', 'Mark as not carrying data'), onExecute: (rows) => classifySelected(rows, false) },
-          ]
-        : [],
-    [active, canReceive, classifySelected, t],
-  )
+  // After receiving: manager correction with a reason; closeout review allows only "not carrying data".
+  const afterReceiving = job.status === 'processing' || job.status === 'closeout_review'
+  const bulkActions = React.useMemo<BulkAction<AssetRow>[]>(() => {
+    const markYes = t('itad.receiving.classify.markYes', 'Mark as carrying data')
+    const markNo = t('itad.receiving.classify.markNo', 'Mark as not carrying data')
+    if (active && canReceive) {
+      return [
+        { id: 'itad.assets.classify.yes', label: markYes, onExecute: (rows) => classifySelected(rows, true) },
+        { id: 'itad.assets.classify.no', label: markNo, onExecute: (rows) => classifySelected(rows, false) },
+      ]
+    }
+    if (afterReceiving && canManageSanitization) {
+      const ask = (rows: AssetRow[], dataBearing: boolean) => {
+        setManagerClassify({ rows, dataBearing })
+        return false as const
+      }
+      return [
+        ...(job.status === 'processing' ? [{ id: 'itad.assets.classify.yes', label: markYes, onExecute: (rows: AssetRow[]) => ask(rows, true) }] : []),
+        { id: 'itad.assets.classify.no', label: markNo, onExecute: (rows: AssetRow[]) => ask(rows, false) },
+      ]
+    }
+    return []
+  }, [active, afterReceiving, canManageSanitization, canReceive, classifySelected, job.status, t])
+
+  const submitManagerClassify = async (reason: string): Promise<string | null> => {
+    if (!managerClassify) return null
+    const call = await apiCall<{ changedAssetIds: string[]; error?: string; assetIds?: string[] }>(`${base}/assets/classify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ assetIds: managerClassify.rows.map((row) => row.id), dataBearing: managerClassify.dataBearing, reason }),
+    })
+    refresh()
+    if (!call.ok) {
+      const blocking = new Set(call.result?.assetIds ?? [])
+      const serials = managerClassify.rows.filter((row) => blocking.has(row.id)).map((row) => row.serial)
+      const message = call.result?.error ?? t('itad.receiving.classify.error', 'Could not classify the selected devices')
+      return serials.length ? `${message}: ${serials.join(', ')}` : message
+    }
+    flash(t('itad.receiving.classify.done', '{count} devices classified', { count: call.result?.changedAssetIds.length ?? 0 }), 'success')
+    return null
+  }
   const counts = reconciliation.data
 
   const openSourceData = async (asset: AssetRow) => {
@@ -783,6 +819,22 @@ export function JobReceivingPanel({
       <RemoveAssetDialog jobId={job.id} asset={removeAsset} onClose={() => setRemoveAsset(null)} onRemoved={refresh} />
       <SourceDataDialog item={sourceItem} onClose={() => setSourceItem(null)} />
       {ConfirmDialogElement}
+      <ReasonDialog
+        open={managerClassify !== null}
+        title={
+          managerClassify?.dataBearing
+            ? t('itad.receiving.classify.confirmYes', 'Mark {count} devices as carrying data?', { count: managerClassify?.rows.length ?? 0 })
+            : t('itad.receiving.classify.confirmNo', 'Mark {count} devices as not carrying data?', { count: managerClassify?.rows.length ?? 0 })
+        }
+        description={t('itad.receiving.classify.afterReceivingHint', 'Receiving is finished, so this correction needs a reason and is recorded in the device history.')}
+        submitLabel={
+          managerClassify?.dataBearing
+            ? t('itad.receiving.classify.markYes', 'Mark as carrying data')
+            : t('itad.receiving.classify.markNo', 'Mark as not carrying data')
+        }
+        onSubmit={submitManagerClassify}
+        onClose={() => setManagerClassify(null)}
+      />
     </section>
   )
 }

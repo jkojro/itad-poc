@@ -19,6 +19,7 @@ import { JobStatusPanel } from './JobStatusPanel'
 import { JobHistory } from './JobHistory'
 import { JobManifestPanel } from './JobManifestPanel'
 import { JobReceivingPanel } from './JobReceivingPanel'
+import { JobSanitizationPanel } from './JobSanitizationPanel'
 import { useGrantedFeatures } from './use-granted-features'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@open-mercato/ui/primitives/tabs'
 import { ITAD_JOB_ENTITY_ID } from '../lib/constants'
@@ -32,8 +33,11 @@ const DETAIL_TAB_FEATURES = [
   'itad.assets.view',
   'itad.assets.receive',
   'itad.assets.manage',
+  'itad.sanitization.view',
+  'itad.sanitization.execute',
+  'itad.sanitization.manage',
 ] as const
-const DETAIL_TABS = ['overview', 'manifest', 'receiving'] as const
+const DETAIL_TABS = ['overview', 'manifest', 'receiving', 'sanitization'] as const
 type DetailTab = (typeof DETAIL_TABS)[number]
 
 type Translate = ReturnType<typeof useT>
@@ -332,10 +336,16 @@ export function JobDetailForm({ id }: { id: string }) {
   const { granted } = useGrantedFeatures(DETAIL_TAB_FEATURES)
   const canViewManifest = granted.has('itad.manifest.view')
   const canViewAssets = granted.has('itad.assets.view')
-  // The selected tab lives in the URL (`?tab=manifest|receiving`) so it survives reloads and can be linked.
+  const canViewSanitization = granted.has('itad.sanitization.view')
+  // The selected tab lives in the URL (`?tab=manifest|receiving|sanitization`) so it survives reloads and can be linked.
   const requestedTab = searchParams?.get('tab')
-  const tab: DetailTab =
-    requestedTab === 'manifest' && canViewManifest ? 'manifest' : requestedTab === 'receiving' && canViewAssets ? 'receiving' : 'overview'
+  const tabVisible: Record<DetailTab, boolean> = {
+    overview: true,
+    manifest: canViewManifest,
+    receiving: canViewAssets,
+    sanitization: canViewSanitization,
+  }
+  const tab: DetailTab = DETAIL_TABS.find((value) => value === requestedTab && tabVisible[value]) ?? 'overview'
   const selectTab = React.useCallback(
     (next: string) => {
       const params = new URLSearchParams(searchParams?.toString() ?? '')
@@ -449,7 +459,7 @@ export function JobDetailForm({ id }: { id: string }) {
     </div>
   )
 
-  if (!job || (!canViewManifest && !canViewAssets)) return overview
+  if (!job || (!canViewManifest && !canViewAssets && !canViewSanitization)) return overview
 
   return (
     <Tabs value={tab} onValueChange={selectTab} variant="underline">
@@ -457,6 +467,7 @@ export function JobDetailForm({ id }: { id: string }) {
         <TabsTrigger value="overview">{t('itad.jobs.detail.tab.overview', 'Overview')}</TabsTrigger>
         {canViewManifest ? <TabsTrigger value="manifest">{t('itad.manifest.title', 'Manifest')}</TabsTrigger> : null}
         {canViewAssets ? <TabsTrigger value="receiving">{t('itad.receiving.title', 'Receiving')}</TabsTrigger> : null}
+        {canViewSanitization ? <TabsTrigger value="sanitization">{t('itad.sanitization.title', 'Sanitization')}</TabsTrigger> : null}
       </TabsList>
       <TabsContent value="overview" className="pt-4">{overview}</TabsContent>
       {canViewManifest ? (
@@ -471,6 +482,16 @@ export function JobDetailForm({ id }: { id: string }) {
             canReceive={granted.has('itad.assets.receive')}
             canManage={granted.has('itad.assets.manage')}
             canViewManifest={canViewManifest}
+            canManageSanitization={granted.has('itad.sanitization.manage')}
+          />
+        </TabsContent>
+      ) : null}
+      {canViewSanitization ? (
+        <TabsContent value="sanitization" className="pt-4">
+          <JobSanitizationPanel
+            job={job}
+            canExecute={granted.has('itad.sanitization.execute')}
+            canManage={granted.has('itad.sanitization.manage')}
           />
         </TabsContent>
       ) : null}

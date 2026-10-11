@@ -8,7 +8,8 @@ import { runGuardedCommand } from '../../../../../lib/command-route'
 import { itadRouteErrorResponse, loadReadableJob, resolveItadRouteContext } from '../../../../../lib/route-context'
 
 export const metadata = {
-  POST: { requireAuth: true, requireFeatures: ['itad.assets.receive'] },
+  // The command checks the status-dependent feature (receive / sanitization.manage) under the job lock.
+  POST: { requireAuth: true, requireFeatures: ['itad.assets.view'] },
 }
 
 const paramsSchema = z.object({ id: z.string().uuid() })
@@ -52,7 +53,7 @@ export const openApi: OpenApiRouteDoc = {
     POST: {
       summary: 'Classify ITAD assets as carrying data or not',
       description:
-        'Sets `dataBearing` for the selected active assets of the job while it is in receiving. All-or-nothing: when any asset is missing or refused, nothing changes and the error lists `assetIds`. Assets that already have the value are reported as unchanged. `true` moves an asset to `sanitization_required`; `false` keeps it on the normal path (`received`).',
+        'Sets `dataBearing` for the selected active assets of the job. In receiving it needs `itad.assets.receive`; in processing and closeout review it needs `itad.sanitization.manage` and a `reason` (3–1000 characters), refuses assets with an open run, and in closeout review allows only `false`. All-or-nothing: when any asset is missing or refused, nothing changes and the error lists `assetIds`. Assets that already have the value are reported as unchanged. `true` moves an asset to `sanitization_required`; `false` keeps it on the normal path (`received`).',
       requestBody: { contentType: 'application/json', schema: bodySchema },
       responses: [
         {
@@ -68,11 +69,11 @@ export const openApi: OpenApiRouteDoc = {
       errors: [
         { status: 400, description: 'Invalid body or reason', schema: errorSchema },
         { status: 401, description: 'Unauthorized', schema: errorSchema },
-        { status: 403, description: 'Missing itad.assets.receive', schema: errorSchema },
+        { status: 403, description: 'Missing itad.assets.receive (receiving) or itad.sanitization.manage (after receiving)', schema: errorSchema },
         { status: 404, description: 'Job not found in scope', schema: errorSchema },
         {
           status: 409,
-          description: 'Job not in receiving (`assets_locked`), assets missing (`assets_not_found`) or refused; `assetIds` lists them',
+          description: 'Job not classifiable (`assets_locked`), assets missing (`assets_not_found`), an open run (`sanitization_in_progress`) or `true` in closeout review (`sanitization_not_possible`); `assetIds` lists them',
           schema: errorSchema,
         },
       ],

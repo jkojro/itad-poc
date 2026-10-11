@@ -1,5 +1,10 @@
 import { z } from 'zod'
 import { ITAD_ASSET_STATUSES, ITAD_JOB_STATUSES } from '../domain/job-types'
+import {
+  ITAD_SANITIZATION_METHODS,
+  ITAD_VERIFICATION_METHODS,
+  SANITIZATION_TEXT_LIMITS,
+} from '../domain/sanitization-state-machine'
 
 export const itadJobStatusSchema = z.enum(ITAD_JOB_STATUSES)
 
@@ -213,4 +218,72 @@ export const itadScanListSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   result: z.enum(['matched', 'unexpected', 'duplicate']).optional(),
   pending: z.enum(['true', 'false']).optional(),
+})
+
+const requiredText = (max: number) =>
+  z.preprocess((value) => (typeof value === 'string' ? value.trim() : value), z.string().min(1).max(max))
+const optionalText = (max: number) => z.preprocess(emptyToNull, z.string().min(1).max(max).nullable().optional())
+
+/** Durable input of `itad.sanitization.start` (sanitization spec "Run data", at start). */
+export const itadSanitizationStartSchema = z.object({
+  jobId: z.string().uuid(),
+  assetId: z.string().uuid(),
+  method: z.enum(ITAD_SANITIZATION_METHODS),
+  methodDetail: optionalText(SANITIZATION_TEXT_LIMITS.methodDetail),
+  tool: requiredText(SANITIZATION_TEXT_LIMITS.tool),
+  toolVersion: requiredText(SANITIZATION_TEXT_LIMITS.toolVersion),
+})
+export type ItadSanitizationStartInput = z.infer<typeof itadSanitizationStartSchema>
+
+/** Durable input of `itad.sanitization.record_result`; notes are required for FAIL. */
+export const itadSanitizationResultSchema = z.object({
+  jobId: z.string().uuid(),
+  runId: z.string().uuid(),
+  result: z.enum(['PASS', 'FAIL']),
+  verificationMethod: z.enum(ITAD_VERIFICATION_METHODS),
+  verificationNotes: optionalText(SANITIZATION_TEXT_LIMITS.verificationNotes),
+})
+export type ItadSanitizationResultInput = z.infer<typeof itadSanitizationResultSchema>
+
+/** Durable input of `itad.sanitization.abort`. */
+export const itadSanitizationAbortSchema = z.object({
+  jobId: z.string().uuid(),
+  runId: z.string().uuid(),
+  reason: z.string().max(1000).nullable().optional(),
+})
+export type ItadSanitizationAbortInput = z.infer<typeof itadSanitizationAbortSchema>
+
+/** Durable input of `itad.sanitization.approve_retry`. */
+export const itadSanitizationRetrySchema = z.object({
+  jobId: z.string().uuid(),
+  assetId: z.string().uuid(),
+  reason: z.string().max(1000).nullable().optional(),
+})
+export type ItadSanitizationRetryInput = z.infer<typeof itadSanitizationRetrySchema>
+
+export const ITAD_EVIDENCE_MAX_RUNS = 200
+
+/** Durable input of `itad.sanitization.attach_evidence`; the bytes travel in the command context. */
+export const itadSanitizationEvidenceSchema = z.object({
+  jobId: z.string().uuid(),
+  runIds: z
+    .array(z.string().uuid())
+    .min(1)
+    .max(ITAD_EVIDENCE_MAX_RUNS)
+    .refine((ids) => new Set(ids).size === ids.length, { message: 'Duplicate run ids' }),
+  fileName: z.string().trim().min(1).max(255),
+  fileType: z.string().max(255).nullable(),
+  fileSize: z.number().int().nonnegative(),
+})
+export type ItadSanitizationEvidenceInput = z.infer<typeof itadSanitizationEvidenceSchema>
+
+export const itadSanitizationListSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  search: z.string().trim().max(200).optional(),
+  status: z.enum(ITAD_ASSET_STATUSES).optional(),
+})
+
+export const itadSanitizationToolsSchema = z.object({
+  search: z.string().trim().max(200).optional(),
 })

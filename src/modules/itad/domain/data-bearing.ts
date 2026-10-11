@@ -82,3 +82,17 @@ export function decideClassification(input: {
 }
 
 const CLASSIFIABLE_JOB_STATUSES: ReadonlySet<ItadJobStatus> = new Set(['receiving', 'processing', 'closeout_review'])
+
+/**
+ * Feature needed to classify in a job status (Q12): free correction while receiving,
+ * manager with a reason afterwards; `null` where classification is closed.
+ */
+export function classificationRequiredFeature(
+  jobStatus: ItadJobStatus,
+): { feature: 'itad.assets.receive' | 'itad.sanitization.manage'; reasonRequired: boolean } | null {
+  if (jobStatus === 'receiving') return { feature: 'itad.assets.receive', reasonRequired: false }
+  if (jobStatus === 'processing' || jobStatus === 'closeout_review') {
+    return { feature: 'itad.sanitization.manage', reasonRequired: true }
+  }
+  return null
+}
