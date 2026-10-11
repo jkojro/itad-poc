@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ITAD_ASSET_STATUSES, ITAD_JOB_STATUSES } from '../domain/job-types'
+import { ITAD_EXCEPTION_STATUSES, ITAD_EXCEPTION_TYPES } from '../domain/exceptions'
 import {
   ITAD_SANITIZATION_METHODS,
   ITAD_VERIFICATION_METHODS,
@@ -303,3 +304,13 @@ export type ItadSanitizationBulkStartInput = z.infer<typeof itadSanitizationBulk
 /** Durable input of `itad.sanitization.bulk_record_result` (the open run of each asset). */
 export const itadSanitizationBulkResultSchema = itadSanitizationResultSchema.omit({ runId: true }).extend({ assetIds: bulkAssetIds })
 export type ItadSanitizationBulkResultInput = z.infer<typeof itadSanitizationBulkResultSchema>
+
+export const itadExceptionListSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  status: z.enum(ITAD_EXCEPTION_STATUSES).optional(),
+  type: z.enum(ITAD_EXCEPTION_TYPES).optional(),
+  /** `me`, `unassigned` or a user id. */
+  assignedTo: z.union([z.enum(['me', 'unassigned']), z.string().uuid()]).optional(),
+  assetId: z.string().uuid().optional(),
+})

@@ -36,6 +36,8 @@ const DETAIL_TAB_FEATURES = [
   'itad.sanitization.view',
   'itad.sanitization.execute',
   'itad.sanitization.manage',
+  'itad.exceptions.view',
+  'itad.exceptions.manage',
 ] as const
 const DETAIL_TABS = ['overview', 'manifest', 'receiving', 'sanitization'] as const
 type DetailTab = (typeof DETAIL_TABS)[number]
@@ -492,6 +494,7 @@ export function JobDetailForm({ id }: { id: string }) {
             job={job}
             canExecute={granted.has('itad.sanitization.execute')}
             canManage={granted.has('itad.sanitization.manage')}
+            canResolveExceptions={granted.has('itad.exceptions.manage')}
           />
         </TabsContent>
       ) : null}

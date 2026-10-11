@@ -66,6 +66,18 @@ export const features = [
     module: 'itad',
     dependsOn: ['itad.sanitization.view'],
   },
+  {
+    id: 'itad.exceptions.view',
+    title: 'View ITAD exceptions and their history',
+    module: 'itad',
+    dependsOn: ['itad.jobs.view'],
+  },
+  {
+    id: 'itad.exceptions.manage',
+    title: 'Assign and resolve ITAD exceptions (with the permissions of the underlying actions)',
+    module: 'itad',
+    dependsOn: ['itad.exceptions.view'],
+  },
 ]
 
 export default features

@@ -37,6 +37,8 @@ import {
 import { validateSerial } from '../domain/serial'
 import { emitItadEvent, type ItadEventId } from '../events'
 import { assetError } from '../lib/asset-errors'
+import { openException, resolveOpenExceptions, type ExceptionChange } from '../services/exception-writer'
+import { emitExceptionChanges } from './exception-effects'
 import { lockJob } from './job-lock'
 import { ensureScope, loadJob, type JobScope } from './jobs'
 
@@ -127,6 +129,7 @@ const scanCommand: CommandHandler<ItadAssetScanInput, ItadAssetScanResult> = {
     await loadJob(em, scope, input.jobId)
 
     let outcome: ItadAssetScanResult
+    let exceptionChanges: ExceptionChange[] = []
     try {
       outcome = await em.transactional(async (tx) => {
         const job = await lockJob(tx, scope, input.jobId)
@@ -198,6 +201,15 @@ const scanCommand: CommandHandler<ItadAssetScanInput, ItadAssetScanResult> = {
           )
         }
         await tx.flush()
+        // Exceptions spec E4-012: a duplicate scan opens its DUPLICATE_SERIAL exception (the
+        // scan id exists only after the flush).
+        if (result === 'duplicate') {
+          const change = await openException(tx, { job, source: { type: 'duplicate_serial', intakeScan: scan, asset }, now })
+          if (change) {
+            await tx.flush()
+            exceptionChanges = [change]
+          }
+        }
         return {
           jobId: job.id,
           tenantId: scope.tenantId,
@@ -228,6 +240,7 @@ const scanCommand: CommandHandler<ItadAssetScanInput, ItadAssetScanResult> = {
         true,
       )
     }
+    await emitExceptionChanges(exceptionChanges, actorUserId)
     return outcome
   },
   buildLog: async ({ result }) => {
@@ -256,7 +269,11 @@ export type ItadScanActionResult = {
 
 type ScanAction = 'resolve' | 'flag'
 
-async function runScanAction(rawInput: unknown, ctx: CommandRuntimeContext, action: ScanAction): Promise<ItadScanActionResult> {
+async function runScanAction(
+  rawInput: unknown,
+  ctx: CommandRuntimeContext,
+  action: ScanAction,
+): Promise<{ result: ItadScanActionResult; exceptionChanges: ExceptionChange[] }> {
   const input = itadScanActionSchema.parse(rawInput)
   const note = resolveNote(input.note, action === 'flag')
   if (note === false) return await assetError(400, 'note_required')
@@ -277,11 +294,21 @@ async function runScanAction(rawInput: unknown, ctx: CommandRuntimeContext, acti
     const allowed = action === 'resolve' ? canResolveAsSameDevice(scan) : canFlagDifferentDevice(scan)
     if (!allowed) return await assetError(409, 'scan_not_resolvable')
     const now = new Date()
+    let exceptionChanges: ExceptionChange[] = []
     if (action === 'resolve') {
       scan.resolution = 'same_device'
       scan.resolutionNote = note
       scan.resolvedAt = now
       scan.resolvedByUserId = actorUserId
+      // Q7: "same device" is the domain resolution of the scan's DUPLICATE_SERIAL exception.
+      exceptionChanges = await resolveOpenExceptions(tx, {
+        job,
+        where: { intakeScan: scan.id },
+        outcome: 'same_device',
+        reason: note,
+        actorUserId,
+        now,
+      })
     } else {
       scan.flaggedDifferentDeviceAt = now
       scan.flaggedDifferentDeviceByUserId = actorUserId
@@ -289,12 +316,15 @@ async function runScanAction(rawInput: unknown, ctx: CommandRuntimeContext, acti
     }
     await tx.flush()
     return {
-      jobId: job.id,
-      scanId: scan.id,
-      assetId: String(scan.asset.id),
-      tenantId: scope.tenantId,
-      organizationId: scope.organizationId,
-      note,
+      result: {
+        jobId: job.id,
+        scanId: scan.id,
+        assetId: String(scan.asset.id),
+        tenantId: scope.tenantId,
+        organizationId: scope.organizationId,
+        note,
+      },
+      exceptionChanges,
     }
   })
 }
@@ -304,7 +334,8 @@ const resolveDuplicateCommand: CommandHandler<ItadScanActionInput, ItadScanActio
   id: 'itad.assets.resolve_duplicate',
   isUndoable: false,
   async execute(rawInput, ctx) {
-    const result = await runScanAction(rawInput, ctx, 'resolve')
+    const { result, exceptionChanges } = await runScanAction(rawInput, ctx, 'resolve')
+    await emitExceptionChanges(exceptionChanges, ctx.auth?.sub ?? null)
     await emitAfterCommit('itad.intake_scan.resolved', {
       jobId: result.jobId,
       scanId: result.scanId,
@@ -339,7 +370,7 @@ const flagDifferentDeviceCommand: CommandHandler<ItadScanActionInput, ItadScanAc
   id: 'itad.assets.flag_different_device',
   isUndoable: false,
   async execute(rawInput, ctx) {
-    const result = await runScanAction(rawInput, ctx, 'flag')
+    const { result } = await runScanAction(rawInput, ctx, 'flag')
     await emitAfterCommit(
       'itad.intake_scan.flagged_different_device',
       {
@@ -709,10 +740,25 @@ const classifyAssetsCommand: CommandHandler<ItadAssetClassifyInput, ItadAssetCla
       const now = new Date()
       const changes: ClassificationChange[] = []
       const unchanged: string[] = []
+      const exceptionChanges: ExceptionChange[] = []
       for (const { asset, decision } of decisions) {
         if (decision.kind !== 'change') {
           unchanged.push(asset.id)
           continue
+        }
+        // Q8: a device in review that does not carry data no longer needs the failed
+        // sanitization handled; its open SANITIZATION_FAILED is resolved with this reason.
+        if (!input.dataBearing && asset.status === 'review_required') {
+          exceptionChanges.push(
+            ...(await resolveOpenExceptions(tx, {
+              job,
+              where: { asset: asset.id, type: 'sanitization_failed' },
+              outcome: 'not_data_bearing',
+              reason,
+              actorUserId,
+              now,
+            })),
+          )
         }
         changes.push(
           applyClassification(tx, {
@@ -729,11 +775,12 @@ const classifyAssetsCommand: CommandHandler<ItadAssetClassifyInput, ItadAssetCla
         )
       }
       await tx.flush()
-      return { job, changes, unchanged }
+      return { job, changes, unchanged, exceptionChanges }
     })
 
     const base = { jobId: outcome.job.id, actorUserId, tenantId: scope.tenantId, organizationId: scope.organizationId }
     await emitClassificationEvents(outcome.changes, base, reason)
+    await emitExceptionChanges(outcome.exceptionChanges, actorUserId)
     return {
       jobId: outcome.job.id,
       tenantId: scope.tenantId,

@@ -53,6 +53,9 @@ export type ItadAssetTransitionAction = (typeof ITAD_ASSET_TRANSITION_ACTIONS)[n
 export const ITAD_SCAN_RESULTS = ['matched', 'unexpected', 'duplicate'] as const
 export type ItadScanResult = (typeof ITAD_SCAN_RESULTS)[number]
 
-/** Resolving outcomes of a duplicate scan in Epic 2; the exceptions epic adds its own. */
-export const ITAD_SCAN_RESOLUTIONS = ['same_device'] as const
+/**
+ * Resolving outcomes of a duplicate scan: `same_device` (Epic 2) and, for a scan flagged
+ * as a different device, `different_device_set_aside` (exceptions spec Q3).
+ */
+export const ITAD_SCAN_RESOLUTIONS = ['same_device', 'different_device_set_aside'] as const
 export type ItadScanResolution = (typeof ITAD_SCAN_RESOLUTIONS)[number]

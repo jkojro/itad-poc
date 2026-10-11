@@ -39,6 +39,13 @@ const events = [
   { id: 'itad.sanitization.run_aborted', label: 'ITAD Sanitization Run Aborted', entity: 'sanitization_run', category: 'lifecycle', clientBroadcast: true },
   // itad.asset.sanitization_retry_approved: { assetId, reason, actorUserId }.
   { id: 'itad.asset.sanitization_retry_approved', label: 'ITAD Asset Sanitization Retry Approved', entity: 'asset', category: 'lifecycle', clientBroadcast: true },
+  // Exceptions (exceptions spec "Events"; + jobId, tenantId, organizationId). `exceptionId` is the idempotency key.
+  // itad.exception.created: { exceptionId, type, sourceKey, assetId }.
+  { id: 'itad.exception.created', label: 'ITAD Exception Created', entity: 'exception', category: 'lifecycle', clientBroadcast: true },
+  // itad.exception.assigned: { exceptionId, assignedToUserId, actorUserId }.
+  { id: 'itad.exception.assigned', label: 'ITAD Exception Assigned', entity: 'exception', category: 'lifecycle', clientBroadcast: true },
+  // itad.exception.resolved: { exceptionId, type, outcome, actorUserId }.
+  { id: 'itad.exception.resolved', label: 'ITAD Exception Resolved', entity: 'exception', category: 'lifecycle', clientBroadcast: true },
 ] as const
 
 export const eventsConfig = createModuleEvents({

@@ -16,6 +16,7 @@ import {
   resolveItadRouteContext,
 } from '../../../../lib/route-context'
 import { loadUserDisplayNames } from '../../../../module-integrations/users'
+import { countOpenExceptions } from '../../../../services/exception-reader'
 
 export const metadata = {
   GET: { requireAuth: true, requireFeatures: ['itad.assets.view'] },
@@ -90,6 +91,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       ),
       em.execute<Array<{ total: string | number }>>(`select count(*) as "total" from "itad_assets" a where ${whereSql}`, values),
     ])
+    const exceptionCounts = await countOpenExceptions(em, route.tenantId, 'asset_id', rows.map((row) => row.id))
     const names = await loadUserDisplayNames(
       route.container.resolve<QueryEngine>('queryEngine'),
       route.tenantId,
@@ -111,6 +113,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
         receivedAt: new Date(row.received_at).toISOString(),
         receivedBy: { id: row.received_by_user_id, name: names.get(row.received_by_user_id) ?? null },
         updatedAt: new Date(row.updated_at).toISOString(),
+        openExceptionCount: exceptionCounts.get(row.id) ?? 0,
       })),
       total: Number(totals[0]?.total ?? 0),
       page: query.page,
@@ -152,6 +155,7 @@ export const openApi: OpenApiRouteDoc = {
                 receivedAt: z.string(),
                 receivedBy: z.object({ id: z.string().uuid(), name: z.string().nullable() }),
                 updatedAt: z.string(),
+                openExceptionCount: z.number().int(),
               }),
             ),
             total: z.number().int(),
