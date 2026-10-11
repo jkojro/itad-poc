@@ -1,5 +1,6 @@
 import { Entity, Index, ManyToOne, PrimaryKey, Property, Unique } from '@mikro-orm/decorators/legacy'
 import type { ItadDataBearingSource } from '../domain/data-bearing'
+import type { ItadRunResult, ItadSanitizationMethod, ItadVerificationMethod } from '../domain/sanitization-state-machine'
 import type {
   ItadAssetHistoryStatus,
   ItadAssetStatus,
@@ -598,11 +599,127 @@ export class ItadAssetStatusTransition {
   @Property({ name: 'data_bearing_to', type: 'boolean', nullable: true })
   dataBearingTo?: boolean | null
 
+  /** The run a run action belongs to; `null` for classification and retry approval. */
+  @ManyToOne(() => ItadSanitizationRun, { fieldName: 'run_id', nullable: true })
+  run?: ItadSanitizationRun | null
+
   @Property({ type: 'text', nullable: true })
   reason?: string | null
 
   @Property({ name: 'actor_user_id', type: 'uuid', nullable: true })
   actorUserId?: string | null
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
+}
+
+/**
+ * One sanitization attempt on a data-bearing asset (sanitization spec "Run data").
+ * Inserted at start with `result = null`, completed exactly once (PASS, FAIL or
+ * ABORTED), then immutable; never deleted or replaced. At most one open run per asset.
+ */
+@Entity({ tableName: 'itad_sanitization_runs' })
+@Index({
+  name: 'itad_sanitization_runs_open_unique',
+  expression:
+    'create unique index "itad_sanitization_runs_open_unique" on "itad_sanitization_runs" ("tenant_id", "organization_id", "asset_id") where "result" is null',
+})
+@Index({ name: 'itad_sanitization_runs_job_idx', properties: ['tenantId', 'organizationId', 'job', 'startedAt'] })
+@Index({ name: 'itad_sanitization_runs_tool_idx', properties: ['tenantId', 'organizationId', 'tool'] })
+export class ItadSanitizationRun {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  @ManyToOne(() => ItadAsset, { fieldName: 'asset_id' })
+  asset!: ItadAsset
+
+  @Property({ type: 'text' })
+  method!: ItadSanitizationMethod
+
+  @Property({ name: 'method_detail', type: 'text', nullable: true })
+  methodDetail?: string | null
+
+  @Property({ type: 'text' })
+  tool!: string
+
+  @Property({ name: 'tool_version', type: 'text' })
+  toolVersion!: string
+
+  @Property({ name: 'operator_user_id', type: 'uuid' })
+  operatorUserId!: string
+
+  @Property({ name: 'started_at', type: Date })
+  startedAt!: Date
+
+  @Property({ name: 'finished_at', type: Date, nullable: true })
+  finishedAt?: Date | null
+
+  @Property({ name: 'finished_by_user_id', type: 'uuid', nullable: true })
+  finishedByUserId?: string | null
+
+  @Property({ type: 'text', nullable: true })
+  result?: ItadRunResult | null
+
+  @Property({ name: 'verification_method', type: 'text', nullable: true })
+  verificationMethod?: ItadVerificationMethod | null
+
+  @Property({ name: 'verification_notes', type: 'text', nullable: true })
+  verificationNotes?: string | null
+
+  @Property({ name: 'abort_reason', type: 'text', nullable: true })
+  abortReason?: string | null
+
+  /** Runs started by one bulk request share it (Phase 3). */
+  @Property({ name: 'bulk_batch_id', type: 'uuid', nullable: true })
+  bulkBatchId?: string | null
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
+
+  @Property({ name: 'updated_at', type: Date, onUpdate: () => new Date() })
+  updatedAt: Date = new Date()
+}
+
+/**
+ * Link between an evidence file and a run (append-only). The file is stored once by the
+ * installed `attachments` module, owned by the job, and may be linked to many runs.
+ */
+@Entity({ tableName: 'itad_sanitization_evidence' })
+@Unique({ name: 'itad_sanitization_evidence_run_attachment_unique', properties: ['run', 'attachmentId'] })
+@Index({ name: 'itad_sanitization_evidence_job_idx', properties: ['tenantId', 'organizationId', 'job', 'attachmentId'] })
+export class ItadSanitizationEvidence {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  @ManyToOne(() => ItadSanitizationRun, { fieldName: 'run_id' })
+  run!: ItadSanitizationRun
+
+  @Property({ name: 'attachment_id', type: 'uuid' })
+  attachmentId!: string
+
+  @Property({ name: 'file_name', type: 'text' })
+  fileName!: string
+
+  @Property({ name: 'added_by_user_id', type: 'uuid' })
+  addedByUserId!: string
 
   @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
   createdAt: Date = new Date()

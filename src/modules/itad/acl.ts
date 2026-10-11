@@ -48,6 +48,24 @@ export const features = [
     module: 'itad',
     dependsOn: ['itad.assets.view'],
   },
+  {
+    id: 'itad.sanitization.view',
+    title: 'View ITAD sanitization runs, evidence and asset status history',
+    module: 'itad',
+    dependsOn: ['itad.assets.view'],
+  },
+  {
+    id: 'itad.sanitization.execute',
+    title: 'Start, finish and abort ITAD sanitization runs and attach evidence',
+    module: 'itad',
+    dependsOn: ['itad.sanitization.view'],
+  },
+  {
+    id: 'itad.sanitization.manage',
+    title: 'Approve ITAD sanitization retries and re-classify assets after receiving',
+    module: 'itad',
+    dependsOn: ['itad.sanitization.view'],
+  },
 ]
 
 export default features

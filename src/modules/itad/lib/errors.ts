@@ -111,3 +111,30 @@ export function itadAssetError(
     ...(fieldErrors ? { fieldErrors } : {}),
   })
 }
+
+export const ITAD_SANITIZATION_ERROR_PREFIX = 'itad.sanitization.errors.'
+
+export type ItadSanitizationErrorCode =
+  | 'processing_required'
+  | 'asset_transition_not_allowed'
+  | 'run_closed'
+  | 'verification_notes_required'
+  | 'reason_required'
+  | 'job_terminal'
+  | 'evidence_file_required'
+  | 'runs_not_found'
+  | 'forbidden'
+
+/** Coded sanitization error; same body shape as `itadAssetError`, with the sanitization key prefix. */
+export function itadSanitizationError(
+  status: 400 | 403 | 409,
+  code: ItadSanitizationErrorCode,
+  message: string,
+  details?: Record<string, unknown>,
+): CrudHttpError {
+  return new CrudHttpError(status, {
+    ...(details ?? {}),
+    error: message,
+    code: `${ITAD_SANITIZATION_ERROR_PREFIX}${code}`,
+  })
+}

@@ -1,7 +1,8 @@
 import type { EntityManager, FilterQuery } from '@mikro-orm/postgresql'
 import type { CommandHandler, CommandRuntimeContext } from '@open-mercato/shared/lib/commands'
 import { registerCommand } from '@open-mercato/shared/lib/commands'
-import { isUniqueViolation, notFound } from '@open-mercato/shared/lib/crud/errors'
+import { forbidden, isUniqueViolation, notFound } from '@open-mercato/shared/lib/crud/errors'
+import type { RbacService } from '@open-mercato/core/modules/auth/services/rbacService'
 import { enforceCommandOptimisticLock } from '@open-mercato/shared/lib/crud/optimistic-lock-command'
 import { resolveTranslations } from '@open-mercato/shared/lib/i18n/server'
 import { createLogger } from '@open-mercato/shared/lib/logger'
@@ -19,7 +20,12 @@ import {
   type ItadAssetUpdateInput,
   type ItadScanActionInput,
 } from '../data/validators'
-import { decideClassification, resolveDataBearing, type ItadDataBearingSource } from '../domain/data-bearing'
+import {
+  classificationRequiredFeature,
+  decideClassification,
+  resolveDataBearing,
+  type ItadDataBearingSource,
+} from '../domain/data-bearing'
 import type { ItadAssetStatus, ItadScanResult } from '../domain/job-types'
 import {
   canFlagDifferentDevice,
@@ -642,21 +648,40 @@ export type ItadAssetClassifyResult = {
  * REQ-304, "Classification changes"). All-or-nothing under the job row lock: when any
  * selected asset is missing or refused, nothing changes and the error lists them.
  * Assets that already have the value are left untouched (no history row, no event).
- * Phase 1: only while the job is in receiving.
+ *
+ * Who may classify depends on the job status, read under the lock: `itad.assets.receive`
+ * while receiving (no reason), `itad.sanitization.manage` plus a reason in processing and
+ * closeout review (Q12). The route only requires `itad.assets.view`.
  */
 const classifyAssetsCommand: CommandHandler<ItadAssetClassifyInput, ItadAssetClassifyResult> = {
   id: 'itad.assets.classify',
   isUndoable: false,
   async execute(rawInput, ctx) {
     const input = itadAssetClassifySchema.parse(rawInput)
-    const reason = resolveNote(input.reason, false)
-    if (reason === false) return await assetError(400, 'reason_required')
+    const optionalReason = resolveNote(input.reason, false)
+    if (optionalReason === false) return await assetError(400, 'reason_required')
     const { scope, actorUserId, em } = await resolveActor(ctx)
     await loadJob(em, scope, input.jobId)
+    const rbac = ctx.container.resolve<RbacService>('rbacService')
+    let reason: string | null = optionalReason
 
     const outcome = await em.transactional(async (tx) => {
       const job = await lockJob(tx, scope, input.jobId)
-      await assertAssetsEditable(job)
+      const required = classificationRequiredFeature(job.status)
+      if (!required) return await assetError(409, 'assets_locked')
+      const allowed = await rbac.userHasAllFeatures(actorUserId, [required.feature], {
+        tenantId: scope.tenantId,
+        organizationId: scope.organizationId,
+      })
+      if (!allowed) {
+        const { translate } = await resolveTranslations()
+        throw forbidden(translate('itad.assets.errors.classify_forbidden', 'You do not have permission to change this classification now'))
+      }
+      if (required.reasonRequired) {
+        const requiredReason = resolveNote(input.reason, true)
+        if (requiredReason === false) return await assetError(400, 'reason_required')
+        reason = requiredReason
+      }
       const assets = await tx.find(ItadAsset, {
         id: { $in: input.assetIds },
         tenantId: scope.tenantId,
@@ -695,7 +720,8 @@ const classifyAssetsCommand: CommandHandler<ItadAssetClassifyInput, ItadAssetCla
             asset,
             target: input.dataBearing,
             toStatus: decision.toStatus,
-            source: 'bulk',
+            // A single selection is a manual decision; several at once are a bulk one.
+            source: input.assetIds.length === 1 ? 'manual' : 'bulk',
             actorUserId,
             reason,
             now,

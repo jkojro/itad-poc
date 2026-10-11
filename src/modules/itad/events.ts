@@ -30,6 +30,15 @@ const events = [
   { id: 'itad.asset.sanitization_required', label: 'ITAD Asset Sanitization Required', entity: 'asset', category: 'lifecycle', clientBroadcast: true },
   // itad.asset.data_bearing_changed: { assetId, from, to, source, actorUserId, reason }.
   { id: 'itad.asset.data_bearing_changed', label: 'ITAD Asset Data-Bearing Classification Changed', entity: 'asset', category: 'lifecycle', clientBroadcast: true },
+  // itad.sanitization.run_started: { runId, assetId, method, bulkBatchId, actorUserId }.
+  { id: 'itad.sanitization.run_started', label: 'ITAD Sanitization Run Started', entity: 'sanitization_run', category: 'lifecycle', clientBroadcast: true },
+  // run_passed / run_failed / run_aborted: { runId, assetId, actorUserId } (+ reason when aborted);
+  // run_failed is persistent (input for the exceptions epic).
+  { id: 'itad.sanitization.run_passed', label: 'ITAD Sanitization Run Passed', entity: 'sanitization_run', category: 'lifecycle', clientBroadcast: true },
+  { id: 'itad.sanitization.run_failed', label: 'ITAD Sanitization Run Failed', entity: 'sanitization_run', category: 'lifecycle', clientBroadcast: true },
+  { id: 'itad.sanitization.run_aborted', label: 'ITAD Sanitization Run Aborted', entity: 'sanitization_run', category: 'lifecycle', clientBroadcast: true },
+  // itad.asset.sanitization_retry_approved: { assetId, reason, actorUserId }.
+  { id: 'itad.asset.sanitization_retry_approved', label: 'ITAD Asset Sanitization Retry Approved', entity: 'asset', category: 'lifecycle', clientBroadcast: true },
 ] as const
 
 export const eventsConfig = createModuleEvents({

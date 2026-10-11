@@ -10,6 +10,8 @@ import { ItadJob, ItadJobConditionConfirmation, ItadJobStatusTransition } from '
 import type { ItadJobStatus } from '../domain/job-types'
 import { emitItadEvent } from '../events'
 import { buildConditionDeps } from '../services/job-condition-evaluator'
+import { abortOpenRunsOfCancelledJob, type AbortedRun } from '../services/sanitization-writer'
+import { JOB_CANCELLED_ABORT_REASON } from '../domain/sanitization-state-machine'
 import { decideTransition, type TransitionRejection } from '../domain/job-conditions'
 import { isTerminalStatus } from '../domain/job-editability'
 import { ITAD_JOB_ACTIONS, type ItadJobAction } from '../domain/job-state-machine'
@@ -92,6 +94,7 @@ const transitionJobCommand: CommandHandler<ItadJobTransitionInput, ItadJobTransi
       to?: ItadJobStatus
       transition?: ItadJobStatusTransition
       confirmations?: Array<{ condition: string; comment: string }>
+      abortedRuns?: AbortedRun[]
     } = {}
 
     // Manifest spec "Concurrency": the job row is locked first and the conditions are
@@ -135,6 +138,8 @@ const transitionJobCommand: CommandHandler<ItadJobTransitionInput, ItadJobTransi
       }
       if (to === 'receiving' && !job.startedAt) job.startedAt = now
       if (to === 'completed') job.completedAt = now
+      // Sanitization spec "Job cancelled": open runs end as ABORTED in this transaction.
+      const abortedRuns = to === 'cancelled' ? await abortOpenRunsOfCancelledJob(tx, { job, actorUserId, now }) : []
       job.status = to
       job.updatedAt = now
 
@@ -165,7 +170,7 @@ const transitionJobCommand: CommandHandler<ItadJobTransitionInput, ItadJobTransi
         )
       }
       await tx.flush()
-      Object.assign(holder, { job, from, to, transition, confirmations: decision.confirmations })
+      Object.assign(holder, { job, from, to, transition, confirmations: decision.confirmations, abortedRuns })
     })
 
     const job = holder.job
@@ -207,6 +212,17 @@ const transitionJobCommand: CommandHandler<ItadJobTransitionInput, ItadJobTransi
           },
           { persistent: true },
         )
+      }
+      for (const aborted of holder.abortedRuns ?? []) {
+        await emitItadEvent('itad.sanitization.run_aborted', {
+          jobId: job.id,
+          runId: aborted.runId,
+          assetId: aborted.assetId,
+          reason: JOB_CANCELLED_ABORT_REASON,
+          actorUserId,
+          tenantId: scope.tenantId,
+          organizationId: scope.organizationId,
+        })
       }
     } catch (err) {
       // The transition is committed; a failed emit must not report the change as failed.

@@ -9,6 +9,9 @@ import { CrudHttpError } from '@open-mercato/shared/lib/crud/errors'
  */
 export const MANIFEST_ATTACHMENT_PARTITION = 'privateAttachments'
 
+/** Sanitization evidence files: private partition, owned by the job. */
+export const EVIDENCE_ATTACHMENT_PARTITION = 'privateAttachments'
+
 export type AttachmentServicePort = {
   validateUpload(input: { contentLength?: string | null; fileName?: string; fileSize?: number }): void
   readUploadForm?(request: Request): Promise<FormData>
