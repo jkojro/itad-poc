@@ -4,7 +4,7 @@ import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/h
 import { readJsonSafe } from '@open-mercato/core/helpers/integration/generalFixtures'
 import { CONFIRM, advanceToReceiving, createSchedulableJob, postTransition, transitionOk, uniqueSuffix } from './itad-job-fixtures'
 import { csv, importManifestOk } from './itad-manifest-fixtures'
-import { getReconciliation, receivingCompleteView, scanAction, scanOk } from './itad-receiving-fixtures'
+import { classifyUndecided, getReconciliation, receivingCompleteView, scanAction, scanOk } from './itad-receiving-fixtures'
 
 async function startProcessingRejection(response: { status: () => number; json: () => Promise<unknown> }) {
   const body = (await response.json()) as { code?: string; conditions?: string[]; condition?: string }
@@ -62,6 +62,9 @@ test.describe('TC-ITAD-114: receivingComplete from data', () => {
 
       // Correcting the mistaken flag closes the duplicate; missing C2 does not block.
       expect((await scanAction(request, token, jobId, duplicate.scan.id, 'resolve', 'Same unit after all')).status()).toBe(200)
+      // Sanitization spec REQ-305: checked after duplicates; C1 is not classified yet.
+      expect((await receivingCompleteView(request, token, jobId))?.detailKey).toBe('itad.jobs.conditions.detail.dataBearingUndecided')
+      await classifyUndecided(request, token, jobId, false)
       expect(await receivingCompleteView(request, token, jobId)).toMatchObject({ state: 'met' })
       expect(await getReconciliation(request, token, jobId)).toMatchObject({ matched: 1, missing: 1, unexpected: 0 })
       expect(await transitionOk(request, token, jobId, { action: 'start_processing' })).toBe('processing')

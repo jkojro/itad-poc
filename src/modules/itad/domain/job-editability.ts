@@ -6,6 +6,7 @@ export const ITAD_JOB_EDITABLE_FIELDS = [
   'customerReference',
   'scheduledPickupAt',
   'expectedAssetEstimate',
+  'defaultDataBearing',
 ] as const
 
 export type ItadJobEditableField = (typeof ITAD_JOB_EDITABLE_FIELDS)[number]
@@ -22,20 +23,21 @@ type OperationalStatus = Exclude<ItadJobStatus, 'on_hold' | 'completed' | 'cance
 
 /** Spec "Field editability by status". `on_hold` uses the column of its pre-hold status. */
 const EDITABLE_BY_STATUS: Record<OperationalStatus, readonly ItadJobEditableField[]> = {
-  draft: ['customerId', 'name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate'],
-  scheduled: ['name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate'],
-  in_transit: ['name', 'customerReference', 'expectedAssetEstimate'],
-  receiving: ['name', 'customerReference'],
+  draft: ['customerId', 'name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing'],
+  scheduled: ['name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing'],
+  in_transit: ['name', 'customerReference', 'expectedAssetEstimate', 'defaultDataBearing'],
+  // The default applies to later scans only, so it is useful until receiving ends (sanitization spec Q11).
+  receiving: ['name', 'customerReference', 'defaultDataBearing'],
   processing: ['name', 'customerReference'],
   closeout_review: ['name', 'customerReference'],
 }
 
 /** `scheduledPickupAt` may be cleared only while the job is still a draft. */
 const CLEARABLE_BY_STATUS: Partial<Record<OperationalStatus, readonly ItadJobEditableField[]>> = {
-  draft: ['customerReference', 'scheduledPickupAt', 'expectedAssetEstimate'],
-  scheduled: ['customerReference', 'expectedAssetEstimate'],
-  in_transit: ['customerReference', 'expectedAssetEstimate'],
-  receiving: ['customerReference'],
+  draft: ['customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing'],
+  scheduled: ['customerReference', 'expectedAssetEstimate', 'defaultDataBearing'],
+  in_transit: ['customerReference', 'expectedAssetEstimate', 'defaultDataBearing'],
+  receiving: ['customerReference', 'defaultDataBearing'],
   processing: ['customerReference'],
   closeout_review: ['customerReference'],
 }
@@ -67,6 +69,7 @@ export type JobFieldValues = {
   customerReference: string | null
   scheduledPickupAt: Date | null
   expectedAssetEstimate: number | null
+  defaultDataBearing: boolean | null
 }
 
 function sameValue(field: ItadJobEditableField, current: JobFieldValues, next: unknown): boolean {

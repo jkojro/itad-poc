@@ -5,6 +5,7 @@ import { escapeLikePattern } from '@open-mercato/shared/lib/db/escapeLikePattern
 import type { OpenApiRouteDoc } from '@open-mercato/shared/lib/openapi'
 import type { QueryEngine } from '@open-mercato/shared/lib/query/types'
 import { itadAssetListSchema } from '../../../../data/validators'
+import { ITAD_DATA_BEARING_SOURCES } from '../../../../domain/data-bearing'
 import { ITAD_ASSET_STATUSES } from '../../../../domain/job-types'
 import { ASSET_RECONCILIATION, classifyAsset } from '../../../../domain/reconciliation'
 import { normalizeSerial } from '../../../../domain/serial'
@@ -27,6 +28,7 @@ type AssetRow = {
   manufacturer: string | null
   model: string | null
   data_bearing: boolean | null
+  data_bearing_source: string | null
   status: string
   received_at: Date | string
   received_by_user_id: string
@@ -59,6 +61,14 @@ export async function GET(request: Request, { params }: { params: { id: string }
           and mi."serial_normalized" = a."serial_normalized" and mi."deleted_at" is null`
       where.push(query.reconciliation === 'matched' ? `exists (${matchingItem})` : `not exists (${matchingItem})`)
     }
+    if (query.dataBearing) {
+      where.push(query.dataBearing === 'unknown' ? 'a."data_bearing" is null' : 'a."data_bearing" = ?')
+      if (query.dataBearing !== 'unknown') values.push(query.dataBearing === 'true')
+    }
+    if (query.status) {
+      where.push('a."status" = ?')
+      values.push(query.status)
+    }
     if (query.search) {
       const text = `%${escapeLikePattern(query.search)}%`
       where.push(`(a."serial_normalized" like ? or a."customer_asset_tag" ilike ? or a."manufacturer" ilike ? or a."model" ilike ?)`)
@@ -67,7 +77,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const whereSql = where.join(' and ')
     const [rows, totals] = await Promise.all([
       em.execute<AssetRow[]>(
-        `select a."id", a."serial", a."customer_asset_tag", a."manufacturer", a."model", a."data_bearing", a."status",
+        `select a."id", a."serial", a."customer_asset_tag", a."manufacturer", a."model", a."data_bearing", a."data_bearing_source", a."status",
                 a."received_at", a."received_by_user_id", a."updated_at", m."id" as "manifest_item_id"
          from "itad_assets" a
          left join "itad_manifest_items" m
@@ -94,6 +104,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
         manufacturer: row.manufacturer,
         model: row.model,
         dataBearing: row.data_bearing,
+        dataBearingSource: row.data_bearing_source,
         status: row.status,
         manifestItemId: row.manifest_item_id,
         reconciliation: classifyAsset(Boolean(row.manifest_item_id)),
@@ -119,7 +130,7 @@ export const openApi: OpenApiRouteDoc = {
     GET: {
       summary: 'List the received assets of a job',
       description:
-        'Active assets, newest first. `search` matches serials (normalized), customer tags, manufacturers and models within this job. Never includes manifest source data.',
+        'Active assets, newest first. `search` matches serials (normalized), customer tags, manufacturers and models within this job; `dataBearing` (`unknown`, `true`, `false`) and `status` filter. Never includes manifest source data.',
       query: itadAssetListSchema,
       responses: [
         {
@@ -134,6 +145,7 @@ export const openApi: OpenApiRouteDoc = {
                 manufacturer: z.string().nullable(),
                 model: z.string().nullable(),
                 dataBearing: z.boolean().nullable(),
+                dataBearingSource: z.enum(ITAD_DATA_BEARING_SOURCES).nullable(),
                 status: z.enum(ITAD_ASSET_STATUSES),
                 manifestItemId: z.string().uuid().nullable(),
                 reconciliation: z.enum(ASSET_RECONCILIATION),

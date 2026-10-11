@@ -28,9 +28,15 @@ export type ReceivingFacts = {
   pendingDuplicates: number
   /** Unresolved duplicate scans flagged as a different device (wait for the exceptions mechanism). */
   differentDeviceUnresolved: number
+  /** Active assets whose `dataBearing` is not determined yet (sanitization spec REQ-305). */
+  dataBearingUndecided: number
 }
 
-export type ReceivingCompleteBlocker = 'manifestMissing' | 'differentDeviceUnresolved' | 'duplicatesPending'
+export type ReceivingCompleteBlocker =
+  | 'manifestMissing'
+  | 'differentDeviceUnresolved'
+  | 'duplicatesPending'
+  | 'dataBearingUndecided'
 
 /**
  * Why receiving cannot be completed yet, or `null` when it can (spec "receivingComplete").
@@ -41,6 +47,7 @@ export function receivingCompleteBlocker(facts: ReceivingFacts): ReceivingComple
   if (facts.activeManifestItems <= 0) return 'manifestMissing'
   if (facts.differentDeviceUnresolved > 0) return 'differentDeviceUnresolved'
   if (facts.pendingDuplicates > 0) return 'duplicatesPending'
+  if (facts.dataBearingUndecided > 0) return 'dataBearingUndecided'
   return null
 }
 
@@ -52,6 +59,7 @@ export type ReconciliationSummary = {
   unexpected: number
   pendingDuplicates: number
   differentDeviceUnresolved: number
+  dataBearingUndecided: number
   hasManifest: boolean
 }
 
@@ -65,6 +73,7 @@ export function summarizeReconciliation(counts: {
   matched: number
   pendingDuplicates: number
   differentDeviceUnresolved: number
+  dataBearingUndecided: number
 }): ReconciliationSummary {
   return {
     expectedAssetCount: counts.activeManifestItems,
@@ -74,6 +83,7 @@ export function summarizeReconciliation(counts: {
     unexpected: counts.activeAssets - counts.matched,
     pendingDuplicates: counts.pendingDuplicates,
     differentDeviceUnresolved: counts.differentDeviceUnresolved,
+    dataBearingUndecided: counts.dataBearingUndecided,
     hasManifest: counts.activeManifestItems > 0,
   }
 }

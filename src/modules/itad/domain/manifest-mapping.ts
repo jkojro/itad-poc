@@ -1,3 +1,4 @@
+import { parseDataBearingValue } from './data-bearing'
 import { validateSerial } from './serial'
 
 /**
@@ -6,7 +7,7 @@ import { validateSerial } from './serial'
  * `ManifestSheet`s; the import command persists the result.
  */
 
-export const MANIFEST_TARGET_FIELDS = ['serial', 'customerAssetTag', 'manufacturer', 'model'] as const
+export const MANIFEST_TARGET_FIELDS = ['serial', 'customerAssetTag', 'manufacturer', 'model', 'dataBearing'] as const
 export type ManifestTargetField = (typeof MANIFEST_TARGET_FIELDS)[number]
 
 /** Target field → source column name. `serial` is required for an import. */
@@ -54,7 +55,7 @@ export type RowErrorCode =
   | 'serial_duplicate_in_file'
   | 'field_too_long'
 
-export type RowWarningCode = 'numeric_serial_cell' | 'formula_cell'
+export type RowWarningCode = 'numeric_serial_cell' | 'formula_cell' | 'data_bearing_unrecognized'
 
 export type RowIssue<C extends string> = { row: number; code: C; column?: string }
 
@@ -66,6 +67,8 @@ export type EvaluatedRow = {
   customerAssetTag: string | null
   manufacturer: string | null
   model: string | null
+  /** Explicit "carries data" value; `null` when the column is unmapped, empty or unrecognized. */
+  dataBearing: boolean | null
   sourceData: SourceDataEntry[]
   errors: RowErrorCode[]
 }
@@ -84,6 +87,7 @@ const HEADER_ALIASES: Record<ManifestTargetField, string[]> = {
   customerAssetTag: ['asset tag', 'tag', 'customer tag', 'customer asset tag', 'nr inwentarzowy', 'numer inwentarzowy'],
   manufacturer: ['manufacturer', 'make', 'vendor', 'brand', 'producent'],
   model: ['model', 'device model', 'model name', 'model number', 'nazwa modelu'],
+  dataBearing: ['data bearing', 'databearing', 'contains data', 'has storage', 'zawiera dane', 'nośnik danych'],
 }
 
 /** Spreadsheet column letter for a 0-based index: 0 → A, 25 → Z, 26 → AA. */
@@ -245,7 +249,7 @@ export function evaluateManifestRows(input: {
       }
     }
 
-    const mappedText = (field: Exclude<ManifestTargetField, 'serial'>) => {
+    const mappedText = (field: 'customerAssetTag' | 'manufacturer' | 'model') => {
       const value = optionalText(cellAt(indexOf(field))?.value)
       if (value && value.length > MANIFEST_LIMITS.maxMappedFieldLength) {
         rowErrors.push({ code: 'field_too_long', column: mapping[field] })
@@ -256,6 +260,14 @@ export function evaluateManifestRows(input: {
     const manufacturer = mappedText('manufacturer')
     const model = mappedText('model')
 
+    let dataBearing: boolean | null = null
+    const dataBearingIndex = indexOf('dataBearing')
+    if (dataBearingIndex !== undefined) {
+      const parsed = parseDataBearingValue(cellAt(dataBearingIndex)?.value)
+      if (parsed.ok) dataBearing = parsed.value
+      else warnings.push({ row: rowNumber, code: 'data_bearing_unrecognized', column: mapping.dataBearing })
+    }
+
     for (const error of rowErrors) errors.push({ row: rowNumber, ...error })
     return {
       rowNumber,
@@ -265,6 +277,7 @@ export function evaluateManifestRows(input: {
       customerAssetTag,
       manufacturer,
       model,
+      dataBearing,
       sourceData,
       errors: rowErrors.map((error) => error.code),
     }

@@ -40,6 +40,7 @@ export type SerializedJob = {
   status: string
   expectedAssetEstimate: number | null
   scheduledPickupAt: string | null
+  defaultDataBearing: boolean | null
 }
 
 export const itadJobCrudEvents: CrudEventsConfig<ItadJob> = {
@@ -136,6 +137,7 @@ function currentValues(job: ItadJob): JobFieldValues {
     customerReference: job.customerReference ?? null,
     scheduledPickupAt: job.scheduledPickupAt ?? null,
     expectedAssetEstimate: job.expectedAssetEstimate ?? null,
+    defaultDataBearing: job.defaultDataBearing ?? null,
   }
 }
 
@@ -151,6 +153,7 @@ export function serializeJob(job: ItadJob): SerializedJob {
     status: job.status,
     expectedAssetEstimate: job.expectedAssetEstimate ?? null,
     scheduledPickupAt: job.scheduledPickupAt ? job.scheduledPickupAt.toISOString() : null,
+    defaultDataBearing: job.defaultDataBearing ?? null,
   }
 }
 
@@ -216,6 +219,7 @@ const createJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
               status: 'draft',
               expectedAssetEstimate: parsed.expectedAssetEstimate ?? null,
               scheduledPickupAt: toDateOrNull(parsed.scheduledPickupAt),
+              defaultDataBearing: parsed.defaultDataBearing ?? null,
               createdAt,
               updatedAt: createdAt,
             })
@@ -277,6 +281,7 @@ const updateJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
     if (parsed.customerReference !== undefined) changes.customerReference = parsed.customerReference
     if (parsed.expectedAssetEstimate !== undefined) changes.expectedAssetEstimate = parsed.expectedAssetEstimate
     if (parsed.scheduledPickupAt !== undefined) changes.scheduledPickupAt = toDateOrNull(parsed.scheduledPickupAt)
+    if (parsed.defaultDataBearing !== undefined) changes.defaultDataBearing = parsed.defaultDataBearing
 
     const violation = findEditabilityViolation(job, currentValues(job), changes)
     if (violation) {
@@ -299,6 +304,7 @@ const updateJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
             if (changes.customerReference !== undefined) job.customerReference = changes.customerReference
             if (changes.expectedAssetEstimate !== undefined) job.expectedAssetEstimate = changes.expectedAssetEstimate
             if (changes.scheduledPickupAt !== undefined) job.scheduledPickupAt = changes.scheduledPickupAt
+            if (changes.defaultDataBearing !== undefined) job.defaultDataBearing = changes.defaultDataBearing
           },
         ],
         { transaction: true, label: 'itad.jobs.update' },
@@ -326,6 +332,7 @@ const updateJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
         'customerReference',
         'expectedAssetEstimate',
         'scheduledPickupAt',
+        'defaultDataBearing',
       ]),
       snapshotBefore: before,
       snapshotAfter: after,

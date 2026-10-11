@@ -61,6 +61,7 @@ function toFieldMapping(mapping: ItadManifestImportInput['mapping']): ManifestFi
   if (mapping.customerAssetTag) result.customerAssetTag = mapping.customerAssetTag
   if (mapping.manufacturer) result.manufacturer = mapping.manufacturer
   if (mapping.model) result.model = mapping.model
+  if (mapping.dataBearing) result.dataBearing = mapping.dataBearing
   return result
 }
 
@@ -191,6 +192,7 @@ const importManifestCommand: CommandHandler<ItadManifestImportInput, ItadManifes
               customerAssetTag: row.customerAssetTag,
               manufacturer: row.manufacturer,
               model: row.model,
+              dataBearing: row.dataBearing,
               sourceData: row.sourceData,
               createdAt: now,
               updatedAt: now,

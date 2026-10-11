@@ -5,7 +5,7 @@ import { readJsonSafe } from '@open-mercato/core/helpers/integration/generalFixt
 /** Manifest API helpers for TC-ITAD-1xx (multipart uploads are not covered by the core `apiRequest`). */
 /** A manifest upload: text `content` (CSV) or raw `buffer` (XLSX). */
 export type ManifestFile = { name: string; content?: string; buffer?: Buffer; mimeType?: string }
-export type ManifestMapping = { serial: string; customerAssetTag?: string; manufacturer?: string; model?: string }
+export type ManifestMapping = { serial: string; customerAssetTag?: string; manufacturer?: string; model?: string; dataBearing?: string }
 
 export type ManifestPreviewBody = {
   sha256: string
@@ -28,6 +28,7 @@ export type ManifestItemBody = {
   customerAssetTag: string | null
   manufacturer: string | null
   model: string | null
+  dataBearing: boolean | null
   sourceRow: number
   sourceData: Array<{ column: string; value: string }>
   importId: string

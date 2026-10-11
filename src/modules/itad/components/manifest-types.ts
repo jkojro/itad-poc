@@ -6,6 +6,7 @@ export type ManifestMappingValue = {
   customerAssetTag?: string
   manufacturer?: string
   model?: string
+  dataBearing?: string
 }
 
 export type ManifestIssue = { row: number; code: string; column?: string }
@@ -29,6 +30,7 @@ export type ManifestPreview = {
     customerAssetTag: string | null
     manufacturer: string | null
     model: string | null
+    dataBearing: boolean | null
     errors: string[]
   }>
   errors: ManifestIssue[]
@@ -65,6 +67,7 @@ export type ManifestItemRow = {
   customerAssetTag: string | null
   manufacturer: string | null
   model: string | null
+  dataBearing: boolean | null
   sourceRow: number
   sourceData: Array<{ column: string; value: string }>
   importId: string
@@ -74,7 +77,7 @@ export type ManifestItemRow = {
   assetId: string | null
 }
 
-export const MANIFEST_TARGET_FIELD_IDS = ['serial', 'customerAssetTag', 'manufacturer', 'model'] as const
+export const MANIFEST_TARGET_FIELD_IDS = ['serial', 'customerAssetTag', 'manufacturer', 'model', 'dataBearing'] as const
 export type ManifestTargetFieldId = (typeof MANIFEST_TARGET_FIELD_IDS)[number]
 
 export const MANIFEST_FIELD_FALLBACK_LABELS: Record<ManifestTargetFieldId, string> = {
@@ -82,6 +85,7 @@ export const MANIFEST_FIELD_FALLBACK_LABELS: Record<ManifestTargetFieldId, strin
   customerAssetTag: 'Customer asset tag',
   manufacturer: 'Manufacturer',
   model: 'Model',
+  dataBearing: 'Carries data',
 }
 
 export const MANIFEST_ISSUE_FALLBACK_LABELS: Record<string, string> = {
@@ -92,4 +96,5 @@ export const MANIFEST_ISSUE_FALLBACK_LABELS: Record<string, string> = {
   field_too_long: 'Value is too long',
   numeric_serial_cell: 'Serial number is stored as a number; leading zeros may be lost',
   formula_cell: 'Cell holds a formula; its last calculated value is used',
+  data_bearing_unrecognized: 'Value not recognized as yes or no; the device is treated as not determined',
 }

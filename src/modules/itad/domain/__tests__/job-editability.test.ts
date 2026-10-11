@@ -15,16 +15,17 @@ const current: JobFieldValues = {
   customerReference: 'NB-RET-1042',
   scheduledPickupAt: pickup,
   expectedAssetEstimate: 500,
+  defaultDataBearing: null,
 }
 
 const job = (status: ItadJobStatus, statusBeforeHold: ItadJobStatus | null = null) => ({ status, statusBeforeHold })
 
 describe('getEditableFields (spec: Field editability by status)', () => {
   it.each([
-    ['draft', ['customerId', 'name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate']],
-    ['scheduled', ['name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate']],
-    ['in_transit', ['name', 'customerReference', 'expectedAssetEstimate']],
-    ['receiving', ['name', 'customerReference']],
+    ['draft', ['customerId', 'name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing']],
+    ['scheduled', ['name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing']],
+    ['in_transit', ['name', 'customerReference', 'expectedAssetEstimate', 'defaultDataBearing']],
+    ['receiving', ['name', 'customerReference', 'defaultDataBearing']],
     ['processing', ['name', 'customerReference']],
     ['closeout_review', ['name', 'customerReference']],
     ['completed', []],
@@ -49,6 +50,15 @@ describe('findEditabilityViolation', () => {
         name: 'Renamed',
       }),
     ).toBeNull()
+  })
+
+  it('lets the default dataBearing change and clear until receiving ends (sanitization spec Q11)', () => {
+    expect(findEditabilityViolation(job('receiving'), current, { defaultDataBearing: true })).toBeNull()
+    expect(findEditabilityViolation(job('receiving'), { ...current, defaultDataBearing: true }, { defaultDataBearing: null })).toBeNull()
+    expect(findEditabilityViolation(job('processing'), current, { defaultDataBearing: true })).toEqual({
+      field: 'defaultDataBearing',
+      reason: 'locked',
+    })
   })
 
   it('locks customerId after draft', () => {

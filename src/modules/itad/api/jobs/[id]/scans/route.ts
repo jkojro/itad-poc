@@ -6,7 +6,8 @@ import type { OpenApiRouteDoc } from '@open-mercato/shared/lib/openapi'
 import type { QueryEngine } from '@open-mercato/shared/lib/query/types'
 import type { ItadAssetScanResult } from '../../../../commands/assets'
 import { itadScanListSchema, type ItadAssetScanInput } from '../../../../data/validators'
-import { ITAD_SCAN_RESULTS } from '../../../../domain/job-types'
+import { ITAD_DATA_BEARING_SOURCES } from '../../../../domain/data-bearing'
+import { ITAD_ASSET_STATUSES, ITAD_SCAN_RESULTS } from '../../../../domain/job-types'
 import { runGuardedCommand } from '../../../../lib/command-route'
 import {
   itadRouteErrorResponse,
@@ -205,6 +206,9 @@ export const openApi: OpenApiRouteDoc = {
               customerAssetTag: z.string().nullable(),
               manufacturer: z.string().nullable(),
               model: z.string().nullable(),
+              dataBearing: z.boolean().nullable(),
+              dataBearingSource: z.enum(ITAD_DATA_BEARING_SOURCES).nullable(),
+              status: z.enum(ITAD_ASSET_STATUSES),
               deleted: z.boolean(),
             }),
             manifestItem: z.object({ id: z.string().uuid(), serial: z.string() }).nullable(),

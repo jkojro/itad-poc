@@ -8,7 +8,16 @@ const BASE_URL = process.env.BASE_URL?.trim() || ''
 export type ScanBody = {
   result: 'MATCHED' | 'UNEXPECTED' | 'DUPLICATE'
   scan: { id: string; rawSerial: string }
-  asset: { id: string; serial: string; customerAssetTag: string | null; manufacturer: string | null; model: string | null }
+  asset: {
+    id: string
+    serial: string
+    customerAssetTag: string | null
+    manufacturer: string | null
+    model: string | null
+    dataBearing: boolean | null
+    dataBearingSource: string | null
+    status: string
+  }
   manifestItem: { id: string; serial: string } | null
 }
 
@@ -19,6 +28,8 @@ export type AssetBody = {
   manufacturer: string | null
   model: string | null
   dataBearing: boolean | null
+  dataBearingSource: string | null
+  status: string
   manifestItemId: string | null
   updatedAt: string
   [key: string]: unknown
@@ -121,6 +132,31 @@ export async function deleteAsset(
   })
 }
 
+/** `itad.assets.classify` (sanitization spec REQ-304); returns the raw response. */
+export async function classifyAssets(
+  request: APIRequestContext,
+  token: string,
+  jobId: string,
+  assetIds: string[],
+  dataBearing: boolean,
+  reason?: string,
+) {
+  return request.fetch(url(jobId, '/assets/classify'), {
+    method: 'POST',
+    headers: headers(token),
+    data: { assetIds, dataBearing, ...(reason ? { reason } : {}) },
+  })
+}
+
+/** Classifies every not yet determined asset of a job (at most 100) as `dataBearing`. */
+export async function classifyUndecided(request: APIRequestContext, token: string, jobId: string, dataBearing: boolean): Promise<string[]> {
+  const ids = (await listAssets(request, token, jobId, 'dataBearing=unknown&pageSize=100')).items.map((asset) => asset.id)
+  if (ids.length === 0) return []
+  const response = await classifyAssets(request, token, jobId, ids, dataBearing)
+  expect(response.status(), `classify failed: ${JSON.stringify(await readJsonSafe(response))}`).toBe(200)
+  return ids
+}
+
 export type ReconciliationBody = {
   expectedAssetCount: number
   receivedAssetCount: number
@@ -129,6 +165,7 @@ export type ReconciliationBody = {
   unexpected: number
   pendingDuplicates: number
   differentDeviceUnresolved: number
+  dataBearingUndecided: number
   hasManifest: boolean
 }
 

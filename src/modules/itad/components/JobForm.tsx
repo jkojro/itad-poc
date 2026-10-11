@@ -45,6 +45,7 @@ export type JobFormValues = {
   customerReference: string
   expectedAssetEstimate: number | string | null
   scheduledPickupAt: string | null
+  defaultDataBearing: DataBearingChoice
   // Carries the optimistic-lock version: `CrudForm` derives the expected-version
   // header from `initialValues.updatedAt` for update AND delete.
   updatedAt?: string | null
@@ -56,6 +57,18 @@ type JobPayload = {
   customerReference: string | null
   expectedAssetEstimate: number | null
   scheduledPickupAt: string | null
+  defaultDataBearing: boolean | null
+}
+
+/** Select value of a tri-state flag; an empty select value would render as "—". */
+export type DataBearingChoice = 'unknown' | 'yes' | 'no'
+
+export function toDataBearingChoice(value: boolean | null | undefined): DataBearingChoice {
+  return value === true ? 'yes' : value === false ? 'no' : 'unknown'
+}
+
+export function fromDataBearingChoice(value: unknown): boolean | null {
+  return value === 'yes' ? true : value === 'no' ? false : null
 }
 
 /**
@@ -72,6 +85,7 @@ export function toJobPayload(values: Partial<JobFormValues>): JobPayload {
     customerReference: reference.length ? reference : null,
     expectedAssetEstimate: estimate === '' || estimate == null ? null : Number(estimate),
     scheduledPickupAt: typeof values.scheduledPickupAt === 'string' && values.scheduledPickupAt ? values.scheduledPickupAt : null,
+    defaultDataBearing: fromDataBearingChoice(values.defaultDataBearing),
   }
 }
 
@@ -83,6 +97,7 @@ export function toJobFormValues(item: ItadJobListItem): JobFormValues {
     customerReference: item.customerReference ?? '',
     expectedAssetEstimate: item.expectedAssetEstimate,
     scheduledPickupAt: item.scheduledPickupAt,
+    defaultDataBearing: toDataBearingChoice(item.defaultDataBearing),
     updatedAt: item.updatedAt,
   }
 }
@@ -169,6 +184,21 @@ function useJobFields(
         readOnly: locked('scheduledPickupAt'),
         description: t('itad.jobs.form.fields.scheduledPickupAt.hint', 'Planned pickup / handover of the equipment. Required to schedule the job.'),
       },
+      {
+        id: 'defaultDataBearing',
+        label: t('itad.jobs.form.fields.defaultDataBearing', 'Default: carries data'),
+        type: 'select',
+        readOnly: locked('defaultDataBearing'),
+        options: [
+          { value: 'unknown', label: t('itad.jobs.form.fields.defaultDataBearing.unset', 'Not set') },
+          { value: 'yes', label: t('itad.receiving.dataBearing.yes', 'Yes') },
+          { value: 'no', label: t('itad.receiving.dataBearing.no', 'No') },
+        ],
+        description: t(
+          'itad.jobs.form.fields.defaultDataBearing.hint',
+          'Applied to devices scanned after this is set, when the manifest gives no value.',
+        ),
+      },
     ]
   }, [companyLabels, customerName, editable, t])
 }
@@ -239,7 +269,7 @@ function useJobGroups(t: Translate, summary: CrudFormGroup | null): CrudFormGrou
         id: 'planning',
         title: t('itad.jobs.form.groups.planning', 'Planning'),
         column: 1,
-        fields: ['scheduledPickupAt', 'expectedAssetEstimate'],
+        fields: ['scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing'],
       },
     ]
     if (summary) groups.push(summary)
@@ -261,6 +291,7 @@ export function JobCreateForm() {
       customerReference: '',
       expectedAssetEstimate: null,
       scheduledPickupAt: null,
+      defaultDataBearing: 'unknown',
     }),
     [preselectedCustomerId],
   )
@@ -382,7 +413,7 @@ export function JobDetailForm({ id }: { id: string }) {
   const terminal = job?.status === 'completed' || job?.status === 'cancelled'
   const initialValues: JobFormValues = job
     ? toJobFormValues(job)
-    : { id, customerId: '', name: '', customerReference: '', expectedAssetEstimate: null, scheduledPickupAt: null, updatedAt: null }
+    : { id, customerId: '', name: '', customerReference: '', expectedAssetEstimate: null, scheduledPickupAt: null, defaultDataBearing: 'unknown', updatedAt: null }
 
   const overview = (
     <div className="space-y-6">

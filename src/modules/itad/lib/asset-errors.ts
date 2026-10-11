@@ -13,13 +13,18 @@ const ASSET_ERROR_MESSAGES: Record<ItadAssetErrorCode, string> = {
   reason_required: 'Enter a reason (3–1000 characters)',
   field_not_writable: 'The serial number and status cannot be changed; remove the asset and scan again',
   serial_too_short: 'Enter at least 3 characters of the serial number',
+  sanitization_in_progress: 'A sanitization run is in progress for this device; finish or abort it first',
+  sanitization_not_possible: 'In closeout review a device can no longer be marked as carrying data, because sanitization is possible only in processing',
+  data_bearing_cannot_be_unset: 'Once decided, "Carries data" can be changed to Yes or No, not back to Not determined',
+  assets_not_found: 'Some selected assets no longer exist in this job. Refresh the list',
 }
 
 export async function assetError(
   status: 400 | 409,
   code: ItadAssetErrorCode,
   fieldErrors?: Record<string, string>,
+  details?: Record<string, unknown>,
 ): Promise<never> {
   const { translate } = await resolveTranslations()
-  throw itadAssetError(status, code, translate(`itad.assets.errors.${code}`, ASSET_ERROR_MESSAGES[code]), fieldErrors)
+  throw itadAssetError(status, code, translate(`itad.assets.errors.${code}`, ASSET_ERROR_MESSAGES[code]), fieldErrors, details)
 }

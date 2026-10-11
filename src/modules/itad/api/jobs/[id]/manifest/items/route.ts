@@ -23,6 +23,7 @@ type ItemRow = {
   customer_asset_tag: string | null
   manufacturer: string | null
   model: string | null
+  data_bearing: boolean | null
   source_row: number
   source_data: Array<{ column: string; value: string }>
   import_id: string
@@ -73,7 +74,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const offset = (query.page - 1) * query.pageSize
     const [rows, totals] = await Promise.all([
       em.execute<ItemRow[]>(
-        `select i."id", i."serial", i."customer_asset_tag", i."manufacturer", i."model", i."source_row",
+        `select i."id", i."serial", i."customer_asset_tag", i."manufacturer", i."model", i."data_bearing", i."source_row",
                 i."source_data", i."import_id", m."file_name" as "import_file_name", i."created_at",
                 (${MATCHING_ASSET}) as "asset_id"
          from "itad_manifest_items" i
@@ -96,6 +97,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
         customerAssetTag: row.customer_asset_tag,
         manufacturer: row.manufacturer,
         model: row.model,
+        dataBearing: row.data_bearing,
         sourceRow: Number(row.source_row),
         sourceData: row.source_data,
         importId: row.import_id,
@@ -121,6 +123,7 @@ const itemsResponseSchema = z.object({
       customerAssetTag: z.string().nullable(),
       manufacturer: z.string().nullable(),
       model: z.string().nullable(),
+      dataBearing: z.boolean().nullable(),
       sourceRow: z.number().int(),
       sourceData: z.array(z.object({ column: z.string(), value: z.string() })),
       importId: z.string().uuid(),

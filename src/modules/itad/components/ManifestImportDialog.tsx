@@ -32,6 +32,7 @@ import {
   type ManifestPreview,
   type ManifestTargetFieldId,
 } from './manifest-types'
+import { dataBearingLabel } from './data-bearing-ui'
 
 type Translate = ReturnType<typeof useT>
 type Step = 'file' | 'mapping' | 'preview'
@@ -349,6 +350,7 @@ export function ManifestImportDialog({
                       <TableHead>{fieldLabel(t, 'customerAssetTag')}</TableHead>
                       <TableHead>{fieldLabel(t, 'manufacturer')}</TableHead>
                       <TableHead>{fieldLabel(t, 'model')}</TableHead>
+                      {mapping.dataBearing ? <TableHead>{fieldLabel(t, 'dataBearing')}</TableHead> : null}
                       <TableHead>{t('itad.manifest.import.preview.state', 'Result')}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -360,6 +362,7 @@ export function ManifestImportDialog({
                         <TableCell>{row.customerAssetTag ?? '—'}</TableCell>
                         <TableCell>{row.manufacturer ?? '—'}</TableCell>
                         <TableCell>{row.model ?? '—'}</TableCell>
+                        {mapping.dataBearing ? <TableCell>{dataBearingLabel(t, row.dataBearing)}</TableCell> : null}
                         <TableCell>
                           <StatusBadge variant={ROW_STATE_VARIANTS[row.state]} dot>{rowStateLabel(t, row.state)}</StatusBadge>
                           {row.errors.length ? (

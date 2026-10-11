@@ -4,7 +4,7 @@ import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/h
 import { readJsonSafe } from '@open-mercato/core/helpers/integration/generalFixtures'
 import { advanceToReceiving, createSchedulableJob, getJob, postTransition, transitionOk, uniqueSuffix } from './itad-job-fixtures'
 import { csv, importManifestOk, listManifestItems } from './itad-manifest-fixtures'
-import { getReconciliation, listAssets, receivingCompleteView, scanOk } from './itad-receiving-fixtures'
+import { classifyUndecided, getReconciliation, listAssets, receivingCompleteView, scanOk } from './itad-receiving-fixtures'
 
 /**
  * TC-ITAD-113 — Epic 2 E2E acceptance (spec TEST-112): a manifest of 10 devices
@@ -42,6 +42,7 @@ test.describe('TC-ITAD-113: Epic 2 acceptance — manifest, receiving, reconcili
         unexpected: 1,
         pendingDuplicates: 0,
         differentDeviceUnresolved: 0,
+        dataBearingUndecided: 10,
         hasManifest: true,
       })
       expect((await listManifestItems(request, token, jobId, 'reconciliation=missing')).items.map((item) => item.serial)).toEqual(['ABC010'])
@@ -49,6 +50,10 @@ test.describe('TC-ITAD-113: Epic 2 acceptance — manifest, receiving, reconcili
       expect((await listAssets(request, token, jobId, 'reconciliation=unexpected')).items.map((asset) => asset.serial)).toEqual(['XYZ999'])
       expect((await listAssets(request, token, jobId, 'reconciliation=matched')).total).toBe(9)
 
+      // Sanitization spec REQ-305: the manifest gave no "carries data" values, so receiving
+      // completes once the devices are classified (here: none carries data).
+      expect((await receivingCompleteView(request, token, jobId))?.detailKey).toBe('itad.jobs.conditions.detail.dataBearingUndecided')
+      expect(await classifyUndecided(request, token, jobId, false)).toHaveLength(10)
       expect(await receivingCompleteView(request, token, jobId)).toMatchObject({ key: 'receivingComplete', state: 'met', canConfirm: false })
       expect(await transitionOk(request, token, jobId, { action: 'start_processing' })).toBe('processing')
 
