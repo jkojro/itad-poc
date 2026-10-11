@@ -1,11 +1,17 @@
 import { describe, expect, it } from '@jest/globals'
-import { decideTransition, type ConditionDeps, type ConditionJob } from '../job-conditions'
+import { decideTransition, type ConditionDeps, type ConditionJob, type ProcessingFacts } from '../job-conditions'
 import type { ReceivingFacts } from '../reconciliation'
 
 const readyToProcess: ReceivingFacts = { activeManifestItems: 10, pendingDuplicates: 0, differentDeviceUnresolved: 0, dataBearingUndecided: 0 }
-const deps = (overrides: Partial<ConditionDeps> = {}, facts: ReceivingFacts = readyToProcess): ConditionDeps => ({
+const nothingPending: ProcessingFacts = { sanitizationPending: 0 }
+const deps = (
+  overrides: Partial<ConditionDeps> = {},
+  facts: ReceivingFacts = readyToProcess,
+  processing: ProcessingFacts = nothingPending,
+): ConditionDeps => ({
   isCustomerValid: async () => true,
   loadReceivingFacts: async () => facts,
+  loadProcessingFacts: async () => processing,
   ...overrides,
 })
 const validCustomer = deps()
@@ -131,6 +137,29 @@ describe('decideTransition (spec TEST-002)', () => {
     it('rejects a manual confirmation of receivingComplete', async () => {
       const decision = await startProcessing(readyToProcess, [{ condition: 'receivingComplete', comment: 'counted by hand' }])
       expect(decision).toMatchObject({ ok: false, rejection: { code: 'confirmation_not_allowed', condition: 'receivingComplete' } })
+    })
+  })
+
+  describe('allAssetsProcessed with sanitization pending (sanitization spec TEST-303, closeout part)', () => {
+    const CONFIRM = [{ condition: 'allAssetsProcessed', comment: 'All graded and packed' }]
+    const closeout = (processing: ProcessingFacts, confirmations?: Array<{ condition: string; comment: string }>) =>
+      decideTransition({ job: job({ status: 'processing' }), action: 'start_closeout', confirmations, deps: deps({}, readyToProcess, processing) })
+
+    it('is unmet while data-bearing devices are not sanitized, and a confirmation cannot override it', async () => {
+      const blocked = await closeout({ sanitizationPending: 2 })
+      expect(blocked).toMatchObject({ ok: false, rejection: { code: 'condition_unmet', conditions: ['allAssetsProcessed'] } })
+      expect(blocked.evaluations).toEqual([
+        { key: 'allAssetsProcessed', state: 'unmet', detailKey: 'itad.jobs.conditions.detail.sanitizationPending' },
+      ])
+      expect(await closeout({ sanitizationPending: 2 }, CONFIRM)).toMatchObject({
+        ok: false,
+        rejection: { code: 'condition_unmet', conditions: ['allAssetsProcessed'] },
+      })
+    })
+
+    it('needs the manual confirmation once everything is sanitized', async () => {
+      expect(await closeout(nothingPending)).toMatchObject({ ok: false, rejection: { code: 'condition_unmet' } })
+      expect(await closeout(nothingPending, CONFIRM)).toMatchObject({ ok: true, target: 'closeout_review' })
     })
   })
 })

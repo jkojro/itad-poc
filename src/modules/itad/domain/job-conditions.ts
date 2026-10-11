@@ -40,6 +40,13 @@ export type ConditionDeps = {
   isCustomerValid: (customerId: string) => Promise<boolean>
   /** Manifest/receiving facts of the job (manifest spec); read inside the caller's transaction. */
   loadReceivingFacts: (jobId: string) => Promise<ReceivingFacts>
+  /** Processing facts of the job (sanitization spec Q14); read inside the caller's transaction. */
+  loadProcessingFacts: (jobId: string) => Promise<ProcessingFacts>
+}
+
+export type ProcessingFacts = {
+  /** Active data-bearing assets that are not `sanitized` yet. */
+  sanitizationPending: number
 }
 
 type ConditionDefinition = {
@@ -92,7 +99,19 @@ export const ITAD_JOB_CONDITIONS: Record<ItadJobConditionKey, ConditionDefinitio
         : { key: 'receivingComplete', state: 'met' }
     },
   },
-  allAssetsProcessed: manualCondition('allAssetsProcessed'),
+  // Sanitization spec Q14: stays a manual confirmation for the other processing work, but
+  // no confirmation can override a data-bearing device that is not sanitized.
+  allAssetsProcessed: {
+    key: 'allAssetsProcessed',
+    source: 'manual',
+    manualAllowed: true,
+    evaluate: async (job, deps) => {
+      const facts = await deps.loadProcessingFacts(job.id)
+      return facts.sanitizationPending > 0
+        ? { key: 'allAssetsProcessed', state: 'unmet', detailKey: 'itad.jobs.conditions.detail.sanitizationPending' }
+        : { key: 'allAssetsProcessed', state: 'confirmation_required' }
+    },
+  },
   noBlockingExceptions: manualCondition('noBlockingExceptions'),
   requiredDocumentsComplete: manualCondition('requiredDocumentsComplete'),
 }
@@ -174,6 +193,11 @@ export async function decideTransition(input: {
       return { ok: false, rejection: { code: 'confirmation_not_allowed', condition }, evaluations }
     }
     const evaluation = byKey.get(condition)
+    // A manual confirmation never overrides a data blocker (sanitization spec Q14).
+    if (evaluation?.state === 'unmet') {
+      const unmetKeys = evaluations.filter((entry) => entry.state === 'unmet').map((entry) => entry.key)
+      return { ok: false, rejection: { code: 'condition_unmet', conditions: unmetKeys }, evaluations }
+    }
     if (!evaluation || evaluation.state !== 'confirmation_required') {
       return { ok: false, rejection: { code: 'confirmation_not_required', condition }, evaluations }
     }

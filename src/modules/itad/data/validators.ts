@@ -287,3 +287,19 @@ export const itadSanitizationListSchema = z.object({
 export const itadSanitizationToolsSchema = z.object({
   search: z.string().trim().max(200).optional(),
 })
+
+export const ITAD_BULK_SANITIZATION_MAX_ASSETS = 200
+
+const bulkAssetIds = z
+  .array(z.string().uuid())
+  .min(1)
+  .max(ITAD_BULK_SANITIZATION_MAX_ASSETS)
+  .refine((ids) => new Set(ids).size === ids.length, { message: 'Duplicate asset ids' })
+
+/** Durable input of `itad.sanitization.bulk_start` (one run per asset, shared batch id). */
+export const itadSanitizationBulkStartSchema = itadSanitizationStartSchema.omit({ assetId: true }).extend({ assetIds: bulkAssetIds })
+export type ItadSanitizationBulkStartInput = z.infer<typeof itadSanitizationBulkStartSchema>
+
+/** Durable input of `itad.sanitization.bulk_record_result` (the open run of each asset). */
+export const itadSanitizationBulkResultSchema = itadSanitizationResultSchema.omit({ runId: true }).extend({ assetIds: bulkAssetIds })
+export type ItadSanitizationBulkResultInput = z.infer<typeof itadSanitizationBulkResultSchema>

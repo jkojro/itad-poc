@@ -88,7 +88,7 @@ test.describe('TC-ITAD-207: Sanitization tab', () => {
       await dialog.getByRole('button', { name: 'Save result' }).click()
       await expect(row.getByText('Sanitized', { exact: true })).toBeVisible()
       await expect(counter('Sanitized')).toHaveText('1')
-      await expect(row.getByRole('cell').nth(4)).toHaveText('2')
+      await expect(row.getByRole('cell', { name: '2', exact: true })).toBeVisible()
 
       // History: both runs and the transition state.
       await action('History')
