@@ -1,7 +1,7 @@
 # ITAD Asset Processing & Sanitization
 
 **Date**: 2026-10-09
-**Status**: Ready for implementation (review fixes applied 2026-10-09)
+**Status**: Implemented — all three phases verified (2026-10-11)
 
 > Spec 3 of the app-owned `itad` module (Epic 3), after `2026-10-02-itad-jobs.md` and `2026-10-05-itad-manifest-reconciliation.md`. It extends `ItadAsset`, the manifest import, the job and the condition registry. Module rules: `src/modules/itad/AGENTS.md`.
 
@@ -403,7 +403,7 @@ All strings use i18n in 5 locales. Every surface covers loading, empty, error an
 |---|---|---|
 | 1 — Classification and receiving gate | done (2026-10-09) | Migration `Migration20261009153019_itad` reviewed and applied to dev. `yarn generate`, typecheck, lint (0 errors), ds:check (313 files), unit tests 220/220 (TEST-301, TEST-302 classification part, TEST-303 receiving part), build in the ephemeral environment. Integration: TC-ITAD-201 (TEST-304), TC-ITAD-202 (TEST-305 receiving part), TC-ITAD-203 (TEST-311 receiving part); TC-ITAD-001/012/109/113/114 and the flow fixture adjusted to the new field and gate. Full TC-ITAD regression 35/35. |
 | 2 — Runs | done (2026-10-11) | Migration `Migration20261011043159_itad` reviewed and applied to dev; role ACLs synced. `yarn generate`, typecheck, lint (0 errors), ds:check (332 files), unit tests 230/230 (TEST-302), build in the ephemeral environment. Integration: TC-ITAD-204 (TEST-306), TC-ITAD-205 (TEST-307), TC-ITAD-206 (TEST-305 processing and closeout part), TC-ITAD-207 (TEST-311 single actions); TC-ITAD-202 adjusted. Full TC-ITAD regression 39/39 twice; TC-ITAD-204 5/5 repeated. |
-| 3 — Bulk and closeout gate | not started | |
+| 3 — Bulk and closeout gate | done (2026-10-11) | No migration. `yarn generate`, typecheck, lint (0 errors), ds:check (334 files), unit tests 232/232 (TEST-303 closeout part), build in the ephemeral environment. Integration: TC-ITAD-208 (TEST-308), TC-ITAD-209 (TEST-309), TC-ITAD-210 (TEST-310 E2E), TC-ITAD-211 (TEST-311 bulk); TC-ITAD-207 adjusted (selection column). Full TC-ITAD regression 43/43 twice. Jobs spec amended. |
 
 Phase 1 notes:
 - `itad_asset_status_transitions` ships in Phase 1 (scan decisions with `actor_user_id = null`, classifications with the user).
@@ -417,6 +417,12 @@ Phase 2 notes:
 - Steps of one action get `createdAt` 1 ms apart, so a FAIL always lists `sanitization_failed` before `review_required`.
 - The evidence route already accepts 1–200 `runIds`; Phase 3 adds the bulk UI on top of it.
 - Manager re-classification is available in the Receiving tab (bulk, with a reason; `true` only in processing) and per row in the Sanitization tab ("Mark as not carrying data").
+
+Phase 3 notes:
+- Bulk start / result lock the selected assets in id order under the job lock and name every blocking asset in `blockingAssetIds`; the runs of one bulk start share `bulk_batch_id`.
+- Found by TC-ITAD-208: run ids come from the database default, so the bulk start reads them after the flush (the first draft returned empty ids).
+- The Sanitization tab clears its selection after a successful action (`selectionScopeKey`), so a follow-up bulk action starts from an empty selection.
+- `allAssetsProcessed` keeps `source: 'manual'`; `loadProcessingFacts` counts active data-bearing assets not `sanitized`. The status panel shows "Sanitization: N devices are not sanitized yet" in processing and closeout review.
 
 ## Implementation Phases
 
@@ -517,7 +523,7 @@ Each phase ends with `yarn generate && yarn typecheck && yarn lint && yarn ds:ch
 | Q6 | Method: NIST SP 800-88 enum + free-text detail; tool and version free text with suggestions |
 | Q7 | Verification method enum + notes + optional evidence files via `attachments` |
 | Q8 | "Abort run" with reason; the run stays as `ABORTED`, the asset returns to `sanitization_required` |
-| Q9 | Bulk start and bulk result (one run per asset) |
+| Q9 | Bulk start and bulk result (one run per asset). Bulk retry approval was considered on 2026-10-11 and deliberately left out: a retry stays a per-device manager decision until the exceptions model of Epic 4 |
 | Q10 | Manifest values parsed leniently; unrecognized value = accepted-warning, treated as no value |
 | Q11 | Job field `defaultDataBearing` for later scans; customer policy deferred |
 | Q12 | Free correction during receiving; in `processing` `itad.sanitization.manage` + reason + history (both directions); in `closeout_review` only `true → false` (`→ true` = 409 `sanitization_not_possible`); refused during an open run |
@@ -533,3 +539,6 @@ Each phase ends with `yarn generate && yarn typecheck && yarn lint && yarn ds:ch
 | 2026-10-09 | Questions answered; full draft with three phases |
 | 2026-10-09 | Review fixes: classify `false` on `received → received` (and no-op/refused rows); job cancel closes open runs as `ABORTED`/`job_cancelled`; backfill limited to non-terminal jobs; snapshot rule for `dataBearing`; persisted vs history-only statuses split; evidence owned by the job (single-owner `attachments` port) |
 | 2026-10-09 | Review fixes 2: `closeout_review` allows only `true → false` (no dead end without runs); explicit plan step for the cancel change; runs "never deleted or replaced, completed exactly once" |
+| 2026-10-09 | Phase 1 implemented and verified (PR #9) |
+| 2026-10-11 | Phase 2 implemented and verified (PR #10) |
+| 2026-10-11 | Phase 3 implemented and verified; all three phases done |

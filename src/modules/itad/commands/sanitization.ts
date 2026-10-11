@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import { LockMode } from '@mikro-orm/core'
 import type { EntityManager, FilterQuery } from '@mikro-orm/postgresql'
 import type { CommandHandler, CommandRuntimeContext } from '@open-mercato/shared/lib/commands'
 import { registerCommand } from '@open-mercato/shared/lib/commands'
@@ -8,11 +10,15 @@ import { createLogger } from '@open-mercato/shared/lib/logger'
 import { ItadAsset, ItadSanitizationEvidence, ItadSanitizationRun, type ItadJob } from '../data/entities'
 import {
   itadSanitizationAbortSchema,
+  itadSanitizationBulkResultSchema,
+  itadSanitizationBulkStartSchema,
   itadSanitizationEvidenceSchema,
   itadSanitizationResultSchema,
   itadSanitizationRetrySchema,
   itadSanitizationStartSchema,
   type ItadSanitizationAbortInput,
+  type ItadSanitizationBulkResultInput,
+  type ItadSanitizationBulkStartInput,
   type ItadSanitizationEvidenceInput,
   type ItadSanitizationResultInput,
   type ItadSanitizationRetryInput,
@@ -499,8 +505,190 @@ const attachEvidenceCommand: CommandHandler<ItadSanitizationEvidenceInput, ItadE
   },
 }
 
+export type ItadBulkRunResult = {
+  jobId: string
+  tenantId: string
+  organizationId: string
+  bulkBatchId: string | null
+  runs: Array<{ runId: string; assetId: string }>
+}
+
+/**
+ * Locks the selected active assets of the job in id order and checks that every one
+ * allows `action` (sanitization spec "Large bulk"). All-or-nothing: missing or blocking
+ * assets reject the whole request with their ids.
+ */
+async function lockBulkAssets(
+  tx: EntityManager,
+  scope: JobScope,
+  job: ItadJob,
+  assetIds: string[],
+  action: RunAction,
+): Promise<{ assets: ItadAsset[]; steps: ReturnType<typeof decideRunAction> & { ok: true } }> {
+  if (job.status !== 'processing') return await sanitizationError(409, 'processing_required')
+  const assets = await tx.find(
+    ItadAsset,
+    { id: { $in: assetIds }, tenantId: scope.tenantId, organizationId: scope.organizationId, job: job.id, deletedAt: null } as FilterQuery<ItadAsset>,
+    { lockMode: LockMode.PESSIMISTIC_WRITE, orderBy: { id: 'asc' } },
+  )
+  const found = new Set(assets.map((asset) => asset.id))
+  const blocking = [
+    ...assetIds.filter((id) => !found.has(id)),
+    ...assets.filter((asset) => !decideRunAction({ jobStatus: job.status, assetStatus: asset.status, action }).ok).map((asset) => asset.id),
+  ]
+  if (blocking.length > 0) return await sanitizationError(409, 'asset_transition_not_allowed', { blockingAssetIds: blocking })
+  const decision = decideRunAction({ jobStatus: job.status, assetStatus: assets[0].status, action })
+  if (!decision.ok) return await sanitizationError(409, decision.code)
+  return { assets, steps: decision }
+}
+
+function bulkLog(actionKey: string, fallback: string) {
+  return async ({ result }: { result: ItadBulkRunResult }) => {
+    const { translate } = await resolveTranslations()
+    return {
+      actionLabel: translate(actionKey, fallback),
+      resourceKind: 'itad.job',
+      resourceId: result.jobId,
+      tenantId: result.tenantId,
+      organizationId: result.organizationId,
+      snapshotAfter: { bulkBatchId: result.bulkBatchId, runCount: result.runs.length },
+    }
+  }
+}
+
+/** Starts one run per selected asset with the same method and tool (Q9); all-or-nothing. */
+const bulkStartCommand: CommandHandler<ItadSanitizationBulkStartInput, ItadBulkRunResult> = {
+  id: 'itad.sanitization.bulk_start',
+  isUndoable: false,
+  async execute(rawInput, ctx) {
+    const input = itadSanitizationBulkStartSchema.parse(rawInput)
+    const { scope, actorUserId, em } = await resolveActor(ctx)
+    await loadJob(em, scope, input.jobId)
+    const bulkBatchId = randomUUID()
+
+    let result: ItadBulkRunResult
+    try {
+      result = await em.transactional(async (tx) => {
+        const job = await lockJob(tx, scope, input.jobId)
+        const { assets, steps } = await lockBulkAssets(tx, scope, job, input.assetIds, 'start_run')
+        const now = new Date()
+        const created: Array<{ run: ItadSanitizationRun; asset: ItadAsset }> = []
+        for (const asset of assets) {
+          const run = tx.create(ItadSanitizationRun, {
+            tenantId: scope.tenantId,
+            organizationId: scope.organizationId,
+            job,
+            asset,
+            method: input.method,
+            methodDetail: input.methodDetail ?? null,
+            tool: input.tool,
+            toolVersion: input.toolVersion,
+            operatorUserId: actorUserId,
+            startedAt: now,
+            result: null,
+            bulkBatchId,
+            createdAt: now,
+            updatedAt: now,
+          })
+          tx.persist(run)
+          recordAssetSteps(tx, { job, asset, action: 'start_run', steps: steps.steps, toStatus: steps.toStatus, run, reason: null, actorUserId, now })
+          created.push({ run, asset })
+        }
+        await tx.flush()
+        // Run ids come from the database default, so they are read after the flush.
+        const runs = created.map((entry) => ({ runId: entry.run.id, assetId: entry.asset.id }))
+        return { jobId: job.id, tenantId: scope.tenantId, organizationId: scope.organizationId, bulkBatchId, runs }
+      })
+    } catch (err) {
+      if (isUniqueViolation(err, OPEN_RUN_UNIQUE_INDEX)) return await sanitizationError(409, 'asset_transition_not_allowed')
+      throw err
+    }
+    for (const run of result.runs) {
+      await emitAfterCommit('itad.sanitization.run_started', {
+        jobId: result.jobId,
+        runId: run.runId,
+        assetId: run.assetId,
+        method: input.method,
+        bulkBatchId,
+        actorUserId,
+        tenantId: result.tenantId,
+        organizationId: result.organizationId,
+      })
+    }
+    return result
+  },
+  buildLog: bulkLog('itad.audit.sanitization.bulkStart', 'Start ITAD sanitization runs in bulk'),
+}
+
+/** Records the same PASS or FAIL for the open run of each selected asset (Q9); all-or-nothing. */
+const bulkRecordResultCommand: CommandHandler<ItadSanitizationBulkResultInput, ItadBulkRunResult> = {
+  id: 'itad.sanitization.bulk_record_result',
+  isUndoable: false,
+  async execute(rawInput, ctx) {
+    const input = itadSanitizationBulkResultSchema.parse(rawInput)
+    if (verificationNotesRequired(input.result) && !input.verificationNotes) {
+      return await sanitizationError(400, 'verification_notes_required')
+    }
+    const { scope, actorUserId, em } = await resolveActor(ctx)
+    await loadJob(em, scope, input.jobId)
+    const action: RunAction = input.result === 'PASS' ? 'record_pass' : 'record_fail'
+
+    const result = await em.transactional(async (tx) => {
+      const job = await lockJob(tx, scope, input.jobId)
+      const { assets, steps } = await lockBulkAssets(tx, scope, job, input.assetIds, action)
+      const openRuns = await tx.find(ItadSanitizationRun, {
+        asset: { $in: assets.map((asset) => asset.id) },
+        tenantId: scope.tenantId,
+        organizationId: scope.organizationId,
+        job: job.id,
+        result: null,
+      } as FilterQuery<ItadSanitizationRun>)
+      const runByAsset = new Map(openRuns.map((run) => [run.asset.id, run]))
+      const withoutRun = assets.filter((asset) => !runByAsset.has(asset.id)).map((asset) => asset.id)
+      if (withoutRun.length > 0) return await sanitizationError(409, 'asset_transition_not_allowed', { blockingAssetIds: withoutRun })
+      const now = new Date()
+      const runs: ItadBulkRunResult['runs'] = []
+      for (const asset of assets) {
+        const run = runByAsset.get(asset.id)!
+        run.result = input.result
+        run.verificationMethod = input.verificationMethod
+        run.verificationNotes = input.verificationNotes ?? null
+        run.finishedAt = now
+        run.finishedByUserId = actorUserId
+        run.updatedAt = now
+        recordAssetSteps(tx, {
+          job,
+          asset,
+          action,
+          steps: steps.steps,
+          toStatus: steps.toStatus,
+          run,
+          reason: input.result === 'FAIL' ? input.verificationNotes ?? null : null,
+          actorUserId,
+          now,
+        })
+        runs.push({ runId: run.id, assetId: asset.id })
+      }
+      await tx.flush()
+      return { jobId: job.id, tenantId: scope.tenantId, organizationId: scope.organizationId, bulkBatchId: null, runs }
+    })
+    const passed = input.result === 'PASS'
+    for (const run of result.runs) {
+      await emitAfterCommit(
+        passed ? 'itad.sanitization.run_passed' : 'itad.sanitization.run_failed',
+        { jobId: result.jobId, runId: run.runId, assetId: run.assetId, actorUserId, tenantId: result.tenantId, organizationId: result.organizationId },
+        !passed,
+      )
+    }
+    return result
+  },
+  buildLog: bulkLog('itad.audit.sanitization.bulkResult', 'Record ITAD sanitization results in bulk'),
+}
+
 registerCommand(startRunCommand)
 registerCommand(recordResultCommand)
 registerCommand(abortRunCommand)
 registerCommand(approveRetryCommand)
 registerCommand(attachEvidenceCommand)
+registerCommand(bulkStartCommand)
+registerCommand(bulkRecordResultCommand)

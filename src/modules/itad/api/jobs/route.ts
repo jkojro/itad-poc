@@ -27,6 +27,7 @@ import type { ItadJobListItem } from '../../components/types'
 import type { EntityManager } from '@mikro-orm/postgresql'
 import { countActiveManifestItems } from '../../services/manifest-import'
 import { countActiveAssets } from '../../services/reconciliation-reader'
+import { countSanitizationPending } from '../../services/sanitization-reader'
 
 const id = 'id'
 const tenant_id = 'tenant_id'
@@ -117,9 +118,10 @@ async function decorateItems(payload: ListPayload, ctx: CrudCtx & { query: ItadJ
   // Derived counter (spec "Derived values"): part of the job summary, needs only `itad.jobs.view`.
   const em = ctx.container.resolve<EntityManager>('em').fork()
   const jobIds = items.map((item) => item.id)
-  const [expectedCounts, receivedCounts] = await Promise.all([
+  const [expectedCounts, receivedCounts, pendingCounts] = await Promise.all([
     countActiveManifestItems(em, tenantId, jobIds),
     countActiveAssets(em, tenantId, jobIds),
+    countSanitizationPending(em, tenantId, jobIds),
   ])
   const singleRecord = typeof ctx.query.id === 'string' && ctx.query.id.length > 0
   for (const item of items) {
@@ -128,6 +130,7 @@ async function decorateItems(payload: ListPayload, ctx: CrudCtx & { query: ItadJ
     item.customerName = names.get(`${item.organizationId}:${item.customerId}`) ?? null
     item.expectedAssetCount = expectedCounts.get(item.id) ?? 0
     item.receivedAssetCount = receivedCounts.get(item.id) ?? 0
+    item.sanitizationPendingCount = pendingCounts.get(item.id) ?? 0
     if (singleRecord) item.editableFields = getEditableFields(item)
   }
 }
@@ -216,6 +219,7 @@ export const { metadata, GET, POST, PUT, DELETE } = makeCrudRoute({
       expectedAssetEstimate: toIntOrNull(item.expected_asset_estimate),
       expectedAssetCount: 0,
       receivedAssetCount: 0,
+      sanitizationPendingCount: 0,
       scheduledPickupAt: toIso(item.scheduled_pickup_at),
       defaultDataBearing: typeof item.default_data_bearing === 'boolean' ? item.default_data_bearing : null,
       startedAt: toIso(item.started_at),
@@ -267,6 +271,7 @@ const itadJobListItemSchema = z.object({
   expectedAssetEstimate: z.number().int().nullable(),
   expectedAssetCount: z.number().int(),
   receivedAssetCount: z.number().int(),
+  sanitizationPendingCount: z.number().int(),
   scheduledPickupAt: z.string().nullable(),
   defaultDataBearing: z.boolean().nullable(),
   startedAt: z.string().nullable(),

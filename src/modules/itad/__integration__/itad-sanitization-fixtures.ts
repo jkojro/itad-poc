@@ -151,3 +151,19 @@ export async function getTools(request: APIRequestContext, token: string, search
   const query = search ? `?search=${encodeURIComponent(search)}` : ''
   return request.fetch(`${BASE_URL}/api/itad/sanitization/tools${query}`, { method: 'GET', headers: headers(token) })
 }
+
+export async function bulkStart(request: APIRequestContext, token: string, jobId: string, assetIds: string[], body: Record<string, unknown> = {}) {
+  return request.fetch(url(jobId, '/sanitization/bulk-start'), {
+    method: 'POST',
+    headers: headers(token, { 'Content-Type': 'application/json' }),
+    data: { method: 'purge', tool: 'Blancco Drive Eraser', toolVersion: '7.9', ...body, assetIds },
+  })
+}
+
+export async function bulkResult(request: APIRequestContext, token: string, jobId: string, assetIds: string[], body: Record<string, unknown>) {
+  return request.fetch(url(jobId, '/sanitization/bulk-result'), {
+    method: 'POST',
+    headers: headers(token, { 'Content-Type': 'application/json' }),
+    data: { ...body, assetIds },
+  })
+}

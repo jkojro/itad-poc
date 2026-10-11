@@ -478,6 +478,7 @@ function buildAssetColumns(t: Translate): ColumnDef<AssetRow>[] {
     {
       id: 'dataBearing',
       header: t('itad.receiving.dataBearing.label', 'Carries data'),
+      meta: { truncate: false },
       cell: ({ row }) => (
         <span>
           {dataBearingLabel(t, row.original.dataBearing)}
@@ -493,6 +494,7 @@ function buildAssetColumns(t: Translate): ColumnDef<AssetRow>[] {
     {
       id: 'status',
       header: t('itad.assets.status.column', 'Status'),
+      meta: { truncate: false },
       cell: ({ row }) => (
         <StatusBadge variant={ASSET_STATUS_VARIANTS[row.original.status]} dot>
           {assetStatusLabel(t, row.original.status)}

@@ -3,6 +3,7 @@ import type { QueryEngine } from '@open-mercato/shared/lib/query/types'
 import type { ConditionDeps } from '../domain/job-conditions'
 import { isCompanyInScope } from '../module-integrations/customers'
 import { loadReceivingFacts } from './reconciliation-reader'
+import { loadProcessingFacts } from './sanitization-reader'
 
 /**
  * Builds the facts lookups the job conditions need (manifest spec "Architecture"):
@@ -19,5 +20,6 @@ export function buildConditionDeps(input: {
   return {
     isCustomerValid: (customerId) => isCompanyInScope(queryEngine, scope, customerId),
     loadReceivingFacts: (jobId) => loadReceivingFacts(em, scope, jobId),
+    loadProcessingFacts: (jobId) => loadProcessingFacts(em, scope, jobId),
   }
 }

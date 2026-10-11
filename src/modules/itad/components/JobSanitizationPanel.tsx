@@ -2,7 +2,7 @@
 import * as React from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy'
-import { DataTable } from '@open-mercato/ui/backend/DataTable'
+import { DataTable, type BulkAction } from '@open-mercato/ui/backend/DataTable'
 import { RowActions } from '@open-mercato/ui/backend/RowActions'
 import { SectionHeader } from '@open-mercato/ui/backend/SectionHeader'
 import type { FilterValues } from '@open-mercato/ui/backend/FilterBar'
@@ -80,6 +80,7 @@ function buildColumns(t: Translate): ColumnDef<SanitizationRow>[] {
     {
       id: 'status',
       header: t('itad.assets.status.column', 'Status'),
+      meta: { truncate: false },
       cell: ({ row }) => (
         <StatusBadge variant={ASSET_STATUS_VARIANTS[row.original.status]} dot>
           {assetStatusLabel(t, row.original.status)}
@@ -89,6 +90,8 @@ function buildColumns(t: Translate): ColumnDef<SanitizationRow>[] {
     {
       id: 'lastRun',
       header: t('itad.sanitization.columns.lastRun', 'Last run'),
+      // Two lines of method, tool, time and operator: wrap instead of the default truncation.
+      meta: { truncate: false },
       cell: ({ row }) => {
         const run = row.original.lastRun
         if (!run) return <span className="text-muted-foreground">{t('itad.sanitization.noRuns', 'No runs yet')}</span>
@@ -110,8 +113,27 @@ function buildColumns(t: Translate): ColumnDef<SanitizationRow>[] {
   ]
 }
 
-/** Starts a run: NIST method, optional detail, tool and version with suggestions from earlier runs. */
-function StartRunDialog({ jobId, asset, onClose, onDone }: { jobId: string; asset: SanitizationRow | null; onClose: () => void; onDone: () => void }) {
+/** Title for one device ("…: SN123") or a selection ("… 12 devices"). */
+function targetLabel(t: Translate, assets: SanitizationRow[]): string {
+  return assets.length === 1 ? assets[0].serial : t('itad.sanitization.bulk.devices', '{count} devices', { count: assets.length })
+}
+
+/** Error text of a failed call; lists the serials a bulk request was blocked by. */
+function failureMessage(t: Translate, result: unknown, assets: SanitizationRow[]): string {
+  const message = errorMessage(result, t('itad.sanitization.errors.generic', 'Could not save'))
+  const blocking = (result as { blockingAssetIds?: unknown } | null)?.blockingAssetIds
+  if (!Array.isArray(blocking) || blocking.length === 0) return message
+  const ids = new Set(blocking.map(String))
+  const serials = assets.filter((asset) => ids.has(asset.id)).map((asset) => asset.serial)
+  return serials.length ? `${message}: ${serials.join(', ')}` : message
+}
+
+/**
+ * Starts a run for one device (with its version check) or one run per selected device
+ * (bulk, all-or-nothing): NIST method, optional detail, tool and version with
+ * suggestions from earlier runs.
+ */
+function StartRunDialog({ jobId, assets, onClose, onDone }: { jobId: string; assets: SanitizationRow[] | null; onClose: () => void; onDone: () => void }) {
   const t = useT()
   const [method, setMethod] = React.useState<ItadSanitizationMethod>('purge')
   const [methodDetail, setMethodDetail] = React.useState('')
@@ -120,58 +142,68 @@ function StartRunDialog({ jobId, asset, onClose, onDone }: { jobId: string; asse
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const suggestionsId = React.useId()
+  const open = assets !== null && assets.length > 0
   const tools = useQuery<{ items: ToolSuggestion[] }>({
     queryKey: ['itad-sanitization-tools'],
-    enabled: asset !== null,
+    enabled: open,
     queryFn: async () => readApiResultOrThrow('/api/itad/sanitization/tools'),
   })
   React.useEffect(() => {
-    if (!asset) return
+    if (!assets) return
     setMethod('purge')
     setMethodDetail('')
     setTool('')
     setToolVersion('')
     setSubmitting(false)
     setError(null)
-  }, [asset])
+  }, [assets])
   // Prefill the most used tool once suggestions arrive, unless the operator already typed one.
   const recent = tools.data?.items?.[0]
   React.useEffect(() => {
-    if (!asset || !recent) return
+    if (!assets || !recent) return
     setTool((current) => current || recent.tool)
     setToolVersion((current) => current || recent.toolVersion)
-  }, [asset, recent])
+  }, [assets, recent])
   const versions = (tools.data?.items ?? []).filter((item) => item.tool === tool.trim()).map((item) => item.toolVersion)
   const canSubmit = !submitting && tool.trim().length > 0 && toolVersion.trim().length > 0
 
   const submit = async () => {
-    if (!asset || !canSubmit) return
+    if (!assets || !open || !canSubmit) return
     setSubmitting(true)
     setError(null)
-    const call = await withScopedApiRequestHeaders(buildOptimisticLockHeader(asset.updatedAt), () =>
-      apiCall(`/api/itad/jobs/${encodeURIComponent(jobId)}/assets/${encodeURIComponent(asset.id)}/sanitization/runs`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ method, methodDetail: methodDetail.trim() || null, tool: tool.trim(), toolVersion: toolVersion.trim() }),
-      }),
-    )
+    const fields = { method, methodDetail: methodDetail.trim() || null, tool: tool.trim(), toolVersion: toolVersion.trim() }
+    const base = `/api/itad/jobs/${encodeURIComponent(jobId)}`
+    const call =
+      assets.length === 1
+        ? await withScopedApiRequestHeaders(buildOptimisticLockHeader(assets[0].updatedAt), () =>
+            apiCall(`${base}/assets/${encodeURIComponent(assets[0].id)}/sanitization/runs`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(fields),
+            }),
+          )
+        : await apiCall(`${base}/sanitization/bulk-start`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ ...fields, assetIds: assets.map((asset) => asset.id) }),
+          })
     if (call.ok) {
-      flash(t('itad.sanitization.flash.started', 'Sanitization of {serial} started', { serial: asset.serial }), 'success')
+      flash(t('itad.sanitization.flash.started', 'Sanitization of {serial} started', { serial: targetLabel(t, assets) }), 'success')
       onDone()
       onClose()
       return
     }
-    if (call.status === 409 && surfaceRecordConflict({ status: call.status, body: call.result }, t)) {
+    if (assets.length === 1 && call.status === 409 && surfaceRecordConflict({ status: call.status, body: call.result }, t)) {
       onDone()
       onClose()
       return
     }
     setSubmitting(false)
-    setError(errorMessage(call.result, t('itad.sanitization.errors.generic', 'Could not save')))
+    setError(failureMessage(t, call.result, assets))
   }
 
   return (
-    <Dialog open={asset !== null} onOpenChange={(open) => { if (!open && !submitting) onClose() }}>
+    <Dialog open={open} onOpenChange={(next) => { if (!next && !submitting) onClose() }}>
       <DialogContent
         onKeyDown={(event) => {
           if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -180,11 +212,15 @@ function StartRunDialog({ jobId, asset, onClose, onDone }: { jobId: string; asse
           }
         }}
       >
-        {asset ? (
+        {assets && open ? (
           <>
             <DialogHeader>
-              <DialogTitle>{t('itad.sanitization.start.title', 'Start sanitization: {serial}', { serial: asset.serial })}</DialogTitle>
-              <DialogDescription>{t('itad.sanitization.start.description', 'Record how the device is being wiped.')}</DialogDescription>
+              <DialogTitle>{t('itad.sanitization.start.title', 'Start sanitization: {serial}', { serial: targetLabel(t, assets) })}</DialogTitle>
+              <DialogDescription>
+                {assets.length === 1
+                  ? t('itad.sanitization.start.description', 'Record how the device is being wiped.')
+                  : t('itad.sanitization.start.bulkDescription', 'One run is started for each selected device, with the same method and tool. If any device cannot start, none does.')}
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <FormField label={t('itad.sanitization.fields.method', 'Method')} required>
@@ -247,10 +283,11 @@ function StartRunDialog({ jobId, asset, onClose, onDone }: { jobId: string; asse
 }
 
 /**
- * Records PASS or FAIL for the open run; FAIL needs notes. An optional evidence file is
- * uploaded after the result is saved — a failed upload never undoes the result.
+ * Records PASS or FAIL for the open run of one device or of every selected device (bulk,
+ * all-or-nothing); FAIL needs notes. An optional evidence file is uploaded after the
+ * results are saved and linked to all those runs — a failed upload never undoes them.
  */
-function ResultDialog({ jobId, asset, onClose, onDone }: { jobId: string; asset: SanitizationRow | null; onClose: () => void; onDone: () => void }) {
+function ResultDialog({ jobId, assets, onClose, onDone }: { jobId: string; assets: SanitizationRow[] | null; onClose: () => void; onDone: () => void }) {
   const t = useT()
   const [result, setResult] = React.useState<'PASS' | 'FAIL'>('PASS')
   const [verificationMethod, setVerificationMethod] = React.useState<ItadVerificationMethod>('full_verification')
@@ -265,35 +302,51 @@ function ResultDialog({ jobId, asset, onClose, onDone }: { jobId: string; asset:
     setFile(null)
     setSubmitting(false)
     setError(null)
-  }, [asset])
-  const runId = asset?.lastRun && !asset.lastRun.result ? asset.lastRun.id : null
-  const canSubmit = !submitting && runId !== null && (result === 'PASS' || notes.trim().length > 0)
+  }, [assets])
+  const open = assets !== null && assets.length > 0
+  const openRunIds = (assets ?? []).flatMap((asset) => (asset.lastRun && !asset.lastRun.result ? [asset.lastRun.id] : []))
+  const canSubmit = !submitting && open && (result === 'PASS' || notes.trim().length > 0)
 
   const submit = async () => {
-    if (!asset || !runId || !canSubmit) return
+    if (!assets || !open || !canSubmit) return
     setSubmitting(true)
     setError(null)
     const base = `/api/itad/jobs/${encodeURIComponent(jobId)}/sanitization`
-    const call = await apiCall(`${base}/runs/${encodeURIComponent(runId)}/result`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ result, verificationMethod, verificationNotes: notes.trim() || null }),
-    })
-    if (!call.ok) {
+    const fields = { result, verificationMethod, verificationNotes: notes.trim() || null }
+    const single = assets.length === 1
+    if (single && openRunIds.length !== 1) {
       setSubmitting(false)
-      setError(errorMessage(call.result, t('itad.sanitization.errors.generic', 'Could not save')))
+      setError(t('itad.sanitization.errors.asset_transition_not_allowed', 'This action is not possible in the current status of the device'))
       return
     }
+    const call = single
+      ? await apiCall(`${base}/runs/${encodeURIComponent(openRunIds[0])}/result`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(fields),
+        })
+      : await apiCall<{ runs?: Array<{ runId: string }> }>(`${base}/bulk-result`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...fields, assetIds: assets.map((asset) => asset.id) }),
+        })
+    if (!call.ok) {
+      setSubmitting(false)
+      setError(failureMessage(t, call.result, assets))
+      return
+    }
+    const label = targetLabel(t, assets)
     flash(
       result === 'PASS'
-        ? t('itad.sanitization.flash.passed', '{serial} sanitized', { serial: asset.serial })
-        : t('itad.sanitization.flash.failed', 'Sanitization of {serial} failed; it needs review', { serial: asset.serial }),
+        ? t('itad.sanitization.flash.passed', '{serial} sanitized', { serial: label })
+        : t('itad.sanitization.flash.failed', 'Sanitization of {serial} failed; it needs review', { serial: label }),
       result === 'PASS' ? 'success' : 'warning',
     )
-    if (file) {
+    const runIds = single ? openRunIds : ((call.result as { runs?: Array<{ runId: string }> } | null)?.runs ?? []).map((run) => run.runId)
+    if (file && runIds.length > 0) {
       const form = new FormData()
       form.append('file', file)
-      form.append('runIds', runId)
+      for (const runId of runIds) form.append('runIds', runId)
       const upload = await apiCall(`${base}/evidence`, { method: 'POST', body: form })
       if (!upload.ok) flash(errorMessage(upload.result, t('itad.sanitization.evidence.error', 'The result was saved, but the evidence file could not be attached')), 'error')
     }
@@ -302,7 +355,7 @@ function ResultDialog({ jobId, asset, onClose, onDone }: { jobId: string; asset:
   }
 
   return (
-    <Dialog open={asset !== null} onOpenChange={(open) => { if (!open && !submitting) onClose() }}>
+    <Dialog open={open} onOpenChange={(next) => { if (!next && !submitting) onClose() }}>
       <DialogContent
         onKeyDown={(event) => {
           if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -311,11 +364,15 @@ function ResultDialog({ jobId, asset, onClose, onDone }: { jobId: string; asset:
           }
         }}
       >
-        {asset ? (
+        {assets && open ? (
           <>
             <DialogHeader>
-              <DialogTitle>{t('itad.sanitization.result.title', 'Sanitization result: {serial}', { serial: asset.serial })}</DialogTitle>
-              <DialogDescription>{t('itad.sanitization.result.description', 'The run is closed with this result and cannot be changed later.')}</DialogDescription>
+              <DialogTitle>{t('itad.sanitization.result.title', 'Sanitization result: {serial}', { serial: targetLabel(t, assets) })}</DialogTitle>
+              <DialogDescription>
+                {assets.length === 1
+                  ? t('itad.sanitization.result.description', 'The run is closed with this result and cannot be changed later.')
+                  : t('itad.sanitization.result.bulkDescription', 'The open run of each selected device is closed with this result. If any device has no open run, nothing is saved.')}
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <FormField label={t('itad.sanitization.fields.result', 'Result')} required>
@@ -369,6 +426,80 @@ function ResultDialog({ jobId, asset, onClose, onDone }: { jobId: string; asset:
               <Button type="button" onClick={() => void submit()} disabled={!canSubmit}>
                 {submitting ? <Spinner className="mr-2 h-4 w-4" /> : null}
                 {t('itad.sanitization.actions.saveResult', 'Save result')}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Uploads one evidence file and links it to the latest run of every selected device. */
+function EvidenceDialog({ jobId, assets, onClose, onDone }: { jobId: string; assets: SanitizationRow[] | null; onClose: () => void; onDone: () => void }) {
+  const t = useT()
+  const [file, setFile] = React.useState<File | null>(null)
+  const [submitting, setSubmitting] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    setFile(null)
+    setSubmitting(false)
+    setError(null)
+  }, [assets])
+  const open = assets !== null && assets.length > 0
+  const runIds = (assets ?? []).flatMap((asset) => (asset.lastRun ? [asset.lastRun.id] : []))
+  const withoutRun = (assets ?? []).filter((asset) => !asset.lastRun).map((asset) => asset.serial)
+  const canSubmit = !submitting && file !== null && runIds.length > 0
+
+  const submit = async () => {
+    if (!file || !canSubmit) return
+    setSubmitting(true)
+    setError(null)
+    const form = new FormData()
+    form.append('file', file)
+    for (const runId of runIds) form.append('runIds', runId)
+    const call = await apiCall(`/api/itad/jobs/${encodeURIComponent(jobId)}/sanitization/evidence`, { method: 'POST', body: form })
+    if (!call.ok) {
+      setSubmitting(false)
+      setError(errorMessage(call.result, t('itad.sanitization.errors.generic', 'Could not save')))
+      return
+    }
+    flash(t('itad.sanitization.evidence.done', 'Evidence attached to {count} runs', { count: runIds.length }), 'success')
+    onDone()
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => { if (!next && !submitting) onClose() }}>
+      <DialogContent>
+        {assets && open ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>{t('itad.sanitization.evidence.title', 'Attach evidence: {serial}', { serial: targetLabel(t, assets) })}</DialogTitle>
+              <DialogDescription>
+                {t('itad.sanitization.evidence.description', 'The file is stored once and linked to the latest run of each selected device.')}
+              </DialogDescription>
+            </DialogHeader>
+            <FormField label={t('itad.sanitization.fields.evidence', 'Evidence file')} required description={t('itad.sanitization.evidence.fileHint', 'E.g. the tool report for the batch (at most 10 MB).')}>
+              <Input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+            </FormField>
+            {withoutRun.length > 0 ? (
+              <Alert status="warning">
+                <AlertDescription>
+                  {t('itad.sanitization.evidence.skipped', 'Devices without a run are skipped: {serials}', { serials: withoutRun.join(', ') })}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            {error ? (
+              <Alert status="error"><AlertDescription>{error}</AlertDescription></Alert>
+            ) : null}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
+                {t('itad.sanitization.actions.cancel', 'Cancel')}
+              </Button>
+              <Button type="button" onClick={() => void submit()} disabled={!canSubmit}>
+                {submitting ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                {t('itad.sanitization.actions.attach', 'Attach')}
               </Button>
             </DialogFooter>
           </>
@@ -499,7 +630,7 @@ function HistoryDialog({ jobId, asset, onClose }: { jobId: string; asset: Saniti
 
 type ReasonAction = { kind: 'abort' | 'retry' | 'notDataBearing'; asset: SanitizationRow }
 
-/** Sanitization tab of a job (sanitization spec "Sanitization tab"; single-asset actions in Phase 2). */
+/** Sanitization tab of a job (sanitization spec "Sanitization tab"): row actions and bulk actions on the selection. */
 export function JobSanitizationPanel({
   job,
   canExecute,
@@ -514,8 +645,9 @@ export function JobSanitizationPanel({
   const [search, setSearch] = React.useState('')
   const [page, setPage] = React.useState(1)
   const [filterValues, setFilterValues] = React.useState<FilterValues>({})
-  const [startAsset, setStartAsset] = React.useState<SanitizationRow | null>(null)
-  const [resultAsset, setResultAsset] = React.useState<SanitizationRow | null>(null)
+  const [startAssets, setStartAssets] = React.useState<SanitizationRow[] | null>(null)
+  const [resultAssets, setResultAssets] = React.useState<SanitizationRow[] | null>(null)
+  const [evidenceAssets, setEvidenceAssets] = React.useState<SanitizationRow[] | null>(null)
   const [historyAsset, setHistoryAsset] = React.useState<SanitizationRow | null>(null)
   const [reasonAction, setReasonAction] = React.useState<ReasonAction | null>(null)
   const statusFilter = typeof filterValues.status === 'string' ? filterValues.status : ''
@@ -535,7 +667,10 @@ export function JobSanitizationPanel({
       })
     },
   })
+  // Bumping the selection scope clears the table selection after an action succeeded.
+  const [selectionVersion, setSelectionVersion] = React.useState(0)
   const refresh = React.useCallback(() => {
+    setSelectionVersion((value) => value + 1)
     void queryClient.invalidateQueries({ queryKey: ['itad-sanitization', job.id] })
     void queryClient.invalidateQueries({ queryKey: ['itad-asset-sanitization', job.id] })
     void queryClient.invalidateQueries({ queryKey: ['itad-assets', job.id] })
@@ -597,6 +732,18 @@ export function JobSanitizationPanel({
   }
 
   const counts = list.data?.counts
+  // Bulk actions (Q9) open the same dialogs for the selection; the selection is kept until they finish.
+  const bulkActions = React.useMemo<BulkAction<SanitizationRow>[]>(
+    () =>
+      processing && canExecute
+        ? [
+            { id: 'itad.sanitization.bulkStart', label: t('itad.sanitization.actions.start', 'Start run'), onExecute: (rows) => { setStartAssets(rows); return false } },
+            { id: 'itad.sanitization.bulkResult', label: t('itad.sanitization.actions.recordResult', 'Record result'), onExecute: (rows) => { setResultAssets(rows); return false } },
+            { id: 'itad.sanitization.bulkEvidence', label: t('itad.sanitization.actions.attachEvidence', 'Attach evidence'), onExecute: (rows) => { setEvidenceAssets(rows); return false } },
+          ]
+        : [],
+    [canExecute, processing, t],
+  )
 
   return (
     <section className="space-y-4 rounded-lg border bg-card p-4" aria-label={t('itad.sanitization.title', 'Sanitization')}>
@@ -648,6 +795,8 @@ export function JobSanitizationPanel({
           }}
           entityId={ITAD_ASSET_ENTITY_ID}
           extensionTableId="itad.assets.sanitization"
+          bulkActions={bulkActions}
+          selectionScopeKey={`itad-sanitization-${selectionVersion}`}
           emptyState={(
             <p className="py-8 text-center text-sm text-muted-foreground">
               {search.trim() || statusFilter
@@ -659,11 +808,11 @@ export function JobSanitizationPanel({
             const open = row.status === 'sanitization_in_progress'
             const items = [
               ...(processing && canExecute && row.status === 'sanitization_required'
-                ? [{ id: 'itad.sanitization.start', label: t('itad.sanitization.actions.start', 'Start run'), onSelect: () => setStartAsset(row) }]
+                ? [{ id: 'itad.sanitization.start', label: t('itad.sanitization.actions.start', 'Start run'), onSelect: () => setStartAssets([row]) }]
                 : []),
               ...(processing && canExecute && open
                 ? [
-                    { id: 'itad.sanitization.result', label: t('itad.sanitization.actions.recordResult', 'Record result'), onSelect: () => setResultAsset(row) },
+                    { id: 'itad.sanitization.result', label: t('itad.sanitization.actions.recordResult', 'Record result'), onSelect: () => setResultAssets([row]) },
                     {
                       id: 'itad.sanitization.abort',
                       label: t('itad.sanitization.actions.abort', 'Abort run'),
@@ -679,7 +828,8 @@ export function JobSanitizationPanel({
                 ? [
                     {
                       id: 'itad.sanitization.notDataBearing',
-                      label: t('itad.sanitization.actions.notDataBearing', 'Mark as not carrying data'),
+                      // Short label: the row actions menu has a fixed width.
+                      label: t('itad.sanitization.actions.notDataBearingShort', 'No data on device'),
                       onSelect: () => setReasonAction({ kind: 'notDataBearing', asset: row }),
                     },
                   ]
@@ -699,8 +849,9 @@ export function JobSanitizationPanel({
         />
       )}
 
-      <StartRunDialog jobId={job.id} asset={startAsset} onClose={() => setStartAsset(null)} onDone={refresh} />
-      <ResultDialog jobId={job.id} asset={resultAsset} onClose={() => setResultAsset(null)} onDone={refresh} />
+      <StartRunDialog jobId={job.id} assets={startAssets} onClose={() => setStartAssets(null)} onDone={refresh} />
+      <ResultDialog jobId={job.id} assets={resultAssets} onClose={() => setResultAssets(null)} onDone={refresh} />
+      <EvidenceDialog jobId={job.id} assets={evidenceAssets} onClose={() => setEvidenceAssets(null)} onDone={refresh} />
       <HistoryDialog jobId={job.id} asset={historyAsset} onClose={() => setHistoryAsset(null)} />
       <ReasonDialog
         open={reasonAction !== null}
