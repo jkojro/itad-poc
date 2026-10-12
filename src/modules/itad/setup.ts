@@ -1,4 +1,5 @@
 import type { ModuleSetupConfig } from '@open-mercato/shared/modules/setup'
+import { seedPickupActivityType } from './services/pickup-task-sync'
 
 export const setup: ModuleSetupConfig = {
   defaultRoleFeatures: {
@@ -14,6 +15,9 @@ export const setup: ModuleSetupConfig = {
       'itad.sanitization.view',
       'itad.exceptions.view',
     ],
+  },
+  async seedDefaults(ctx) {
+    await seedPickupActivityType(ctx.container, { tenantId: ctx.tenantId, organizationId: ctx.organizationId })
   },
 }
 
