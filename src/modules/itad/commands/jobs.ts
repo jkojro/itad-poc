@@ -54,6 +54,7 @@ export const itadJobCrudEvents: CrudEventsConfig<ItadJob> = {
     customerId: ctx.entity?.customerId ?? null,
     internalReference: ctx.entity?.internalReference ?? null,
     status: ctx.entity?.status ?? null,
+    actorUserId: ctx.actorUserId ?? null,
   }),
 }
 
@@ -183,6 +184,7 @@ export async function emitJobEffects(
     entity: job,
     identifiers: { id: String(job.id), tenantId: scope.tenantId, organizationId: scope.organizationId },
     syncOrigin: ctx.syncOrigin,
+    actorUserId: ctx.auth?.sub ?? null,
     events: itadJobCrudEvents,
     indexer: itadJobCrudIndexer,
   })

@@ -16,6 +16,7 @@ import type {
   ItadScanResult,
 } from '../domain/job-types'
 import type { ManifestFieldMapping, RowWarningCode, SourceDataEntry } from '../domain/manifest-mapping'
+import type { PickupTaskLinkState } from '../domain/pickup-task'
 
 /**
  * One unit of ITAD work for one customer company.
@@ -90,6 +91,10 @@ export class ItadJob {
 
   @Property({ name: 'scheduled_pickup_at', type: Date, nullable: true })
   scheduledPickupAt?: Date | null
+
+  /** Organization user responsible for the pickup (`auth:user` id); owner of the calendar task. */
+  @Property({ name: 'pickup_coordinator_user_id', type: 'uuid', nullable: true })
+  pickupCoordinatorUserId?: string | null
 
   @Property({ name: 'started_at', type: Date, nullable: true })
   startedAt?: Date | null
@@ -845,4 +850,67 @@ export class ItadExceptionEvent {
 
   @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
   createdAt: Date = new Date()
+}
+
+/**
+ * One pickup task the job projected into the platform calendar (pickup calendar spec
+ * "Data Model"). The task itself is a `customers` interaction; this row is the
+ * integration memory: which interaction, which job, and the state `itad` gave it.
+ *
+ * One row per task, never per job: history stays, so the interceptor still protects
+ * older tasks. `isCurrent` marks the job's latest occurrence (terminal included; `lost`
+ * never). The sync writes these rows after the job commit, so it never touches
+ * `itad_jobs.updated_at`.
+ */
+@Entity({ tableName: 'itad_job_pickup_tasks' })
+@Unique({ name: 'itad_job_pickup_tasks_interaction_unique', properties: ['tenantId', 'organizationId', 'interactionId'] })
+@Index({ name: 'itad_job_pickup_tasks_job_idx', properties: ['tenantId', 'organizationId', 'job', 'createdAt'] })
+@Index({
+  name: 'itad_job_pickup_tasks_current_unique',
+  expression:
+    'create unique index "itad_job_pickup_tasks_current_unique" on "itad_job_pickup_tasks" ("tenant_id", "organization_id", "job_id") where "is_current"',
+})
+export class ItadJobPickupTask {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  /** Chosen by `itad` before the create command runs, so a retried create reuses it. */
+  @Property({ name: 'interaction_id', type: 'uuid' })
+  interactionId!: string
+
+  @Property({ type: 'text' })
+  state!: PickupTaskLinkState
+
+  @Property({ name: 'is_current', type: 'boolean' })
+  isCurrent!: boolean
+
+  /** The pickup time this task stands for. */
+  @Property({ name: 'scheduled_at', type: Date })
+  scheduledAt!: Date
+
+  /** Who triggered the last sync of this task; audit only, never used to authorize. */
+  @Property({ name: 'caused_by_user_id', type: 'uuid', nullable: true })
+  causedByUserId?: string | null
+
+  @Property({ name: 'last_synced_at', type: Date, nullable: true })
+  lastSyncedAt?: Date | null
+
+  /** Error code of the last failed sync; cleared on success. */
+  @Property({ name: 'last_error', type: 'text', nullable: true })
+  lastError?: string | null
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
+
+  @Property({ name: 'updated_at', type: Date, onUpdate: () => new Date() })
+  updatedAt: Date = new Date()
 }
