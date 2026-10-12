@@ -221,7 +221,7 @@ Migration: one migration with the table, its indexes and the column, and no back
 - `POST /api/itad/jobs/:id/pickup-task/sync`: runs the sync for one job now and returns the resulting `pickupTask`. Requires `itad.jobs.manage`; has `metadata` and `openApi`. Idempotent.
 
 **Interceptor** (`api/interceptors.ts`, id `itad.pickup-task-guard`, target `customers/interactions`):
-- `PUT` / `DELETE`: the interaction id (body `id` or query `id`) has a link row in the caller's tenant and organization → 422 with the message "This pickup comes from ITAD job <ref>. Change it on the job." The interceptor runner returns a rejection as `{ error: <message> }`, so the body carries the translated message, not a code.
+- `PUT` / `DELETE`: the interaction id (body `id` or query `id`) has a link row in the caller's tenant and organization → 422 with the message "The date and details of this pickup can only be changed on ITAD job <ref>." (pl: "Datę i szczegóły tego odbioru można zmienić tylko w zleceniu ITAD <ref>.") The interceptor runner returns a rejection as `{ error: <message> }`, so the body carries the translated message, not a code.
 - `POST` / `PUT` with `interactionType === 'itad-pickup'` → 422 "This activity type is reserved for ITAD pickups."
 - Anything else passes through unchanged.
 
@@ -244,6 +244,7 @@ Migration: one migration with the table, its indexes and the column, and no back
 - The history count is shown when greater than 1 ("2 earlier pickup tasks").
 
 **Calendar:**
+- the calendar has no drag & drop of existing items (dragging on the grid only creates a new event), so a pickup is never moved by dragging;
 - the task shows with the `itad-pickup` label, colour and icon;
 - saving the editor on it shows the 422 message as a form error;
 - the calendar's "Cancel event" action shows its generic failure message;

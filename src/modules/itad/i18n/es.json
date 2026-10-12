@@ -391,7 +391,7 @@
   "itad.nav.group": "ITAD",
   "itad.pickupTask.activityType": "Recogida ITAD",
   "itad.pickupTask.customerReference": "Referencia del cliente: {value}",
-  "itad.pickupTask.errors.locked": "Esta recogida proviene del trabajo ITAD {reference}. Cámbiala en el trabajo.",
+  "itad.pickupTask.errors.locked": "La fecha y los detalles de esta recogida solo se pueden cambiar en el trabajo ITAD {reference}.",
   "itad.pickupTask.errors.typeReserved": "Este tipo de actividad está reservado para las recogidas ITAD.",
   "itad.pickupTask.jobLink": "Trabajo ITAD: {url}",
   "itad.pickupTask.title": "Recogida de equipos – {reference} – {name}",

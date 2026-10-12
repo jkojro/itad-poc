@@ -49,7 +49,7 @@ export const interceptors: ApiInterceptor[] = [
       return {
         ok: false,
         statusCode: 422,
-        message: translate('itad.pickupTask.errors.locked', 'Change the pickup on ITAD job {reference}.', {
+        message: translate('itad.pickupTask.errors.locked', 'The date and details of this pickup can only be changed on ITAD job {reference}.', {
           reference: link.job.internalReference,
         }),
       }

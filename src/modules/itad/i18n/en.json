@@ -391,7 +391,7 @@
   "itad.nav.group": "ITAD",
   "itad.pickupTask.activityType": "ITAD pickup",
   "itad.pickupTask.customerReference": "Customer reference: {value}",
-  "itad.pickupTask.errors.locked": "This pickup comes from ITAD job {reference}. Change it on the job.",
+  "itad.pickupTask.errors.locked": "The date and details of this pickup can only be changed on ITAD job {reference}.",
   "itad.pickupTask.errors.typeReserved": "This activity type is reserved for ITAD pickups.",
   "itad.pickupTask.jobLink": "ITAD job: {url}",
   "itad.pickupTask.title": "Device pickup – {reference} – {name}",
