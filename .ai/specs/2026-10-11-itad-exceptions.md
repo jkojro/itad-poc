@@ -1,7 +1,7 @@
 # ITAD Exceptions, Permissions & Auditability
 
 **Date**: 2026-10-11
-**Status**: Ready for implementation (approved 2026-10-11)
+**Status**: Implemented — all three phases verified (2026-10-12)
 
 > Spec 4 of the app-owned `itad` module (Epic 4), after `2026-10-02-itad-jobs.md`, `2026-10-05-itad-manifest-reconciliation.md` and `2026-10-09-itad-asset-sanitization.md`. Source: "Epic 4 – Exceptions, Permissions & Auditability — development requirements" (E4-001 … E4-072, AC-401 … AC-408). Module rules: `src/modules/itad/AGENTS.md`.
 
@@ -335,7 +335,7 @@ All strings use i18n in 5 locales (Polish wording "wyjątek", "zlecenie"). Statu
 |---|---|---|
 | 1 — Records, creation, domain-action resolution, closeout gate | done (2026-10-11) | Migration `Migration20261011084132_itad` (tables + backfill) reviewed and applied to dev: 13 exceptions backfilled (1 duplicate, 5 missing, 7 unexpected); role ACLs synced. `yarn generate`, typecheck, lint (0 errors), ds:check (343 files), unit tests 238/238 (TEST-401 + condition rules), build in the ephemeral environment. Integration: TC-ITAD-301 (TEST-402 API, AC-401–403, AC-406), TC-ITAD-302 (TEST-404 same-device, AC-404), TC-ITAD-303 (TEST-405, AC-405), TC-ITAD-304 (TEST-406 Phase 1 part, AC-407); TC-ITAD-009/010/210 adjusted. Full TC-ITAD regression 47/47 twice. |
 | 2 — Manager resolution, assignment, set-aside, Exceptions tab | done (2026-10-11) | No migration. `yarn generate`, typecheck, lint (0 errors), ds:check (352 files), unit tests 238/238, build in the ephemeral environment. Integration: TC-ITAD-305 (TEST-402 completion, TEST-403), TC-ITAD-306 (TEST-404 set-aside), TC-ITAD-307 (TEST-407, assignment), TC-ITAD-304 extended (TEST-406), TC-ITAD-308 (TEST-409 tab part); TC-ITAD-210 now resolves its UNEXPECTED exception and completes. Full TC-ITAD regression 51/51 twice. |
-| 3 — Asset detail and timeline | not started | |
+| 3 — Asset detail and timeline | done (2026-10-12) | No migration. `yarn generate`, typecheck, lint (0 errors), ds:check (358 files), unit tests 242/242 (timeline ordering, FAIL step collapsing, feature filtering, voided), build in the ephemeral environment. Integration: TC-ITAD-309 (TEST-408, AC-408), TC-ITAD-310 (TEST-410 E2E demo, AC-401–406, AC-408), TC-ITAD-311 (TEST-409 detail part). Full TC-ITAD regression 54/54 twice. Jobs spec amended. |
 
 Phase 1 notes:
 - Exception ids come from the database default; every creation point flushes the source record first and emits events from the committed rows.
@@ -347,6 +347,12 @@ Phase 2 notes:
 - The assignee list reads `auth:user` of the selected organization through the query engine (soft-deleted excluded). Search runs after decryption, in memory, over at most 500 users; that is enough for the PoC.
 - "Set aside 2nd device" is offered in the Exceptions tab and also next to a flagged duplicate in the Receiving tab (managers only).
 - The Exceptions tab offers each domain action itself ("Same device", "Approve retry"). The retry reads the device version first, because it is a sanitization action with an optimistic lock.
+
+Phase 3 notes:
+- The timeline rules are pure (`domain/asset-timeline.ts`); `services/asset-detail-reader.ts` only reads rows. A FAIL's two history steps become one "Sanitization failed" entry, and entries at the same instant follow a fixed narrative order (e.g. the FAIL before the exception it opened, the retry before the exception it resolved).
+- Job milestones on the timeline: `start_processing` ("reconciled", E4-054), `complete`, `cancel`; only those after the device was received.
+- The serial lookup row now opens the Asset detail page (its "Open receiving" action and the job link still open the Receiving tab; the job link stops the row click — found by TC-ITAD-116).
+- Asset detail is linked from the Receiving and Sanitization tabs ("Details"), from exception serials, and from the lookup.
 
 ## Implementation Phases
 
@@ -461,4 +467,5 @@ Each phase ends with `yarn generate && yarn typecheck && yarn lint && yarn ds:ch
 |---|---|
 | 2026-10-11 | Skeleton with Fit-Gap and open questions |
 | 2026-10-11 | Questions answered; full draft with three phases |
+| 2026-10-12 | All three phases implemented and verified (PRs #12, #13 and the Phase 3 PR) |
 | 2026-10-11 | Design decisions confirmed by the user (`noBlockingExceptions` on `complete`; Resolve only for MISSING/UNEXPECTED; set-aside action; retry needs both manage features; backfill in the Phase 1 migration) |

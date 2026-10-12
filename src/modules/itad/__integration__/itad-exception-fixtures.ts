@@ -104,3 +104,18 @@ export async function getAssignees(request: APIRequestContext, token: string, se
     headers: headers(token),
   })
 }
+
+export type TimelineItemBody = { at: string; kind: string; category: string; actor: { id: string } | null; details: Record<string, unknown> }
+
+export async function getTimeline(request: APIRequestContext, token: string, jobId: string, assetId: string) {
+  return request.fetch(`${BASE_URL}/api/itad/jobs/${encodeURIComponent(jobId)}/assets/${encodeURIComponent(assetId)}/timeline`, {
+    method: 'GET',
+    headers: headers(token),
+  })
+}
+
+export async function timelineOf(request: APIRequestContext, token: string, jobId: string, assetId: string): Promise<TimelineItemBody[]> {
+  const response = await getTimeline(request, token, jobId, assetId)
+  expect(response.status()).toBe(200)
+  return ((await readJsonSafe<{ items: TimelineItemBody[] }>(response))?.items) ?? []
+}

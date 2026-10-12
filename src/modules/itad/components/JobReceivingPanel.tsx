@@ -795,6 +795,11 @@ export function JobReceivingPanel({
           )}
           rowActions={(row) => {
             const items = [
+              {
+                id: 'itad.assets.details',
+                label: t('itad.assetDetail.open', 'Details'),
+                href: `/backend/itad/jobs/${encodeURIComponent(job.id)}/assets/${encodeURIComponent(row.id)}`,
+              },
               ...(canViewManifest && row.manifestItemId
                 ? [{ id: 'itad.assets.sourceData', label: t('itad.manifest.actions.sourceData', 'Source data'), onSelect: () => void openSourceData(row) }]
                 : []),
@@ -805,7 +810,7 @@ export function JobReceivingPanel({
                 ? [{ id: 'itad.assets.remove', label: t('itad.receiving.actions.remove', 'Remove scan'), destructive: true, onSelect: () => setRemoveAsset(row) }]
                 : []),
             ]
-            return items.length ? <RowActions items={items} /> : null
+            return <RowActions items={items} />
           }}
           pagination={{
             page,

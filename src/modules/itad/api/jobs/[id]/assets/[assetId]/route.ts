@@ -5,9 +5,19 @@ import type { OpenApiRouteDoc } from '@open-mercato/shared/lib/openapi'
 import type { ItadAssetChangeResult } from '../../../../../commands/assets'
 import type { ItadAssetDeleteInput, ItadAssetUpdateInput } from '../../../../../data/validators'
 import { runGuardedCommand } from '../../../../../lib/command-route'
+import type { EntityManager } from '@mikro-orm/postgresql'
+import { notFound } from '@open-mercato/shared/lib/crud/errors'
+import { resolveTranslations } from '@open-mercato/shared/lib/i18n/server'
+import type { QueryEngine } from '@open-mercato/shared/lib/query/types'
+import { ITAD_DATA_BEARING_SOURCES } from '../../../../../domain/data-bearing'
+import { ITAD_ASSET_STATUSES, ITAD_JOB_STATUSES } from '../../../../../domain/job-types'
+import { classifyAsset, ASSET_RECONCILIATION } from '../../../../../domain/reconciliation'
 import { itadRouteErrorResponse, loadReadableJob, resolveItadRouteContext } from '../../../../../lib/route-context'
+import { loadUserDisplayNames } from '../../../../../module-integrations/users'
+import { loadAssetDetail } from '../../../../../services/asset-detail-reader'
 
 export const metadata = {
+  GET: { requireAuth: true, requireFeatures: ['itad.assets.view'] },
   PUT: { requireAuth: true, requireFeatures: ['itad.assets.receive'] },
   DELETE: { requireAuth: true, requireFeatures: ['itad.assets.manage'] },
 }
@@ -22,6 +32,41 @@ const updateBodySchema = z
   })
   .passthrough()
 const deleteBodySchema = z.object({ reason: z.string().max(1000).nullable().optional() })
+
+/** Asset detail (exceptions spec "Asset detail"): the device, its job and reconciliation, open exceptions. */
+export async function GET(request: Request, { params }: { params: { id: string; assetId: string } }) {
+  try {
+    const { id, assetId } = paramsSchema.parse({ id: params?.id, assetId: params?.assetId })
+    const route = await resolveItadRouteContext(request)
+    const job = await loadReadableJob(route, id)
+    const em = route.container.resolve<EntityManager>('em').fork()
+    const row = await loadAssetDetail(em, { tenantId: route.tenantId, organizationId: job.organizationId }, job.id, assetId)
+    if (!row) {
+      const { translate } = await resolveTranslations()
+      throw notFound(translate('itad.assets.errors.asset_not_found', 'Asset not found'))
+    }
+    const names = await loadUserDisplayNames(route.container.resolve<QueryEngine>('queryEngine'), route.tenantId, [row.received_by_user_id])
+    return NextResponse.json({
+      id: row.id,
+      serial: row.serial,
+      customerAssetTag: row.customer_asset_tag,
+      manufacturer: row.manufacturer,
+      model: row.model,
+      dataBearing: row.data_bearing,
+      dataBearingSource: row.data_bearing_source,
+      status: row.status,
+      reconciliation: classifyAsset(Boolean(row.manifest_item_id)),
+      receivedAt: new Date(row.received_at).toISOString(),
+      receivedBy: { id: row.received_by_user_id, name: names.get(row.received_by_user_id) ?? null },
+      deleted: Boolean(row.deleted_at),
+      openExceptionCount: Number(row.open_exceptions),
+      updatedAt: new Date(row.updated_at).toISOString(),
+      job: { id: job.id, internalReference: job.internalReference, name: job.name, status: job.status },
+    })
+  } catch (err) {
+    return itadRouteErrorResponse(err, 'itad.assets.detail')
+  }
+}
 
 /** Edits an asset's details (`itad.assets.update`); send the expected `updatedAt` in the lock header. */
 export async function PUT(request: Request, { params }: { params: { id: string; assetId: string } }) {
@@ -73,6 +118,38 @@ export const openApi: OpenApiRouteDoc = {
   tag: 'ITAD',
   summary: 'ITAD asset',
   methods: {
+    GET: {
+      summary: 'Asset detail',
+      description: 'The device with its status, data-bearing decision and source, reconciliation state, open exception count and job. A voided asset is returned with `deleted: true`.',
+      responses: [
+        {
+          status: 200,
+          description: 'Asset',
+          schema: z.object({
+            id: z.string().uuid(),
+            serial: z.string(),
+            customerAssetTag: z.string().nullable(),
+            manufacturer: z.string().nullable(),
+            model: z.string().nullable(),
+            dataBearing: z.boolean().nullable(),
+            dataBearingSource: z.enum(ITAD_DATA_BEARING_SOURCES).nullable(),
+            status: z.enum(ITAD_ASSET_STATUSES),
+            reconciliation: z.enum(ASSET_RECONCILIATION),
+            receivedAt: z.string(),
+            receivedBy: z.object({ id: z.string().uuid(), name: z.string().nullable() }),
+            deleted: z.boolean(),
+            openExceptionCount: z.number().int(),
+            updatedAt: z.string(),
+            job: z.object({ id: z.string().uuid(), internalReference: z.string(), name: z.string(), status: z.enum(ITAD_JOB_STATUSES) }),
+          }),
+        },
+      ],
+      errors: [
+        { status: 401, description: 'Unauthorized', schema: errorSchema },
+        { status: 403, description: 'Missing itad.assets.view', schema: errorSchema },
+        { status: 404, description: 'Job or asset not found in scope', schema: errorSchema },
+      ],
+    },
     PUT: {
       summary: 'Edit an asset',
       description:
