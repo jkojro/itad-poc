@@ -34,6 +34,7 @@ type LookupRow = {
 }
 
 const receivingHref = (jobId: string) => `/backend/itad/jobs/${encodeURIComponent(jobId)}?tab=receiving`
+const detailHref = (jobId: string, assetId: string) => `/backend/itad/jobs/${encodeURIComponent(jobId)}/assets/${encodeURIComponent(assetId)}`
 
 function buildColumns(t: Translate): ColumnDef<LookupRow>[] {
   return [
@@ -51,7 +52,8 @@ function buildColumns(t: Translate): ColumnDef<LookupRow>[] {
       id: 'job',
       header: t('itad.assets.lookup.job', 'Job'),
       cell: ({ row }) => (
-        <Link className="underline underline-offset-2" href={receivingHref(row.original.jobId)}>
+        // The row opens the device; this link opens the job, so it must not reach the row.
+        <Link className="underline underline-offset-2" href={receivingHref(row.original.jobId)} onClick={(event) => event.stopPropagation()}>
           {row.original.jobReference}
         </Link>
       ),
@@ -129,9 +131,14 @@ export default function AssetLookup() {
         </p>
       )}
       rowActions={(row) => (
-        <RowActions items={[{ id: 'itad.assets.lookup.open', label: t('itad.assets.lookup.open', 'Open receiving'), href: receivingHref(row.jobId) }]} />
+        <RowActions
+          items={[
+            { id: 'itad.assets.details', label: t('itad.assetDetail.open', 'Details'), href: detailHref(row.jobId, row.id) },
+            { id: 'itad.assets.lookup.open', label: t('itad.assets.lookup.open', 'Open receiving'), href: receivingHref(row.jobId) },
+          ]}
+        />
       )}
-      onRowClick={(row) => router.push(receivingHref(row.jobId))}
+      onRowClick={(row) => router.push(detailHref(row.jobId, row.id))}
       pagination={{
         page,
         pageSize: PAGE_SIZE,

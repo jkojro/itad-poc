@@ -1,5 +1,6 @@
 "use client"
 import * as React from 'react'
+import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy'
 import { DataTable } from '@open-mercato/ui/backend/DataTable'
@@ -73,7 +74,7 @@ function contextText(t: Translate, row: ExceptionRow): string {
   }
 }
 
-function buildColumns(t: Translate): ColumnDef<ExceptionRow>[] {
+function buildColumns(t: Translate, jobId: string): ColumnDef<ExceptionRow>[] {
   return [
     { id: 'type', header: t('itad.exceptions.columns.type', 'Type'), meta: { truncate: false }, cell: ({ row }) => exceptionTypeLabel(t, row.original.type) },
     {
@@ -86,7 +87,19 @@ function buildColumns(t: Translate): ColumnDef<ExceptionRow>[] {
         </StatusBadge>
       ),
     },
-    { id: 'serial', header: t('itad.manifest.field.serial', 'Serial number'), cell: ({ row }) => <span className="font-mono">{row.original.serial}</span> },
+    {
+      id: 'serial',
+      header: t('itad.manifest.field.serial', 'Serial number'),
+      // A missing device has no asset yet (E4-062): no detail link.
+      cell: ({ row }) =>
+        row.original.assetId ? (
+          <Link className="font-mono underline underline-offset-2" href={`/backend/itad/jobs/${encodeURIComponent(jobId)}/assets/${encodeURIComponent(row.original.assetId)}`}>
+            {row.original.serial}
+          </Link>
+        ) : (
+          <span className="font-mono">{row.original.serial}</span>
+        ),
+    },
     { id: 'context', header: t('itad.exceptions.columns.context', 'Context'), meta: { truncate: false }, cell: ({ row }) => contextText(t, row.original) },
     {
       id: 'assignedTo',
@@ -396,7 +409,7 @@ export function JobExceptionsPanel({
   const type = typeof filterValues.type === 'string' ? filterValues.type : ''
   const assignedTo = typeof filterValues.assignedTo === 'string' ? filterValues.assignedTo : ''
   const base = `/api/itad/jobs/${encodeURIComponent(job.id)}`
-  const columns = React.useMemo(() => buildColumns(t), [t])
+  const columns = React.useMemo(() => buildColumns(t, job.id), [job.id, t])
 
   const list = useQuery<ExceptionList>({
     queryKey: ['itad-exceptions', job.id, page, status, type, assignedTo],

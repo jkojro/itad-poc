@@ -838,6 +838,11 @@ export function JobSanitizationPanel({
                   ]
                 : []),
               { id: 'itad.sanitization.history', label: t('itad.sanitization.actions.history', 'History'), onSelect: () => setHistoryAsset(row) },
+              {
+                id: 'itad.assets.details',
+                label: t('itad.assetDetail.open', 'Details'),
+                href: `/backend/itad/jobs/${encodeURIComponent(job.id)}/assets/${encodeURIComponent(row.id)}`,
+              },
             ]
             return <RowActions items={items} />
           }}
