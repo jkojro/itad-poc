@@ -51,6 +51,7 @@ test.describe('TC-ITAD-001: ITAD job create issues consecutive references', () =
         'scheduledPickupAt',
         'expectedAssetEstimate',
         'defaultDataBearing',
+        'pickupCoordinatorUserId',
       ])
     } finally {
       for (const id of jobIds) await deleteJobIfExists(request, token, id)

@@ -17,6 +17,7 @@ import {
 import { itadJobError } from '../lib/errors'
 import { allocateJobReference } from '../services/job-reference-generator'
 import { isCompanyInScope } from '../module-integrations/customers'
+import { isOrganizationUser } from '../module-integrations/users'
 import {
   findEditabilityViolation,
   isTerminalStatus,
@@ -41,6 +42,7 @@ export type SerializedJob = {
   expectedAssetEstimate: number | null
   scheduledPickupAt: string | null
   defaultDataBearing: boolean | null
+  pickupCoordinatorUserId: string | null
 }
 
 export const itadJobCrudEvents: CrudEventsConfig<ItadJob> = {
@@ -108,6 +110,14 @@ async function assertCustomerCompany(ctx: CommandRuntimeContext, scope: JobScope
   throw itadJobError(400, 'customer_invalid', message, { customerId: message })
 }
 
+async function assertPickupCoordinator(ctx: CommandRuntimeContext, scope: JobScope, userId: string): Promise<void> {
+  const queryEngine = ctx.container.resolve<QueryEngine>('queryEngine')
+  if (await isOrganizationUser(queryEngine, scope, userId)) return
+  const { translate } = await resolveTranslations()
+  const message = translate('itad.jobs.errors.pickup_coordinator_invalid', 'Select a user from this organization')
+  throw itadJobError(400, 'pickup_coordinator_invalid', message, { pickupCoordinatorUserId: message })
+}
+
 async function mapUniqueViolation(err: unknown): Promise<never> {
   const { translate } = await resolveTranslations()
   if (isUniqueViolation(err, CUSTOMER_REFERENCE_INDEX)) {
@@ -139,6 +149,7 @@ function currentValues(job: ItadJob): JobFieldValues {
     scheduledPickupAt: job.scheduledPickupAt ?? null,
     expectedAssetEstimate: job.expectedAssetEstimate ?? null,
     defaultDataBearing: job.defaultDataBearing ?? null,
+    pickupCoordinatorUserId: job.pickupCoordinatorUserId ?? null,
   }
 }
 
@@ -155,6 +166,7 @@ export function serializeJob(job: ItadJob): SerializedJob {
     expectedAssetEstimate: job.expectedAssetEstimate ?? null,
     scheduledPickupAt: job.scheduledPickupAt ? job.scheduledPickupAt.toISOString() : null,
     defaultDataBearing: job.defaultDataBearing ?? null,
+    pickupCoordinatorUserId: job.pickupCoordinatorUserId ?? null,
   }
 }
 
@@ -201,6 +213,7 @@ const createJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
     const parsed = itadJobCreateSchema.parse(rawInput)
     const scope = await ensureScope(ctx)
     await assertCustomerCompany(ctx, scope, parsed.customerId)
+    if (parsed.pickupCoordinatorUserId) await assertPickupCoordinator(ctx, scope, parsed.pickupCoordinatorUserId)
 
     const em = ctx.container.resolve<EntityManager>('em').fork()
     const createdAt = new Date()
@@ -222,6 +235,7 @@ const createJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
               expectedAssetEstimate: parsed.expectedAssetEstimate ?? null,
               scheduledPickupAt: toDateOrNull(parsed.scheduledPickupAt),
               defaultDataBearing: parsed.defaultDataBearing ?? null,
+              pickupCoordinatorUserId: parsed.pickupCoordinatorUserId ?? null,
               createdAt,
               updatedAt: createdAt,
             })
@@ -284,6 +298,7 @@ const updateJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
     if (parsed.expectedAssetEstimate !== undefined) changes.expectedAssetEstimate = parsed.expectedAssetEstimate
     if (parsed.scheduledPickupAt !== undefined) changes.scheduledPickupAt = toDateOrNull(parsed.scheduledPickupAt)
     if (parsed.defaultDataBearing !== undefined) changes.defaultDataBearing = parsed.defaultDataBearing
+    if (parsed.pickupCoordinatorUserId !== undefined) changes.pickupCoordinatorUserId = parsed.pickupCoordinatorUserId
 
     const violation = findEditabilityViolation(job, currentValues(job), changes)
     if (violation) {
@@ -294,6 +309,9 @@ const updateJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
     }
     if (changes.customerId !== undefined && changes.customerId !== job.customerId) {
       await assertCustomerCompany(ctx, scope, changes.customerId)
+    }
+    if (changes.pickupCoordinatorUserId && changes.pickupCoordinatorUserId !== (job.pickupCoordinatorUserId ?? null)) {
+      await assertPickupCoordinator(ctx, scope, changes.pickupCoordinatorUserId)
     }
 
     try {
@@ -307,6 +325,7 @@ const updateJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
             if (changes.expectedAssetEstimate !== undefined) job.expectedAssetEstimate = changes.expectedAssetEstimate
             if (changes.scheduledPickupAt !== undefined) job.scheduledPickupAt = changes.scheduledPickupAt
             if (changes.defaultDataBearing !== undefined) job.defaultDataBearing = changes.defaultDataBearing
+            if (changes.pickupCoordinatorUserId !== undefined) job.pickupCoordinatorUserId = changes.pickupCoordinatorUserId
           },
         ],
         { transaction: true, label: 'itad.jobs.update' },

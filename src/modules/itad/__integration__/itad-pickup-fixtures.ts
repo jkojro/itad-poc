@@ -88,3 +88,11 @@ export async function changeTaskOutsideApi(
     }
   })
 }
+
+/** Records a sync failure on the job's current link, as a failed `customers` command would. */
+export async function recordPickupSyncError(jobId: string, error: string): Promise<void> {
+  await withClient(async (client) => {
+    const result = await client.query('update itad_job_pickup_tasks set last_error = $1 where job_id = $2 and is_current', [error, jobId])
+    expect(result.rowCount, `no current pickup task link for job ${jobId} in the test database (DATABASE_URL)`).toBe(1)
+  })
+}

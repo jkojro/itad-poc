@@ -24,6 +24,12 @@ export const injectionTable: ModuleInjectionTable = {
     groupId: 'itad-jobs',
     groupLabel: 'ITAD Jobs',
   },
+  // "Go to job" box in the customers interaction form; the calendar's event editor renders
+  // it above its fields. The widget shows only for pickup tasks (pickup calendar spec).
+  'crud-form:customers.customer_interaction': {
+    widgetId: 'itad.injection.pickup-task-job-link',
+    priority: 10,
+  },
 }
 
 export default injectionTable

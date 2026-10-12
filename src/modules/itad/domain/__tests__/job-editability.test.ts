@@ -16,14 +16,15 @@ const current: JobFieldValues = {
   scheduledPickupAt: pickup,
   expectedAssetEstimate: 500,
   defaultDataBearing: null,
+  pickupCoordinatorUserId: null,
 }
 
 const job = (status: ItadJobStatus, statusBeforeHold: ItadJobStatus | null = null) => ({ status, statusBeforeHold })
 
 describe('getEditableFields (spec: Field editability by status)', () => {
   it.each([
-    ['draft', ['customerId', 'name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing']],
-    ['scheduled', ['name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing']],
+    ['draft', ['customerId', 'name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing', 'pickupCoordinatorUserId']],
+    ['scheduled', ['name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing', 'pickupCoordinatorUserId']],
     ['in_transit', ['name', 'customerReference', 'expectedAssetEstimate', 'defaultDataBearing']],
     ['receiving', ['name', 'customerReference', 'defaultDataBearing']],
     ['processing', ['name', 'customerReference']],
@@ -102,5 +103,23 @@ describe('isTerminalStatus', () => {
     expect(isTerminalStatus('cancelled')).toBe(true)
     expect(isTerminalStatus('on_hold')).toBe(false)
     expect(isTerminalStatus('draft')).toBe(false)
+  })
+})
+
+describe('pickupCoordinatorUserId (pickup calendar spec REQ-513)', () => {
+  const coordinator = '33333333-3333-4333-8333-333333333333'
+
+  it('can be set and cleared while draft or scheduled, also on hold from scheduled', () => {
+    for (const subject of [job('draft'), job('scheduled'), job('on_hold', 'scheduled')]) {
+      expect(findEditabilityViolation(subject, current, { pickupCoordinatorUserId: coordinator })).toBeNull()
+      expect(findEditabilityViolation(subject, { ...current, pickupCoordinatorUserId: coordinator }, { pickupCoordinatorUserId: null })).toBeNull()
+    }
+  })
+
+  it('is locked once the pickup happened', () => {
+    expect(findEditabilityViolation(job('in_transit'), current, { pickupCoordinatorUserId: coordinator })).toEqual({
+      field: 'pickupCoordinatorUserId',
+      reason: 'locked',
+    })
   })
 })

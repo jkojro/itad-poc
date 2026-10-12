@@ -31,5 +31,17 @@ export type ItadJobListItem = {
   completedAt: string | null
   createdAt: string | null
   updatedAt: string | null
+  /** Organization user who coordinates the pickup (pickup calendar spec). */
+  pickupCoordinatorUserId: string | null
+  pickupCoordinator?: { id: string; name: string | null } | null
+  /** Single-record reads only: the pickup task in the calendar and how many the job had. */
+  pickupTask?: {
+    interactionId: string
+    state: 'creating' | 'planned' | 'completed' | 'cancelled' | 'lost'
+    scheduledAt: string
+    lastError: string | null
+    lastSyncedAt: string | null
+  } | null
+  pickupTaskHistoryCount?: number
   editableFields?: string[]
 }

@@ -27,6 +27,10 @@ export type JobListItem = {
   expectedAssetEstimate?: number | null
   updatedAt: string | null
   editableFields?: string[]
+  pickupCoordinatorUserId?: string | null
+  pickupCoordinator?: { id: string; name: string | null } | null
+  pickupTask?: { interactionId: string; state: string; scheduledAt: string; lastError: string | null; lastSyncedAt: string | null } | null
+  pickupTaskHistoryCount?: number
 }
 
 export const JOB_REFERENCE_PATTERN = /^ITAD-(\d{4})-(\d{5,})$/
