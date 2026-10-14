@@ -18,7 +18,7 @@ A scheduled ITAD job gets one **current pickup task** in the platform calendar (
 - going back to `scheduled` creates a new task. Earlier tasks stay as history.
 
 **Protection:**
-- Editing, cancelling or deleting any pickup task (current or historical) through the `customers` HTTP API and UI is rejected by an `itad` API interceptor.
+- Editing, completing, cancelling or deleting any pickup task (current or historical), and using the `itad-pickup` type, is rejected by an `itad` **command interceptor** on the `customers.interactions.*` commands. This covers every route, page, AI tool and module. Only the ITAD sync, identified by its own trusted marker, may change a task, and nobody may delete one.
 - Changes made around the API, such as a direct command, are reverted by the next sync.
 
 **Failures and existing jobs:**
@@ -44,7 +44,7 @@ No module needs enabling. The calendar is part of the already-enabled `customers
 | Q2 | Interaction type | (b) new `itad-pickup` value in the `activity-types` dictionary, with its own label, colour and icon |
 | Q3 | Task owner | (c) new optional job field "pickup coordinator" |
 | Q4 | Lifecycle sync | (a) full sync |
-| Q5 | Edits made in the calendar | (c) one-way; edits through the `customers` API are blocked by an `itad` API interceptor |
+| Q5 | Edits made in the calendar | (c) one-way; edits are blocked. Originally an API interceptor; since TODO-501 an `itad` command interceptor on the `customers.interactions.*` commands |
 | Q6 | Time format | (a) timed event at `scheduledPickupAt`, 60 minutes |
 | Q7 | Existing jobs | (a) one-off backfill CLI |
 | Q8 | Link back to the job | (a) job reference and URL in the task body, plus a "Pickup task" section on the job page |
@@ -92,7 +92,7 @@ A job's pickup date lives only on the job. Dispatchers and drivers plan their we
 - Touchpoints:
   - the public command bus, for writing interactions and the dictionary entry;
   - a query-engine read of the interactions `itad` created, in `module-integrations/customers.ts`;
-  - one API interceptor on `customers/interactions`.
+  - command interceptors on `customers.interactions.create` / `.update` / `.complete` / `.cancel` / `.delete` (TODO-501).
 - No ORM relation and no edits to installed code.
 
 **Sync** (`services/pickup-task-sync.ts`). It runs from a persistent post-commit subscriber on `itad.job.updated` (every job write and every transition emit it; the payload now also carries `actorUserId`) and `itad.job.deleted`, from the Retry action and from the CLI. It is a reconcile loop in short steps; no `itad` transaction is open while a `customers` command runs:
@@ -106,16 +106,23 @@ A job's pickup date lives only on the job. Dispatchers and drivers plan their we
 
 Duplicate and retried runs converge: create reuses the stored `interaction_id`, and a "row already exists" result counts as done. A failed sync never fails or rolls back the job action.
 
-**Protection.** An `itad` API interceptor on `customers/interactions` rejects:
-- `PUT` and `DELETE` of any interaction that has a link row, current or historical;
-- `POST` or `PUT` that sets `interactionType = 'itad-pickup'`.
+**Protection** (since TODO-501, 2026-10-14). The `itad` command interceptors (`src/modules/itad/commands/interceptors.ts`, ids `itad.pickup-task-guard.<command>`) run inside the command bus before the `customers` command. Whichever route, page, AI tool or module the call comes from, it passes through them.
 
-The sync calls commands, not HTTP, so it is not intercepted.
+| Command | User or any other caller | ITAD sync (trusted marker) |
+|---|---|---|
+| `create` with `interactionType: 'itad-pickup'` | blocked, `itad_pickup_type_reserved` | allowed |
+| `update` / `complete` / `cancel` of a linked task (current or history) | blocked, `itad_pickup_task_locked` | allowed |
+| `update` retyping another interaction to `itad-pickup` | blocked, `itad_pickup_type_reserved` | allowed (never used) |
+| `delete` of a linked task | blocked, `itad_pickup_task_locked` | **blocked**: history stays |
 
-**Guarantee** (stated precisely):
-- Pickup tasks cannot be changed through the `customers` HTTP API or UI.
-- A change made around the API is reverted the next time the job is synced: a job change, Retry, or the CLI.
-- Historical tasks are protected from API edits but not re-checked.
+- A linked task is checked before the reserved type. The calendar editor re-sends `interactionType: 'itad-pickup'` on every save, and the user must see the job message.
+- **Trusted marker.** The command interceptor context carries no framework "trusted system" flag: `systemActor` is not passed to interceptors. Any in-process caller can build `auth: null`, so `auth === null` alone is not trusted. The sync runs its `customers` commands inside `runAsPickupSync(...)` (`lib/pickup-sync-scope.ts`, an `AsyncLocalStorage` scope, the same mechanism `@open-mercato/cache` uses for tenant context). The interceptor allows a change only when `isPickupSyncActive()`. Request input cannot set this marker.
+- **Rejection.** `{ ok: false, status: 422, message, body: { error: <translated message>, code, reference? } }`. The CRUD factory and the hand-written `complete` / `cancel` routes map it to HTTP 422 with that body (`getCommandInterceptorHttpRejection`).
+
+**Guarantee:**
+- No caller except the ITAD sync can change or complete a pickup task, cancel it, or create an `itad-pickup` interaction through the command bus. This holds for every route and in-process caller.
+- No caller at all can delete a linked pickup task.
+- Only direct database writes bypass the guard; the next sync corrects them (REQ-507).
 
 **Alternatives rejected:**
 - A separate ITAD calendar page: duplicates the platform calendar.
@@ -138,7 +145,7 @@ cli: itad sync-pickup-tasks ─────────────────�
                                                            └─ itad_job_pickup_tasks          (one row per task)
 
 PUT/DELETE/POST /api/customers/interactions
-  └─ itad api/interceptors.ts → link lookup by interaction_id → 422 "Change the pickup on ITAD job <ref>"
+  └─ commandBus → itad commands/interceptors.ts (customers.interactions.*) → link lookup → 422 itad_pickup_task_locked
 ```
 
 **Desired state** (`desiredPickupTask(job)`):
@@ -221,10 +228,11 @@ Migration: one migration with the table, its indexes and the column, and no back
 - `GET /api/itad/pickup-tasks/lookup?interactionId=<uuid>`: the job behind a pickup task (`{ jobId, reference }`), 404 when the interaction is not a pickup task in the caller's scope. Requires `itad.jobs.view`.
 - `POST /api/itad/jobs/:id/pickup-task/sync`: runs the sync for one job now and returns the resulting `pickupTask`. Requires `itad.jobs.manage`; has `metadata` and `openApi`. Idempotent.
 
-**Interceptor** (`api/interceptors.ts`, id `itad.pickup-task-guard`, target `customers/interactions`):
-- `PUT` / `DELETE`: the interaction id (body `id` or query `id`) has a link row in the caller's tenant and organization → 422 with the message "The date and details of this pickup can only be changed on ITAD job <ref>." (pl: "Datę i szczegóły tego odbioru można zmienić tylko w zleceniu ITAD <ref>.") The interceptor runner returns a rejection as `{ error: <message> }`, so the body carries the translated message, not a code.
-- `POST` / `PUT` with `interactionType === 'itad-pickup'` → 422 "This activity type is reserved for ITAD pickups."
-- Anything else passes through unchanged.
+**Pickup task guard** (`commands/interceptors.ts`, command interceptors on `customers.interactions.create|update|complete|cancel|delete`; replaces the API interceptor `api/interceptors.ts` since TODO-501):
+- Linked task: 422 `{ error: "The date and details of this pickup can only be changed on ITAD job <ref>.", code: "itad_pickup_task_locked", reference }`. In Polish: "Datę i szczegóły tego odbioru można zmienić tylko w zleceniu ITAD <ref>."
+- Reserved type: 422 `{ error: "This activity type is reserved for ITAD pickups.", code: "itad_pickup_type_reserved" }`.
+- The link lookup is scoped to the caller's tenant and selected organization, so a job of another organization is never revealed.
+- Everything else passes through unchanged.
 
 **CLI:** `yarn mercato itad sync-pickup-tasks [--tenant <id>] [--org <id>] [--job <id>] [--dry-run]`.
 - Ensures the dictionary entry.
@@ -271,7 +279,7 @@ All strings go into `i18n/pl.json` and `i18n/en.json`. The Polish copy uses "odb
 | REQ-506 | Duplicate, parallel or retried syncs never create a second current task for a job. |
 | REQ-507 | The sync compares the actual interaction with the desired state and corrects drift in date, owner, title, body or status, or recreates a deleted task. |
 | REQ-508 | A failed sync never fails or rolls back the job action. `last_error` is shown on the job page, and Retry runs the sync again. |
-| REQ-509 | `PUT` / `DELETE` through `/api/customers/interactions` of any linked interaction, current or historical → 422 with the job reference. Other interactions are unaffected. |
+| REQ-509 | Update, complete, cancel or delete of any linked interaction, current or historical, through any route or command call except the ITAD sync → 422 `itad_pickup_task_locked` with the job reference. Delete is refused for the sync too. Other interactions are unaffected. |
 | REQ-510 | Creating or retyping any interaction to `itad-pickup` through the API → 422. |
 | REQ-511 | The CLI backfills `scheduled` and `in_transit` jobs, is idempotent, and supports `--dry-run`. |
 | REQ-512 | `customers` commands run in the system command context scoped to the job's organization. They work for any user allowed to run the job action, whatever their `customers` features. |
@@ -282,7 +290,7 @@ All strings go into `i18n/pl.json` and `i18n/en.json`. The Polish copy uses "odb
 ## Edge Cases & Failure Scenarios
 
 - **`customers` command fails** (company soft-deleted, validation): the link keeps its state, `last_error` holds the code, and the job page offers Retry.
-- **Task changed or deleted around the API** (a direct command, an AI tool): the next sync of that job detects it and corrects it (REQ-507). Historical tasks are not re-checked.
+- **Task changed outside the command bus** (a direct database write): the next sync of that job detects it and corrects it (REQ-507). Historical tasks are not re-checked. Command callers, including AI tools, are blocked by the guard.
 - **Two syncs for one job at once:** only one can insert the current `creating` link (partial unique index). For updates both read the job freshly. The finalize step re-runs if the job changed meanwhile, so the last write reflects the latest job.
 - **Crash between intent and command:** the `creating` link keeps its `interaction_id`, and the next sync creates the task with it.
 - **Crash between command and finalize:** the next sync finds the interaction and finalizes.
@@ -293,11 +301,67 @@ All strings go into `i18n/pl.json` and `i18n/en.json`. The Polish copy uses "odb
 
 ## Risks & Impact Review
 
-- **No contract change in `customers`.** The interceptor narrows what its API accepts for linked interactions and the reserved type only. That is an extension of installed behaviour and is documented here.
+- **No contract change in `customers`.** The command interceptors narrow what its commands accept, for linked interactions and the reserved type only. That is an extension of installed behaviour and is documented here.
 - **`itad` changes are additive:** a new table and column, optional request and response fields, two new endpoints, a subscriber, an interceptor and a CLI.
-- **Interceptor cost:** one indexed lookup by `interaction_id` on interaction `PUT`/`DELETE`, plus a field check on `POST`/`PUT`.
+- **Interceptor cost:** one indexed lookup by `interaction_id` per update, complete, cancel or delete of any interaction, plus a field check on create and update.
 - **System context:** `customers` commands run with no user. This is limited to the job's own organization and to interactions `itad` owns through links. It never acts on input from outside `itad`.
 - **Rollback:** disable the subscriber and the interceptor. Existing tasks stay as ordinary interactions and can be cancelled in bulk by type through the `customers` API, because the interceptor is off.
+
+## Known Gaps (TODO)
+
+### TODO-501 — the lock does not cover the separate complete / cancel routes
+
+**Status:** **resolved 2026-10-14.** Severity was high and it blocked the Epic 5 release: the spec promised that the job is the only place to change a pickup, and a normal company-page action broke that. Found 2026-10-13. The text below describes the problem as found; the resolution follows it.
+
+**Problem.** The protection is an **API interceptor** (`src/modules/itad/api/interceptors.ts`, id `itad.pickup-task-guard`, `targetRoute: 'customers/interactions'`). An API interceptor runs only inside a route built with `makeCrudRoute`: `applyInterceptorsBefore` in `@open-mercato/shared/src/lib/crud/factory.ts` reads the registry with `getApiInterceptorsForRoute(routePath, method)`, and `routeMatches` compares `targetRoute` with the path exactly. The `customers` module also has hand-written interaction routes that call the commands directly and never read the API interceptor registry:
+
+| Route | Command | Feature | UI callers |
+|---|---|---|---|
+| `POST /api/customers/interactions/complete` (`customers/api/interactions/complete/route.ts`) | `customers.interactions.complete` | `customers.interactions.manage` | "Mark as done" on the company/person page: `components/detail/ActivityCard.tsx`, `components/detail/ActivitiesSection.tsx`, `components/detail/hooks/useInteractionMutations.ts`, `components/detail/hooks/useInteractions.ts` |
+| `POST /api/customers/interactions/cancel` (`customers/api/interactions/cancel/route.ts`) | `customers.interactions.cancel` | `customers.interactions.manage` | `components/detail/hooks/useInteractions.ts` |
+
+The pickup task sits on the job's customer company, so it is listed in that company's Activities. Any user with `customers.interactions.manage` can **mark a pickup task done or cancel it from the company page**, and the call succeeds. The calendar itself is not affected: it uses only the main route (`PUT` / `DELETE /api/customers/interactions`), where the interceptor works.
+
+Out of scope: `/api/customers/interactions/[id]/visibility` changes only `email` interactions, so it cannot reach a pickup task.
+
+**Effect today:**
+- The task shows "done" or "canceled" in the calendar and in the company Activities, while the job is still `scheduled`.
+- The link in `itad_job_pickup_tasks` still says `planned`, so the job page does not show the discrepancy.
+- Drift correction (REQ-507) restores the task to `planned` only at the next sync of that job: a job change, "Retry calendar sync", or the CLI. Until then calendar and job disagree.
+- The same applies to any other caller that runs these commands as a user (e.g. an AI tool).
+
+**Resolution (2026-10-14), following the review:**
+- **One protection layer.** The command interceptors in `commands/interceptors.ts` replace the API interceptor, which is removed. The reserved-type rule moved there too, so the rule exists once.
+- **Delete is refused for everyone,** including the sync, so earlier pickup tasks stay as history.
+- **Trusted sync marker.** The interceptor context offers no framework trusted flag, and `auth: null` can be built by any in-process caller, so the sync uses its own `AsyncLocalStorage` marker (`lib/pickup-sync-scope.ts`).
+- **Stable codes:** `itad_pickup_task_locked` and `itad_pickup_type_reserved`, returned with HTTP 422.
+- **Generated registration checked:** `command-interceptors.generated.ts` is used by the app, and the compiled `command-interceptors.generated.mjs` by the CLI and workers. Both contain `itad.pickup-task-guard.*`.
+- **Tests:**
+  - 21 unit tests: every command × user / trusted sync / system without the marker; delete refused for the sync; delete input shapes; calendar save with the pickup type; reserved type on create and retype; ordinary interactions pass; other organization not revealed.
+  - TC-ITAD-405 covers every route: `PUT`, `DELETE`, `complete`, `cancel`, reserved create and retype, and ordinary interactions through each route.
+  - TC-ITAD-404 checks that a historical task is protected on `PUT`, `cancel` and `DELETE`.
+  - TC-ITAD-401…407 are the sync regression.
+
+**Original plan** (kept for reference):
+- Add a **command interceptor** in `src/modules/itad/commands/interceptors.ts` (export `interceptors: CommandInterceptor[]`; `yarn generate` registers it through `command-interceptors.generated`).
+- Target `customers.interactions.update`, `customers.interactions.complete`, `customers.interactions.cancel` and `customers.interactions.delete`.
+- In `beforeExecute`, for an interaction that has a link in `itad_job_pickup_tasks` in the caller's tenant/organization:
+  - block with `{ ok: false }` and HTTP 422, carrying the same message as today ("The date and details of this pickup can only be changed on ITAD job <ref>.");
+  - **allow** executions without a user (`auth === null`): the `itad` sync runs the commands in the system command context.
+- Command interceptors run inside the command bus for every caller, so the lock no longer depends on which route was used.
+- Keep the API interceptor only for reserving the `itad-pickup` type on `POST` / `PUT`, or move that check into the command interceptor on `customers.interactions.create` / `.update` as well.
+- Before implementing, check two things with `om-framework-context`:
+  - how a command interceptor rejection becomes an HTTP status. The hand-written routes map it with `getCommandInterceptorHttpRejection`;
+  - that `auth === null` is reliably the system context and not reachable from a user request.
+
+**Tests to add:**
+- unit tests of the command interceptor: linked + user → blocked, linked + system → allowed, unlinked → allowed;
+- integration: `POST /api/customers/interactions/complete` and `/cancel` on a pickup task → 422 with the job reference, task unchanged; the same on an ordinary interaction → 200;
+- regression: the sync still creates, updates, completes and cancels tasks (TC-ITAD-401…407).
+
+**Related fix already made (2026-10-13, not yet merged):**
+- The calendar editor re-sends `interactionType: 'itad-pickup'` on every save. The API interceptor used to check the reserved type first, so a calendar save showed "This activity type is reserved for ITAD pickups." instead of the job message.
+- It now checks the link first on `PUT` / `DELETE`. There is a regression unit test, and TC-ITAD-405 has a case for a `PUT` with `interactionType`.
 
 ## Phasing
 
@@ -313,7 +377,7 @@ The phases are separate PRs; each leaves the app working.
 2. `domain/pickup-task.ts`: `desiredPickupTask` and `planPickupTaskStep`, with unit tests for every row of the two tables above, including deleted jobs and terminal current links.
 3. `module-integrations/customers.ts`: `readPickupTask` (query engine; confirm the `customers:customer_interaction` entity id in the generated ids), the command helpers in the system context, and `ensurePickupActivityType`. `setup.ts` `seedDefaults` ensures the dictionary entry.
 4. `services/pickup-task-sync.ts` (read → decide → intent → command → finalize, re-run on job change) and `subscribers/sync-pickup-task.ts`.
-5. `api/interceptors.ts` guard, with unit tests: linked current or historical → 422, unlinked → pass, reserved type → 422, foreign scope → pass.
+5. `api/interceptors.ts` guard, with unit tests: linked current or historical → 422, unlinked → pass, reserved type → 422, foreign scope → pass. *(Replaced by the command interceptors in `commands/interceptors.ts`, TODO-501.)*
 6. Integration tests:
    - TC-ITAD-401: schedule creates a task visible in `/api/customers/interactions`.
    - TC-ITAD-402: a date change updates it; dispatch completes it.
@@ -373,7 +437,7 @@ Validation per phase: `yarn generate && yarn typecheck && yarn lint && yarn ds:c
 - `typecheck`, `lint`, `ds:check`, `test` (281/281) and `build` pass.
 
 **Deviations recorded in this spec:**
-- The interceptor rejection body is `{ error: <message> }`, the shape the interceptor runner returns.
+- Phase 1's API interceptor returned `{ error: <message> }`. Since TODO-501 the command interceptors return `{ error, code, reference? }`.
 - `OM_ITAD_CALENDAR_LOCALE` selects the task text language.
 - A `creating` link whose task never appeared is marked `lost` when the job no longer needs a planned task.
 - Phase 1 added the coordinator column but did not use it; since Phase 2 the coordinator is the task owner.

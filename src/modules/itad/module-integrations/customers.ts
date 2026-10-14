@@ -8,6 +8,7 @@ import {
   type ActualPickupTask,
   type PickupTaskContent,
 } from '../domain/pickup-task'
+import { runAsPickupSync } from '../lib/pickup-sync-scope'
 
 /**
  * Reads customer companies owned by the installed `customers` module.
@@ -122,9 +123,13 @@ function systemCommandContext(container: Resolver, scope: CustomerScope): Comman
   }
 }
 
+/**
+ * Runs a `customers` command as the pickup task sync: system context plus the trusted
+ * sync marker, which the `itad` pickup task guard lets through (spec TODO-501).
+ */
 async function runCustomersCommand(container: Resolver, scope: CustomerScope, commandId: string, input: Record<string, unknown>) {
   const commandBus = container.resolve<CommandBus>('commandBus')
-  await commandBus.execute(commandId, { input, ctx: systemCommandContext(container, scope) })
+  await runAsPickupSync(() => commandBus.execute(commandId, { input, ctx: systemCommandContext(container, scope) }))
 }
 
 const isUniqueViolation = (error: unknown): boolean => {

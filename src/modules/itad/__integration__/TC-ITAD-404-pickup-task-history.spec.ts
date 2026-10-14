@@ -33,6 +33,10 @@ test.describe('TC-ITAD-404: pickup task history', () => {
 
       const editOld = await apiRequest(request, 'PUT', '/api/customers/interactions', { token, data: { id: first.id, title: 'edited' } })
       expect(editOld.status()).toBe(422)
+      const cancelOld = await apiRequest(request, 'POST', '/api/customers/interactions/cancel', { token, data: { id: first.id } })
+      expect(cancelOld.status()).toBe(422)
+      const deleteOld = await apiRequest(request, 'DELETE', `/api/customers/interactions?id=${first.id}`, { token })
+      expect(deleteOld.status()).toBe(422)
     } finally {
       await deleteEntityIfExists(request, token, '/api/customers/companies', companyId)
     }
