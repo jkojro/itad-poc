@@ -25,6 +25,13 @@ test.describe('TC-ITAD-405: pickup task locked in the customers API', () => {
       const edit = await apiRequest(request, 'PUT', '/api/customers/interactions', { token, data: { id: task.id, title: 'moved by hand' } })
       expect(edit.status()).toBe(422)
       expect(JSON.stringify(await readJsonSafe(edit))).toContain(job.internalReference)
+      // The calendar editor re-sends the interaction type with every save.
+      const editorSave = await apiRequest(request, 'PUT', '/api/customers/interactions', {
+        token,
+        data: { id: task.id, interactionType: PICKUP_TYPE, title: 'moved in the calendar' },
+      })
+      expect(editorSave.status()).toBe(422)
+      expect(JSON.stringify(await readJsonSafe(editorSave))).toContain(job.internalReference)
       const cancel = await apiRequest(request, 'PUT', '/api/customers/interactions', { token, data: { id: task.id, status: 'canceled' } })
       expect(cancel.status()).toBe(422)
       const remove = await apiRequest(request, 'DELETE', `/api/customers/interactions?id=${encodeURIComponent(task.id)}`, { token })

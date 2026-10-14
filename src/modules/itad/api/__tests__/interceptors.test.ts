@@ -64,13 +64,23 @@ describe('itad.pickup-task-guard (pickup calendar spec "Protection")', () => {
     expect(await guard.before!(request({ method: 'POST', body: { interactionType: 'task' } }), ctx)).toEqual({ ok: true })
   })
 
-  it('reserves the itad-pickup type on create and update', async () => {
-    const { ctx, filters } = context()
-    for (const method of ['POST', 'PUT'] as const) {
-      const result = await guard.before!(request({ method, body: { interactionType: 'itad-pickup' } }), ctx)
-      expect(result).toMatchObject({ ok: false, statusCode: 422 })
-    }
-    expect(filters).toHaveLength(0)
+  it('reserves the itad-pickup type on create and on retyping another interaction', async () => {
+    const { ctx } = context()
+    const created = await guard.before!(request({ method: 'POST', body: { interactionType: 'itad-pickup' } }), ctx)
+    expect(created).toMatchObject({ ok: false, statusCode: 422, message: 'This activity type is reserved for ITAD pickups.' })
+    const retyped = await guard.before!(
+      request({ body: { id: '44444444-4444-4444-8444-444444444444', interactionType: 'itad-pickup' } }),
+      ctx,
+    )
+    expect(retyped).toMatchObject({ ok: false, statusCode: 422, message: 'This activity type is reserved for ITAD pickups.' })
+  })
+
+  it('answers a calendar editor save of a pickup task with the job message, not the reserved type', async () => {
+    const { ctx } = context()
+    // The calendar editor re-sends the interaction type with every save.
+    const result = await guard.before!(request({ body: { id: LINKED, interactionType: 'itad-pickup', title: 'Moved' } }), ctx)
+    expect(result).toMatchObject({ ok: false, statusCode: 422 })
+    expect(result.message).toContain('can only be changed on ITAD job ITAD-2026-00010')
   })
 
   it('looks the link up only in the caller tenant and organization', async () => {

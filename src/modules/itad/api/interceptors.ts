@@ -27,6 +27,27 @@ export const interceptors: ApiInterceptor[] = [
     methods: ['POST', 'PUT', 'DELETE'],
     priority: 100,
     async before(request, context) {
+      // A linked pickup task first: the calendar editor re-sends `interactionType:
+      // 'itad-pickup'` on every save, and the user must see the "change it on the job" message.
+      if (request.method !== 'POST') {
+        const interactionId = interactionIdOf(request)
+        if (interactionId && context.tenantId) {
+          const em = (context.em as EntityManager).fork()
+          const filter: Record<string, unknown> = { tenantId: context.tenantId, interactionId }
+          if (context.organizationId) filter.organizationId = context.organizationId
+          const link = await em.findOne(ItadJobPickupTask, filter as FilterQuery<ItadJobPickupTask>, { populate: ['job'] })
+          if (link) {
+            const { translate } = await resolveTranslations()
+            return {
+              ok: false,
+              statusCode: 422,
+              message: translate('itad.pickupTask.errors.locked', 'The date and details of this pickup can only be changed on ITAD job {reference}.', {
+                reference: link.job.internalReference,
+              }),
+            }
+          }
+        }
+      }
       if (request.method !== 'DELETE' && request.body?.interactionType === PICKUP_TASK_INTERACTION_TYPE) {
         const { translate } = await resolveTranslations()
         return {
@@ -35,24 +56,7 @@ export const interceptors: ApiInterceptor[] = [
           message: translate('itad.pickupTask.errors.typeReserved', 'This activity type is reserved for ITAD pickups.'),
         }
       }
-      if (request.method === 'POST') return { ok: true }
-      const interactionId = interactionIdOf(request)
-      if (!interactionId || !context.tenantId) return { ok: true }
-
-      const em = (context.em as EntityManager).fork()
-      const filter: Record<string, unknown> = { tenantId: context.tenantId, interactionId }
-      if (context.organizationId) filter.organizationId = context.organizationId
-      const link = await em.findOne(ItadJobPickupTask, filter as FilterQuery<ItadJobPickupTask>, { populate: ['job'] })
-      if (!link) return { ok: true }
-
-      const { translate } = await resolveTranslations()
-      return {
-        ok: false,
-        statusCode: 422,
-        message: translate('itad.pickupTask.errors.locked', 'The date and details of this pickup can only be changed on ITAD job {reference}.', {
-          reference: link.job.internalReference,
-        }),
-      }
+      return { ok: true }
     },
   },
 ]

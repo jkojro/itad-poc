@@ -113,7 +113,7 @@ Duplicate and retried runs converge: create reuses the stored `interaction_id`, 
 The sync calls commands, not HTTP, so it is not intercepted.
 
 **Guarantee** (stated precisely):
-- Pickup tasks cannot be changed through the `customers` HTTP API or UI.
+- Pickup tasks cannot be changed through the `customers` main interactions route (`/api/customers/interactions`), which the calendar uses. **Not yet true for the separate complete/cancel routes used on the company page — see "Known Gaps (TODO)" TODO-501.**
 - A change made around the API is reverted the next time the job is synced: a job change, Retry, or the CLI.
 - Historical tasks are protected from API edits but not re-checked.
 
@@ -298,6 +298,50 @@ All strings go into `i18n/pl.json` and `i18n/en.json`. The Polish copy uses "odb
 - **Interceptor cost:** one indexed lookup by `interaction_id` on interaction `PUT`/`DELETE`, plus a field check on `POST`/`PUT`.
 - **System context:** `customers` commands run with no user. This is limited to the job's own organization and to interactions `itad` owns through links. It never acts on input from outside `itad`.
 - **Rollback:** disable the subscriber and the interceptor. Existing tasks stay as ordinary interactions and can be cancelled in bulk by type through the `customers` API, because the interceptor is off.
+
+## Known Gaps (TODO)
+
+### TODO-501 — the lock does not cover the separate complete / cancel routes
+
+**Status:** open, found 2026-10-13, deferred.
+
+**Problem.** The protection is an **API interceptor** (`src/modules/itad/api/interceptors.ts`, id `itad.pickup-task-guard`, `targetRoute: 'customers/interactions'`). An API interceptor runs only inside a route built with `makeCrudRoute`: `applyInterceptorsBefore` in `@open-mercato/shared/src/lib/crud/factory.ts` reads the registry with `getApiInterceptorsForRoute(routePath, method)`, and `routeMatches` compares `targetRoute` with the path exactly. The `customers` module also has hand-written interaction routes that call the commands directly and never read the API interceptor registry:
+
+| Route | Command | Feature | UI callers |
+|---|---|---|---|
+| `POST /api/customers/interactions/complete` (`customers/api/interactions/complete/route.ts`) | `customers.interactions.complete` | `customers.interactions.manage` | "Mark as done" on the company/person page: `components/detail/ActivityCard.tsx`, `components/detail/ActivitiesSection.tsx`, `components/detail/hooks/useInteractionMutations.ts`, `components/detail/hooks/useInteractions.ts` |
+| `POST /api/customers/interactions/cancel` (`customers/api/interactions/cancel/route.ts`) | `customers.interactions.cancel` | `customers.interactions.manage` | `components/detail/hooks/useInteractions.ts` |
+
+The pickup task sits on the job's customer company, so it is listed in that company's Activities. Any user with `customers.interactions.manage` can **mark a pickup task done or cancel it from the company page**, and the call succeeds. The calendar itself is not affected: it uses only the main route (`PUT` / `DELETE /api/customers/interactions`), where the interceptor works.
+
+Out of scope: `/api/customers/interactions/[id]/visibility` changes only `email` interactions, so it cannot reach a pickup task.
+
+**Effect today:**
+- The task shows "done" or "canceled" in the calendar and in the company Activities, while the job is still `scheduled`.
+- The link in `itad_job_pickup_tasks` still says `planned`, so the job page does not show the discrepancy.
+- Drift correction (REQ-507) restores the task to `planned` only at the next sync of that job: a job change, "Retry calendar sync", or the CLI. Until then calendar and job disagree.
+- The same applies to any other caller that runs these commands as a user (e.g. an AI tool).
+
+**Planned fix:**
+- Add a **command interceptor** in `src/modules/itad/commands/interceptors.ts` (export `interceptors: CommandInterceptor[]`; `yarn generate` registers it through `command-interceptors.generated`).
+- Target `customers.interactions.update`, `customers.interactions.complete`, `customers.interactions.cancel` and `customers.interactions.delete`.
+- In `beforeExecute`, for an interaction that has a link in `itad_job_pickup_tasks` in the caller's tenant/organization:
+  - block with `{ ok: false }` and HTTP 422, carrying the same message as today ("The date and details of this pickup can only be changed on ITAD job <ref>.");
+  - **allow** executions without a user (`auth === null`): the `itad` sync runs the commands in the system command context.
+- Command interceptors run inside the command bus for every caller, so the lock no longer depends on which route was used.
+- Keep the API interceptor only for reserving the `itad-pickup` type on `POST` / `PUT`, or move that check into the command interceptor on `customers.interactions.create` / `.update` as well.
+- Before implementing, check two things with `om-framework-context`:
+  - how a command interceptor rejection becomes an HTTP status. The hand-written routes map it with `getCommandInterceptorHttpRejection`;
+  - that `auth === null` is reliably the system context and not reachable from a user request.
+
+**Tests to add:**
+- unit tests of the command interceptor: linked + user → blocked, linked + system → allowed, unlinked → allowed;
+- integration: `POST /api/customers/interactions/complete` and `/cancel` on a pickup task → 422 with the job reference, task unchanged; the same on an ordinary interaction → 200;
+- regression: the sync still creates, updates, completes and cancels tasks (TC-ITAD-401…407).
+
+**Related fix already made (2026-10-13, not yet merged):**
+- The calendar editor re-sends `interactionType: 'itad-pickup'` on every save. The API interceptor used to check the reserved type first, so a calendar save showed "This activity type is reserved for ITAD pickups." instead of the job message.
+- It now checks the link first on `PUT` / `DELETE`. There is a regression unit test, and TC-ITAD-405 has a case for a `PUT` with `interactionType`.
 
 ## Phasing
 
