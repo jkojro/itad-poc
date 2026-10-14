@@ -6,6 +6,7 @@ import { CrudForm, type CrudField, type CrudFormGroup } from '@open-mercato/ui/b
 import { ErrorMessage, RecordNotFoundState } from '@open-mercato/ui/backend/detail'
 import { createCrud, deleteCrud, fetchCrudList, updateCrud } from '@open-mercato/ui/backend/utils/crud'
 import { withFlash } from '@open-mercato/ui/backend/utils/flash'
+import { readApiResultOrThrow } from '@open-mercato/ui/backend/utils/apiCall'
 import { StatusBadge } from '@open-mercato/ui/primitives/status-badge'
 import { useT } from '@open-mercato/shared/lib/i18n/context'
 import { CompanySelectField } from '@open-mercato/core/modules/customers/components/formConfig'
@@ -53,6 +54,8 @@ export type JobFormValues = {
   expectedAssetEstimate: number | string | null
   scheduledPickupAt: string | null
   defaultDataBearing: DataBearingChoice
+  /** `''` = no coordinator. */
+  pickupCoordinatorUserId: string
   // Carries the optimistic-lock version: `CrudForm` derives the expected-version
   // header from `initialValues.updatedAt` for update AND delete.
   updatedAt?: string | null
@@ -65,6 +68,7 @@ type JobPayload = {
   expectedAssetEstimate: number | null
   scheduledPickupAt: string | null
   defaultDataBearing: boolean | null
+  pickupCoordinatorUserId: string | null
 }
 
 /** Select value of a tri-state flag; an empty select value would render as "—". */
@@ -93,6 +97,8 @@ export function toJobPayload(values: Partial<JobFormValues>): JobPayload {
     expectedAssetEstimate: estimate === '' || estimate == null ? null : Number(estimate),
     scheduledPickupAt: typeof values.scheduledPickupAt === 'string' && values.scheduledPickupAt ? values.scheduledPickupAt : null,
     defaultDataBearing: fromDataBearingChoice(values.defaultDataBearing),
+    pickupCoordinatorUserId:
+      typeof values.pickupCoordinatorUserId === 'string' && values.pickupCoordinatorUserId ? values.pickupCoordinatorUserId : null,
   }
 }
 
@@ -105,6 +111,7 @@ export function toJobFormValues(item: ItadJobListItem): JobFormValues {
     expectedAssetEstimate: item.expectedAssetEstimate,
     scheduledPickupAt: item.scheduledPickupAt,
     defaultDataBearing: toDataBearingChoice(item.defaultDataBearing),
+    pickupCoordinatorUserId: item.pickupCoordinatorUserId ?? '',
     updatedAt: item.updatedAt,
   }
 }
@@ -128,10 +135,21 @@ function useCompanyLabels(t: Translate) {
   )
 }
 
+type CoordinatorOption = { id: string; name: string | null; email: string | null }
+
+async function loadCoordinatorOptions(query?: string) {
+  const search = (query ?? '').trim()
+  const result = await readApiResultOrThrow<{ items: CoordinatorOption[] }>(
+    `/api/itad/pickup-coordinators?search=${encodeURIComponent(search)}`,
+  )
+  return (result.items ?? []).map((user) => ({ value: user.id, label: user.name || user.email || user.id }))
+}
+
 function useJobFields(
   t: Translate,
   editable: readonly string[] | null,
   customerName: string | null,
+  coordinator: { id: string; name: string | null } | null = null,
 ): CrudField[] {
   const companyLabels = useCompanyLabels(t)
   return React.useMemo<CrudField[]>(() => {
@@ -192,6 +210,20 @@ function useJobFields(
         description: t('itad.jobs.form.fields.scheduledPickupAt.hint', 'Planned pickup / handover of the equipment. Required to schedule the job.'),
       },
       {
+        id: 'pickupCoordinatorUserId',
+        label: t('itad.jobs.form.fields.pickupCoordinator', 'Pickup coordinator'),
+        type: 'combobox',
+        readOnly: locked('pickupCoordinatorUserId'),
+        allowCustomValues: false,
+        loadOptions: loadCoordinatorOptions,
+        seedOptions: coordinator ? [{ value: coordinator.id, label: coordinator.name ?? coordinator.id }] : undefined,
+        placeholder: t('itad.jobs.form.fields.pickupCoordinator.placeholder', 'Select a user'),
+        description: t(
+          'itad.jobs.form.fields.pickupCoordinator.hint',
+          'Owner of the pickup task in the calendar. Can be changed until the equipment is picked up.',
+        ),
+      },
+      {
         id: 'defaultDataBearing',
         label: t('itad.jobs.form.fields.defaultDataBearing', 'Default: carries data'),
         type: 'select',
@@ -207,7 +239,7 @@ function useJobFields(
         ),
       },
     ]
-  }, [companyLabels, customerName, editable, t])
+  }, [companyLabels, coordinator, customerName, editable, t])
 }
 
 function formatDateTime(value: string | null): string {
@@ -276,7 +308,7 @@ function useJobGroups(t: Translate, summary: CrudFormGroup | null): CrudFormGrou
         id: 'planning',
         title: t('itad.jobs.form.groups.planning', 'Planning'),
         column: 1,
-        fields: ['scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing'],
+        fields: ['scheduledPickupAt', 'pickupCoordinatorUserId', 'expectedAssetEstimate', 'defaultDataBearing'],
       },
     ]
     if (summary) groups.push(summary)
@@ -299,6 +331,7 @@ export function JobCreateForm() {
       expectedAssetEstimate: null,
       scheduledPickupAt: null,
       defaultDataBearing: 'unknown',
+      pickupCoordinatorUserId: '',
     }),
     [preselectedCustomerId],
   )
@@ -391,7 +424,7 @@ export function JobDetailForm({ id }: { id: string }) {
   }, [id, reloadToken, t])
 
   const editable = job?.editableFields ?? []
-  const fields = useJobFields(t, editable, job?.customerName ?? null)
+  const fields = useJobFields(t, editable, job?.customerName ?? null, job?.pickupCoordinator ?? null)
   const summaryGroup = React.useMemo<CrudFormGroup | null>(
     () =>
       job
@@ -428,7 +461,7 @@ export function JobDetailForm({ id }: { id: string }) {
   const terminal = job?.status === 'completed' || job?.status === 'cancelled'
   const initialValues: JobFormValues = job
     ? toJobFormValues(job)
-    : { id, customerId: '', name: '', customerReference: '', expectedAssetEstimate: null, scheduledPickupAt: null, defaultDataBearing: 'unknown', updatedAt: null }
+    : { id, customerId: '', name: '', customerReference: '', expectedAssetEstimate: null, scheduledPickupAt: null, defaultDataBearing: 'unknown', pickupCoordinatorUserId: '', updatedAt: null }
 
   const overview = (
     <div className="space-y-6">

@@ -1,7 +1,7 @@
 # ITAD Pickup in the Calendar
 
 **Date**: 2026-10-12
-**Status**: In progress — Phase 1 implemented and verified (2026-10-12)
+**Status**: In progress — Phases 1–2 implemented and verified (2026-10-12)
 
 > Spec 5 of the app-owned `itad` module (Epic 5), after `2026-10-02-itad-jobs.md` … `2026-10-11-itad-exceptions.md`. Source: user request "Włączyć moduł kalendarza i umieszczać w nim taska dotyczącego odbioru urządzeń z etapu joba." Module rules: `src/modules/itad/AGENTS.md`.
 
@@ -210,7 +210,7 @@ Migration: one migration with the table, its indexes and the column, and no back
 ## API Contracts
 
 **Changed (additive):**
-- `POST/PUT /api/itad/jobs` accept optional `pickupCoordinatorUserId` (uuid or null). A user outside the organization → 422 `pickup_coordinator_invalid`; editability → 422 `field_not_editable`.
+- `POST/PUT /api/itad/jobs` accept optional `pickupCoordinatorUserId` (uuid or null). A user outside the organization → 400 `itad.jobs.errors.pickup_coordinator_invalid` (same shape as `customer_invalid`); editability → 400 `itad.jobs.errors.field_locked`, the module's existing code.
 - `GET /api/itad/jobs/:id` returns:
   - `pickupCoordinatorUserId`;
   - `pickupTask: { interactionId, state, scheduledAt, lastError, lastSyncedAt } | null`: the current link, or the last one if none is current;
@@ -218,6 +218,7 @@ Migration: one migration with the table, its indexes and the column, and no back
 
 **New:**
 - `GET /api/itad/pickup-coordinators`: organization users for the coordinator picker. It reuses `listOrganizationUsers` and requires `itad.jobs.manage`.
+- `GET /api/itad/pickup-tasks/lookup?interactionId=<uuid>`: the job behind a pickup task (`{ jobId, reference }`), 404 when the interaction is not a pickup task in the caller's scope. Requires `itad.jobs.view`.
 - `POST /api/itad/jobs/:id/pickup-task/sync`: runs the sync for one job now and returns the resulting `pickupTask`. Requires `itad.jobs.manage`; has `metadata` and `openApi`. Idempotent.
 
 **Interceptor** (`api/interceptors.ts`, id `itad.pickup-task-guard`, target `customers/interactions`):
@@ -242,6 +243,12 @@ Migration: one migration with the table, its indexes and the column, and no back
 - with no task yet: "A pickup task is created when the job is scheduled";
 - with `lastError`: the warning "Calendar sync failed" and a **Retry calendar sync** button for users with `itad.jobs.manage`. The button disables while running and shows success or error.
 - The history count is shown when greater than 1 ("2 earlier pickup tasks").
+
+**Calendar event editor — "Go to job" widget** (added 2026-10-12):
+- The calendar's event peek popover has no extension point and its "Edit" button depends only on the user's features, so it stays.
+- The event editor dialog is a `CrudForm` for `customers:customer_interaction`, which renders the injection spot `crud-form:customers.customer_interaction` (stacked widgets above the fields) also when embedded in the calendar.
+- `itad` injects a widget there. For a pickup task (form value `id` linked in `itad_job_pickup_tasks`) it shows: "This pickup comes from ITAD job <ref>. Change the date and details on the job." and a **Go to job** button linking to `/backend/itad/jobs/<id>`. For any other interaction it renders nothing.
+- The lookup is `GET /api/itad/pickup-tasks/lookup?interactionId=<uuid>` → `{ jobId, reference } | 404`, requiring `itad.jobs.view`. A user without it sees nothing.
 
 **Calendar:**
 - the calendar has no drag & drop of existing items (dragging on the grid only creates a new event), so a pickup is never moved by dragging;
@@ -296,7 +303,7 @@ All strings go into `i18n/pl.json` and `i18n/en.json`. The Polish copy uses "odb
 
 The phases are separate PRs; each leaves the app working.
 1. **Phase 1 — Synced and protected pickup task:** link table, domain rules, `customers` integration, sync with drift detection, subscriber, interceptor and dictionary entry. Delivering creation and protection together means no released state lets users edit pickup tasks.
-2. **Phase 2 — Coordinator and job page:** the coordinator field (data, API, form), the "Pickup task" section, and Retry.
+2. **Phase 2 — Coordinator and job page:** the coordinator field (data, API, form), the "Pickup task" section, Retry, and the "Go to job" widget in the calendar's event editor.
 3. **Phase 3 — Backfill:** the CLI.
 
 ## Implementation Plan
@@ -326,10 +333,11 @@ The phases are separate PRs; each leaves the app working.
 3. Integration tests:
    - TC-ITAD-408: the coordinator becomes the task owner; an invalid user gets 422.
    - TC-ITAD-409: UI — the job page section shows the states; Retry after a forced failure creates the task; the calendar shows the task and rejects an editor save with the message.
+   - TC-ITAD-410: UI — the calendar event editor of a pickup task shows the job reference and "Go to job" opens the job; the editor of an ordinary interaction shows no widget; the lookup API returns 404 for an ordinary interaction and 403 without `itad.jobs.view`.
 
 **Phase 3:**
 1. `cli.ts` `sync-pickup-tasks` with `--dry-run` and `--job`.
-2. TC-ITAD-410: the CLI creates tasks for a pre-existing scheduled job and a completed one for an `in_transit` job; a second run reports no changes.
+2. TC-ITAD-411: the CLI creates tasks for a pre-existing scheduled job and a completed one for an `in_transit` job; a second run reports no changes.
 
 Validation per phase: `yarn generate && yarn typecheck && yarn lint && yarn ds:check && yarn test`, then the phase's TC-ITAD tests and the TC-ITAD regression on the ephemeral environment.
 
@@ -338,7 +346,7 @@ Validation per phase: `yarn generate && yarn typecheck && yarn lint && yarn ds:c
 | Phase | Status | Evidence |
 |---|---|---|
 | 1 — Synced and protected pickup task | Done (2026-10-12) | See below |
-| 2 — Coordinator and job page | Not started | — |
+| 2 — Coordinator and job page | Done (2026-10-12) | See below |
 | 3 — Backfill | Not started | — |
 
 **Phase 1 evidence:**
@@ -349,8 +357,25 @@ Validation per phase: `yarn generate && yarn typecheck && yarn lint && yarn ds:c
 - `yarn typecheck`, `lint`, `ds:check`, `test` (279/279) and `build` pass.
 - Migration `Migration20261012063623_itad` applied to the dev database after review.
 
+**Phase 2 evidence:**
+- Coordinator in editability (`domain/job-editability.ts`, 2 new unit tests), validators, job commands (`isOrganizationUser`) and the job form (combobox from `GET /api/itad/pickup-coordinators`).
+- `pickupCoordinator`, `pickupTask` and `pickupTaskHistoryCount` in the single-job read.
+- `POST /api/itad/jobs/{id}/pickup-task/sync` (Retry).
+- `GET /api/itad/pickup-tasks/lookup`.
+- "Pickup task" section in the status panel.
+- "Go to job" widget on `crud-form:customers.customer_interaction`.
+- Integration tests:
+  - TC-ITAD-408 (API): coordinator, read model, lookup 200/404/403, lock after dispatch;
+  - TC-ITAD-409 (UI): section states, Retry clears a recorded failure;
+  - TC-ITAD-410 (UI): the calendar editor of a pickup task shows the widget and "Go to job" opens the job, while an ordinary event has no widget.
+- TC-ITAD-001 now expects `pickupCoordinatorUserId` among the draft's editable fields (additive).
+- Full TC-ITAD regression: 69/69.
+- `typecheck`, `lint`, `ds:check`, `test` (281/281) and `build` pass.
+
 **Deviations recorded in this spec:**
 - The interceptor rejection body is `{ error: <message> }`, the shape the interceptor runner returns.
 - `OM_ITAD_CALENDAR_LOCALE` selects the task text language.
 - A `creating` link whose task never appeared is marked `lost` when the job no longer needs a planned task.
-- The coordinator column is added now, but nothing reads it until Phase 2; the task owner is `null` meanwhile.
+- Phase 1 added the coordinator column but did not use it; since Phase 2 the coordinator is the task owner.
+- Phase 2 error codes follow the module's existing ones: 400 `pickup_coordinator_invalid` / `field_locked` instead of the planned 422 codes.
+- In the calendar's Agenda view a click opens the event editor directly, so the widget is one click away. In the week view the peek popover comes first.

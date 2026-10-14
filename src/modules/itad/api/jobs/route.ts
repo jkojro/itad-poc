@@ -29,6 +29,8 @@ import { countActiveManifestItems } from '../../services/manifest-import'
 import { countActiveAssets } from '../../services/reconciliation-reader'
 import { countSanitizationPending } from '../../services/sanitization-reader'
 import { countOpenExceptions } from '../../services/exception-reader'
+import { loadPickupTaskSummary } from '../../services/pickup-task-reader'
+import { PICKUP_TASK_LINK_STATES } from '../../domain/pickup-task'
 
 const id = 'id'
 const tenant_id = 'tenant_id'
@@ -45,6 +47,7 @@ const hold_reason = 'hold_reason'
 const expected_asset_estimate = 'expected_asset_estimate'
 const scheduled_pickup_at = 'scheduled_pickup_at'
 const default_data_bearing = 'default_data_bearing'
+const pickup_coordinator_user_id = 'pickup_coordinator_user_id'
 const started_at = 'started_at'
 const completed_at = 'completed_at'
 const created_at = 'created_at'
@@ -68,6 +71,7 @@ type JobRow = {
   expected_asset_estimate: number | string | null
   scheduled_pickup_at: Date | string | null
   default_data_bearing: boolean | null
+  pickup_coordinator_user_id: string | null
   started_at: Date | string | null
   completed_at: Date | string | null
   created_at: Date | string
@@ -115,7 +119,10 @@ async function decorateItems(payload: ListPayload, ctx: CrudCtx & { query: ItadJ
     const found = await loadCompanyNames(queryEngine, { tenantId, organizationId }, customerIds)
     for (const [customerId, displayName] of found) names.set(`${organizationId}:${customerId}`, displayName)
   }
-  const holders = await loadUserDisplayNames(queryEngine, tenantId, items.map((item) => item.heldByUserId))
+  const holders = await loadUserDisplayNames(queryEngine, tenantId, [
+    ...items.map((item) => item.heldByUserId),
+    ...items.map((item) => item.pickupCoordinatorUserId),
+  ])
   // Derived counter (spec "Derived values"): part of the job summary, needs only `itad.jobs.view`.
   const em = ctx.container.resolve<EntityManager>('em').fork()
   const jobIds = items.map((item) => item.id)
@@ -128,6 +135,9 @@ async function decorateItems(payload: ListPayload, ctx: CrudCtx & { query: ItadJ
   const singleRecord = typeof ctx.query.id === 'string' && ctx.query.id.length > 0
   for (const item of items) {
     item.heldBy = item.heldByUserId ? { id: item.heldByUserId, name: holders.get(item.heldByUserId) ?? null } : null
+    item.pickupCoordinator = item.pickupCoordinatorUserId
+      ? { id: item.pickupCoordinatorUserId, name: holders.get(item.pickupCoordinatorUserId) ?? null }
+      : null
     // `null` means the company was deleted (or moved out of scope) after the job was created.
     item.customerName = names.get(`${item.organizationId}:${item.customerId}`) ?? null
     item.expectedAssetCount = expectedCounts.get(item.id) ?? 0
@@ -135,6 +145,12 @@ async function decorateItems(payload: ListPayload, ctx: CrudCtx & { query: ItadJ
     item.sanitizationPendingCount = pendingCounts.get(item.id) ?? 0
     item.openExceptionCount = exceptionCounts.get(item.id) ?? 0
     if (singleRecord) item.editableFields = getEditableFields(item)
+  }
+  if (singleRecord && items.length === 1) {
+    const [item] = items
+    const summary = await loadPickupTaskSummary(em, { tenantId, organizationId: item.organizationId }, item.id)
+    item.pickupTask = summary.pickupTask
+    item.pickupTaskHistoryCount = summary.historyCount
   }
 }
 
@@ -173,6 +189,7 @@ export const { metadata, GET, POST, PUT, DELETE } = makeCrudRoute({
       expected_asset_estimate,
       scheduled_pickup_at,
       default_data_bearing,
+      pickup_coordinator_user_id,
       started_at,
       completed_at,
       created_at,
@@ -226,6 +243,7 @@ export const { metadata, GET, POST, PUT, DELETE } = makeCrudRoute({
       openExceptionCount: 0,
       scheduledPickupAt: toIso(item.scheduled_pickup_at),
       defaultDataBearing: typeof item.default_data_bearing === 'boolean' ? item.default_data_bearing : null,
+      pickupCoordinatorUserId: item.pickup_coordinator_user_id ?? null,
       startedAt: toIso(item.started_at),
       completedAt: toIso(item.completed_at),
       createdAt: toIso(item.created_at),
@@ -283,6 +301,19 @@ const itadJobListItemSchema = z.object({
   completedAt: z.string().nullable(),
   createdAt: z.string().nullable(),
   updatedAt: z.string().nullable(),
+  pickupCoordinatorUserId: z.string().uuid().nullable(),
+  pickupCoordinator: z.object({ id: z.string().uuid(), name: z.string().nullable() }).nullable().optional(),
+  pickupTask: z
+    .object({
+      interactionId: z.string().uuid(),
+      state: z.enum(PICKUP_TASK_LINK_STATES),
+      scheduledAt: z.string(),
+      lastError: z.string().nullable(),
+      lastSyncedAt: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
+  pickupTaskHistoryCount: z.number().int().optional(),
   editableFields: z.array(z.string()).optional(),
 })
 

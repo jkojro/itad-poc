@@ -11,6 +11,7 @@ export type ItadJobErrorCode =
   | 'field_not_writable'
   | 'field_locked'
   | 'customer_invalid'
+  | 'pickup_coordinator_invalid'
   | 'customer_reference_taken'
   | 'reference_conflict'
   | 'transition_not_allowed'

@@ -37,6 +37,7 @@ import {
 import type { ItadJobListItem } from './types'
 import { effectiveJobStatus } from '../domain/manifest-rules'
 import { reconciliationSummaryText, useReconciliation } from './reconciliation-ui'
+import { JobPickupTaskSection } from './JobPickupTaskSection'
 
 /** Reconciliation line shown while the job is (or was held in) receiving. */
 function ReceivingSummary({ jobId, t }: { jobId: string; t: Translate }) {
@@ -255,6 +256,8 @@ export function JobStatusPanel({ job, onChanged }: { job: ItadJobListItem; onCha
           })}
         </ul>
       )}
+
+      <JobPickupTaskSection job={job} onChanged={onChanged} />
 
       <Dialog open={dialog !== null} onOpenChange={(open) => { if (!open) setDialog(null) }}>
         <DialogContent onKeyDown={onDialogKeyDown}>

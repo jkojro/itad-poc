@@ -55,6 +55,9 @@ const scheduledPickupAtSchema = z.preprocess(
     .nullable(),
 )
 
+/** Organization user who coordinates the pickup (pickup calendar spec); empty = none. */
+const pickupCoordinatorUserIdSchema = z.preprocess(emptyToNull, z.string().uuid().nullable())
+
 export const itadJobCreateSchema = z.object({
   customerId: z.string().uuid(),
   name: nameSchema,
@@ -62,6 +65,7 @@ export const itadJobCreateSchema = z.object({
   expectedAssetEstimate: expectedAssetEstimateSchema.optional(),
   scheduledPickupAt: scheduledPickupAtSchema.optional(),
   defaultDataBearing: defaultDataBearingSchema.optional(),
+  pickupCoordinatorUserId: pickupCoordinatorUserIdSchema.optional(),
 })
 
 export const itadJobUpdateSchema = z.object({
@@ -72,6 +76,7 @@ export const itadJobUpdateSchema = z.object({
   expectedAssetEstimate: expectedAssetEstimateSchema.optional(),
   scheduledPickupAt: scheduledPickupAtSchema.optional(),
   defaultDataBearing: defaultDataBearingSchema.optional(),
+  pickupCoordinatorUserId: pickupCoordinatorUserIdSchema.optional(),
 })
 
 export const itadJobListSchema = z.object({
