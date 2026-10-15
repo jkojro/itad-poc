@@ -18,8 +18,12 @@ export type ItadJobListItem = {
   expectedAssetEstimate: number | null
   /** Derived: active manifest items of the job. */
   expectedAssetCount: number
-  /** Derived: active (received) assets of the job. */
+  /** Derived, deprecated: every active asset of the job (Total intake), unexpected included. */
   receivedAssetCount: number
+  /** Derived: Received = active manifest items matched by an active asset (operations dashboard spec Q3). */
+  matchedAssetCount: number
+  /** Derived: active assets without an active manifest item. */
+  unexpectedAssetCount: number
   /** Derived: active data-bearing assets not yet sanitized (sanitization spec Q14). */
   sanitizationPendingCount: number
   /** Derived: OPEN exceptions of the job (exceptions spec). */

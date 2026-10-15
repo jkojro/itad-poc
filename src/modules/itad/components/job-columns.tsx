@@ -76,12 +76,21 @@ export function buildJobColumns(
       cell: ({ row }) => row.original.expectedAssetCount,
     },
     {
-      id: 'receivedAssetCount',
-      accessorKey: 'receivedAssetCount',
+      // Received means matched to the manifest everywhere (operations dashboard spec Q3).
+      id: 'matchedAssetCount',
+      accessorKey: 'matchedAssetCount',
       header: t('itad.jobs.table.column.receivedAssetCount', 'Received'),
       enableSorting: false,
       meta: { priority: 5 },
-      cell: ({ row }) => row.original.receivedAssetCount,
+      cell: ({ row }) => row.original.matchedAssetCount,
+    },
+    {
+      id: 'unexpectedAssetCount',
+      accessorKey: 'unexpectedAssetCount',
+      header: t('itad.jobs.table.column.unexpectedAssetCount', 'Unexpected'),
+      enableSorting: false,
+      meta: { priority: 5 },
+      cell: ({ row }) => row.original.unexpectedAssetCount,
     },
     {
       id: 'updatedAt',

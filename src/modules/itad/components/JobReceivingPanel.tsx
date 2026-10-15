@@ -35,6 +35,7 @@ import { ASSET_STATUS_VARIANTS, assetStatusLabel, dataBearingLabel, dataBearingS
 import type { ManifestItemRow } from './manifest-types'
 import type { AssetRow, ScanListItem, ScanOutcome, ScanResponse } from './receiving-types'
 import type { ItadJobListItem } from './types'
+import { useInitialUrlFilters } from './use-url-filters'
 import type { FilterValues } from '@open-mercato/ui/backend/FilterBar'
 import { ReconciliationBadge, reconciliationLabel, useInvalidateReconciliation, useReconciliation } from './reconciliation-ui'
 
@@ -539,7 +540,8 @@ export function JobReceivingPanel({
   const [editAsset, setEditAsset] = React.useState<AssetRow | null>(null)
   const [removeAsset, setRemoveAsset] = React.useState<AssetRow | null>(null)
   const [sourceItem, setSourceItem] = React.useState<ManifestItemRow | null>(null)
-  const [filterValues, setFilterValues] = React.useState<FilterValues>({})
+  const initialFilters = useInitialUrlFilters({ reconciliation: ['matched', 'unexpected'], dataBearing: ['unknown', 'true', 'false'] })
+  const [filterValues, setFilterValues] = React.useState<FilterValues>(initialFilters)
   const reconciliationFilter = typeof filterValues.reconciliation === 'string' ? filterValues.reconciliation : ''
   const dataBearingFilter = typeof filterValues.dataBearing === 'string' ? filterValues.dataBearing : ''
   const { confirm, ConfirmDialogElement } = useConfirmDialog()
@@ -690,7 +692,8 @@ export function JobReceivingPanel({
       <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-7" aria-live="polite">
         {[
           ['expected', t('itad.receiving.counters.expected', 'Expected (manifest)'), counts?.expectedAssetCount],
-          ['received', t('itad.receiving.counters.received', 'Received'), counts?.receivedAssetCount],
+          // Every physically received device; "Received" itself means matched (operations dashboard spec Q3).
+          ['received', t('itad.receiving.counters.totalIntake', 'Total intake'), counts?.receivedAssetCount],
           ['matched', reconciliationLabel(t, 'matched'), counts?.matched],
           ['missing', reconciliationLabel(t, 'missing'), counts?.missing],
           ['unexpected', reconciliationLabel(t, 'unexpected'), counts?.unexpected],

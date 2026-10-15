@@ -22,6 +22,7 @@ import { JobManifestPanel } from './JobManifestPanel'
 import { JobReceivingPanel } from './JobReceivingPanel'
 import { JobSanitizationPanel } from './JobSanitizationPanel'
 import { JobDocumentsPanel } from './JobDocumentsPanel'
+import { JobOverviewPanel } from './JobOverviewPanel'
 import { JobExceptionsPanel } from './JobExceptionsPanel'
 import { useGrantedFeatures } from './use-granted-features'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@open-mercato/ui/primitives/tabs'
@@ -284,7 +285,11 @@ function JobSummary({ job, t }: { job: ItadJobListItem; t: Translate }) {
       </div>
       <div>
         <dt className="text-muted-foreground">{t('itad.jobs.detail.receivedAssetCount', 'Received devices')}</dt>
-        <dd>{job.receivedAssetCount}</dd>
+        <dd>{job.matchedAssetCount}</dd>
+      </div>
+      <div>
+        <dt className="text-muted-foreground">{t('itad.jobs.detail.unexpectedAssetCount', 'Unexpected devices')}</dt>
+        <dd>{job.unexpectedAssetCount}</dd>
       </div>
       <div>
         <dt className="text-muted-foreground">{t('itad.jobs.detail.startedAt', 'Started')}</dt>
@@ -475,6 +480,7 @@ export function JobDetailForm({ id }: { id: string }) {
         title={job ? `${job.internalReference} · ${job.name}` : t('itad.jobs.detail.title', 'ITAD job')}
         titleHeadingLevel={1}
         backHref={LIST_HREF}
+        contentHeader={job ? <JobOverviewPanel job={job} /> : undefined}
         entityId={ENTITY_ID}
         injectionSpotId="crud-form:itad.itad_job"
         fields={fields}

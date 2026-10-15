@@ -79,7 +79,27 @@ export async function loadReconciliationSummary(
   })
 }
 
-/** `receivedAssetCount` per job: active assets, one grouped query. */
+/**
+ * Received (matched) per job: active manifest items with an active asset of the same
+ * normalized serial, one grouped query (operations dashboard spec Q3).
+ */
+export async function countMatchedManifestItems(em: EntityManager, tenantId: string, jobIds: string[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>()
+  if (!jobIds.length) return counts
+  const rows = await em.execute<Array<{ job_id: string; count: string | number }>>(
+    `select m."job_id", count(*) as "count" from "itad_manifest_items" m
+     where m."tenant_id" = ? and m."job_id" in (${jobIds.map(() => '?').join(', ')}) and m."deleted_at" is null
+       and exists (select 1 from "itad_assets" a
+         where a."tenant_id" = m."tenant_id" and a."organization_id" = m."organization_id" and a."job_id" = m."job_id"
+           and a."serial_normalized" = m."serial_normalized" and a."deleted_at" is null)
+     group by m."job_id"`,
+    [tenantId, ...jobIds],
+  )
+  for (const row of rows) counts.set(String(row.job_id), Number(row.count))
+  return counts
+}
+
+/** Total intake per job: every active asset, matched or not, one grouped query. */
 export async function countActiveAssets(em: EntityManager, tenantId: string, jobIds: string[]): Promise<Map<string, number>> {
   const counts = new Map<string, number>()
   if (!jobIds.length) return counts
