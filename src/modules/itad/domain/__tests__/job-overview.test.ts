@@ -4,6 +4,7 @@ import {
   buildJobOverview,
   buildJobOverviewCounters,
   compareOverviewJobs,
+  matchesOperationsFilters,
   type JobOverviewSource,
   type OverviewJob,
 } from '../job-overview'
@@ -123,5 +124,22 @@ describe('groups and order (REQ-721)', () => {
       'ITAD-2026-00004',
       'ITAD-2026-00005',
     ])
+  })
+})
+
+describe('matchesOperationsFilters (REQ-712)', () => {
+  const counters = buildJobOverviewCounters(
+    source({ activeManifestItems: 5, matched: 4, activeAssets: 4, failed: 1, openExceptions: 2, sanitized: 2, certifiedSanitized: 2 }),
+    'processing',
+  )
+
+  it('keeps a job when every required condition holds, combined', () => {
+    expect(matchesOperationsFilters(counters, {})).toBe(true)
+    expect(matchesOperationsFilters(counters, { openExceptions: true, missing: true, failed: true })).toBe(true)
+  })
+
+  it('drops a job missing any required condition', () => {
+    expect(matchesOperationsFilters(counters, { missingCertificates: true })).toBe(false)
+    expect(matchesOperationsFilters(buildJobOverviewCounters(source(), 'processing'), { openExceptions: true })).toBe(false)
   })
 })

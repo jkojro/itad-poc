@@ -186,3 +186,32 @@ export function buildJobOverview(job: OverviewJob, source: JobOverviewSource): J
   const severity = jobSeverity(signals)
   return { counters, signals, severity, group: jobOverviewGroup(job, severity) }
 }
+
+// ─── Operations dashboard (spec "Operations Dashboard", Q2, REQ-712) ────────
+
+/** Every non-terminal job is active (Q2); groups keep future work apart from work in progress. */
+export const ACTIVE_JOB_STATUSES = [
+  'draft',
+  'scheduled',
+  'in_transit',
+  'receiving',
+  'processing',
+  'closeout_review',
+  'on_hold',
+] as const satisfies readonly ItadJobStatus[]
+
+/** Dashboard filters on computed values; `true` requires the condition, absent ignores it. */
+export type OperationsFilters = {
+  openExceptions?: boolean
+  missing?: boolean
+  failed?: boolean
+  missingCertificates?: boolean
+}
+
+export function matchesOperationsFilters(counters: JobOverviewCounters, filters: OperationsFilters): boolean {
+  if (filters.openExceptions && counters.openExceptions === 0) return false
+  if (filters.missing && counters.missing === 0) return false
+  if (filters.failed && counters.failed === 0) return false
+  if (filters.missingCertificates && counters.certificatesMissing === 0) return false
+  return true
+}
