@@ -17,6 +17,8 @@ const bodySchema = z.object({
   result: z.enum(['PASS', 'FAIL']),
   verificationMethod: z.enum(ITAD_VERIFICATION_METHODS),
   verificationNotes: z.string().max(2000).nullable().optional(),
+  /** Optional identifiers of the media the run covered, e.g. SSD serials (at most 10 × 100 characters). */
+  mediaIdentifiers: z.array(z.string().max(200)).max(50).nullable().optional(),
 })
 
 /** Records PASS or FAIL for an open run (`itad.sanitization.record_result`). */

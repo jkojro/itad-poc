@@ -78,6 +78,24 @@ export const features = [
     module: 'itad',
     dependsOn: ['itad.exceptions.view'],
   },
+  {
+    id: 'itad.certificates.view',
+    title: 'View and download ITAD certificates of data sanitization',
+    module: 'itad',
+    dependsOn: ['itad.assets.view'],
+  },
+  {
+    id: 'itad.certificates.issue',
+    title: 'Issue ITAD certificates of data sanitization',
+    module: 'itad',
+    dependsOn: ['itad.certificates.view'],
+  },
+  {
+    id: 'itad.certificates.manage',
+    title: 'Reissue and void ITAD certificates of data sanitization',
+    module: 'itad',
+    dependsOn: ['itad.certificates.view'],
+  },
 ]
 
 export default features

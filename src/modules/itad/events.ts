@@ -46,6 +46,13 @@ const events = [
   { id: 'itad.exception.assigned', label: 'ITAD Exception Assigned', entity: 'exception', category: 'lifecycle', clientBroadcast: true },
   // itad.exception.resolved: { exceptionId, type, outcome, actorUserId }.
   { id: 'itad.exception.resolved', label: 'ITAD Exception Resolved', entity: 'exception', category: 'lifecycle', clientBroadcast: true },
+  // Certificates (certificates spec "Events"; + jobId, assetId, actorUserId, tenantId, organizationId).
+  // itad.certificate.issued: { certificateId, certificateNumber, supersedesCertificateId }.
+  { id: 'itad.certificate.issued', label: 'ITAD Certificate Issued', entity: 'certificate', category: 'lifecycle', clientBroadcast: true },
+  // itad.certificate.superseded: { certificateId, certificateNumber, supersededByCertificateId }.
+  { id: 'itad.certificate.superseded', label: 'ITAD Certificate Superseded', entity: 'certificate', category: 'lifecycle', clientBroadcast: true },
+  // itad.certificate.voided: { certificateId, certificateNumber, voidReasonCode }.
+  { id: 'itad.certificate.voided', label: 'ITAD Certificate Voided', entity: 'certificate', category: 'lifecycle', clientBroadcast: true },
 ] as const
 
 export const eventsConfig = createModuleEvents({

@@ -14,6 +14,7 @@ export const setup: ModuleSetupConfig = {
       'itad.assets.receive',
       'itad.sanitization.view',
       'itad.exceptions.view',
+      'itad.certificates.view',
     ],
   },
   async seedDefaults(ctx) {

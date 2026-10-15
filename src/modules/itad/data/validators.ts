@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { CERTIFICATE_LOCALES } from '../domain/certificates'
 import { ITAD_ASSET_STATUSES, ITAD_JOB_STATUSES } from '../domain/job-types'
 import { ITAD_EXCEPTION_STATUSES, ITAD_EXCEPTION_TYPES } from '../domain/exceptions'
 import {
@@ -248,6 +249,8 @@ export const itadSanitizationResultSchema = z.object({
   result: z.enum(['PASS', 'FAIL']),
   verificationMethod: z.enum(ITAD_VERIFICATION_METHODS),
   verificationNotes: optionalText(SANITIZATION_TEXT_LIMITS.verificationNotes),
+  /** Identifiers of the media the run covered (certificates spec Q1); optional, ≤ 10 × 100. */
+  mediaIdentifiers: z.array(z.string().max(200)).max(50).nullable().optional(),
 })
 export type ItadSanitizationResultInput = z.infer<typeof itadSanitizationResultSchema>
 
@@ -346,3 +349,11 @@ export const itadSetAsideDuplicateSchema = z.object({
 export type ItadSetAsideDuplicateInput = z.infer<typeof itadSetAsideDuplicateSchema>
 
 export const itadAssigneeSearchSchema = z.object({ search: z.string().trim().max(200).optional() })
+
+/** Durable input of `itad.certificates.issue` (certificates spec "Issue"). */
+export const itadCertificateIssueSchema = z.object({
+  jobId: z.string().uuid(),
+  assetId: z.string().uuid(),
+  locale: z.enum(CERTIFICATE_LOCALES),
+})
+export type ItadCertificateIssueInput = z.infer<typeof itadCertificateIssueSchema>

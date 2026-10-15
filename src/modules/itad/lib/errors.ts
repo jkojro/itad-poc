@@ -154,3 +154,23 @@ export type ItadExceptionErrorCode =
 export function itadExceptionError(status: 400 | 409, code: ItadExceptionErrorCode, message: string): CrudHttpError {
   return new CrudHttpError(status, { error: message, code: `${ITAD_EXCEPTION_ERROR_PREFIX}${code}` })
 }
+
+export const ITAD_CERTIFICATE_ERROR_PREFIX = 'itad.certificates.errors.'
+
+export type ItadCertificateErrorCode =
+  | 'certificate_not_eligible'
+  | 'certificate_already_issued'
+  | 'certificate_unprintable_characters'
+  | 'certificate_not_found'
+  | 'locale_invalid'
+  | 'media_identifiers_invalid'
+
+/** Coded certificate error (certificates spec "Errors"); same body shape as the other itad errors. */
+export function itadCertificateError(
+  status: 400 | 404 | 409 | 422,
+  code: ItadCertificateErrorCode,
+  message: string,
+  details?: Record<string, unknown>,
+): CrudHttpError {
+  return new CrudHttpError(status, { ...(details ?? {}), error: message, code: `${ITAD_CERTIFICATE_ERROR_PREFIX}${code}` })
+}
