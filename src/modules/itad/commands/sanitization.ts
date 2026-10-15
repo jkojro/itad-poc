@@ -34,6 +34,8 @@ import {
   type RunAction,
 } from '../domain/sanitization-state-machine'
 import { emitItadEvent, type ItadEventId } from '../events'
+import { normalizeMediaIdentifiers } from '../domain/certificates'
+import { certificateError } from '../lib/certificate-errors'
 import { ITAD_JOB_ENTITY_ID } from '../lib/constants'
 import { sanitizationError } from '../lib/sanitization-errors'
 import { EVIDENCE_ATTACHMENT_PARTITION, resolveAttachmentService } from '../module-integrations/attachments'
@@ -237,6 +239,8 @@ const recordResultCommand: CommandHandler<ItadSanitizationResultInput, ItadRunCh
     if (verificationNotesRequired(input.result) && !input.verificationNotes) {
       return await sanitizationError(400, 'verification_notes_required')
     }
+    const mediaIdentifiers = normalizeMediaIdentifiers(input.mediaIdentifiers)
+    if (mediaIdentifiers === null) return await certificateError('media_identifiers_invalid')
     const { scope, actorUserId, em } = await resolveActor(ctx)
     await loadJob(em, scope, input.jobId)
 
@@ -251,6 +255,7 @@ const recordResultCommand: CommandHandler<ItadSanitizationResultInput, ItadRunCh
       run.result = input.result
       run.verificationMethod = input.verificationMethod
       run.verificationNotes = input.verificationNotes ?? null
+      run.mediaIdentifiers = mediaIdentifiers.length > 0 ? mediaIdentifiers : null
       run.finishedAt = now
       run.finishedByUserId = actorUserId
       run.updatedAt = now

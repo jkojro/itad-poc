@@ -20,6 +20,7 @@ import { ReconciliationBadge } from './reconciliation-ui'
 import { RUN_RESULT_VARIANTS, methodLabel, runResultLabel, verificationLabel } from './sanitization-ui'
 import type { AssetSanitization } from './sanitization-types'
 import { useGrantedFeatures } from './use-granted-features'
+import { AssetCertificatesSection } from './AssetCertificatesSection'
 
 type Translate = ReturnType<typeof useT>
 type Actor = { id: string; name: string | null } | null
@@ -60,7 +61,7 @@ type TimelineItem = {
   }
 }
 
-const FEATURES = ['itad.sanitization.view', 'itad.exceptions.view'] as const
+const FEATURES = ['itad.sanitization.view', 'itad.exceptions.view', 'itad.certificates.view', 'itad.certificates.issue'] as const
 
 const KIND_LABELS: Record<TimelineKind, string> = {
   received: 'Received',
@@ -136,6 +137,8 @@ export function AssetDetail({ jobId, assetId }: { jobId: string; assetId: string
   const { granted } = useGrantedFeatures(FEATURES)
   const canViewSanitization = granted.has('itad.sanitization.view')
   const canViewExceptions = granted.has('itad.exceptions.view')
+  const canViewCertificates = granted.has('itad.certificates.view')
+  const canIssueCertificates = granted.has('itad.certificates.issue')
   const base = `/api/itad/jobs/${encodeURIComponent(jobId)}`
   const asset = useQuery<AssetDetailBody>({
     queryKey: ['itad-asset-detail', jobId, assetId],
@@ -270,6 +273,10 @@ export function AssetDetail({ jobId, assetId }: { jobId: string; assetId: string
             </ul>
           )}
         </Section>
+      ) : null}
+
+      {canViewCertificates ? (
+        <AssetCertificatesSection jobId={jobId} assetId={assetId} serial={data.serial} canIssue={canIssueCertificates} />
       ) : null}
 
       <Section title={t('itad.timeline.title', 'Timeline')}>

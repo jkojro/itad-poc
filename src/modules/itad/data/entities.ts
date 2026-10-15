@@ -8,6 +8,13 @@ import type {
 } from '../domain/exceptions'
 import type { ItadRunResult, ItadSanitizationMethod, ItadVerificationMethod } from '../domain/sanitization-state-machine'
 import type {
+  CertificateEventKind,
+  CertificateLocale,
+  CertificateSnapshot,
+  CertificateStatus,
+  CertificateVoidReasonCode,
+} from '../domain/certificates'
+import type {
   ItadAssetHistoryStatus,
   ItadAssetStatus,
   ItadAssetTransitionAction,
@@ -686,6 +693,13 @@ export class ItadSanitizationRun {
   @Property({ name: 'verification_notes', type: 'text', nullable: true })
   verificationNotes?: string | null
 
+  /**
+   * Identifiers of the media the run covered (certificates spec Q1), e.g. two SSD serials.
+   * A snapshot of what the operator recorded, not a media entity. Set with the result.
+   */
+  @Property({ name: 'media_identifiers', type: 'json', nullable: true })
+  mediaIdentifiers?: string[] | null
+
   @Property({ name: 'abort_reason', type: 'text', nullable: true })
   abortReason?: string | null
 
@@ -913,4 +927,129 @@ export class ItadJobPickupTask {
 
   @Property({ name: 'updated_at', type: Date, onUpdate: () => new Date() })
   updatedAt: Date = new Date()
+}
+
+/**
+ * Certificate of Data Sanitization (certificates spec, Epic 6): evidence that one asset
+ * passed one recorded sanitization run. The snapshot and the stored PDF freeze what was
+ * issued; corrections create a new certificate (reissue), nothing is ever deleted. At most
+ * one `issued` certificate per asset (partial unique index).
+ */
+@Entity({ tableName: 'itad_certificates' })
+@Unique({ name: 'itad_certificates_number_unique', properties: ['tenantId', 'organizationId', 'certificateNumber'] })
+@Index({ name: 'itad_certificates_job_idx', properties: ['tenantId', 'organizationId', 'job', 'status'] })
+@Index({ name: 'itad_certificates_asset_idx', properties: ['tenantId', 'organizationId', 'asset', 'issuedAt'] })
+@Index({
+  name: 'itad_certificates_asset_issued_unique',
+  expression:
+    'create unique index "itad_certificates_asset_issued_unique" on "itad_certificates" ("tenant_id", "organization_id", "asset_id") where "status" = \'issued\'',
+})
+export class ItadCertificate {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @Property({ name: 'certificate_number', type: 'text' })
+  certificateNumber!: string
+
+  @ManyToOne(() => ItadJob, { fieldName: 'job_id' })
+  job!: ItadJob
+
+  @ManyToOne(() => ItadAsset, { fieldName: 'asset_id' })
+  asset!: ItadAsset
+
+  @ManyToOne(() => ItadSanitizationRun, { fieldName: 'sanitization_run_id' })
+  sanitizationRun!: ItadSanitizationRun
+
+  @Property({ type: 'text' })
+  status!: CertificateStatus
+
+  /** What the document shows, as issued. Never updated. */
+  @Property({ type: 'json' })
+  snapshot!: CertificateSnapshot
+
+  @Property({ type: 'text' })
+  locale!: CertificateLocale
+
+  /** Scalar id of the stored PDF in the installed `attachments` module. */
+  @Property({ name: 'pdf_attachment_id', type: 'uuid' })
+  pdfAttachmentId!: string
+
+  @Property({ name: 'issued_by_user_id', type: 'uuid' })
+  issuedByUserId!: string
+
+  @Property({ name: 'issued_at', type: Date })
+  issuedAt!: Date
+
+  @Property({ name: 'supersedes_certificate_id', type: 'uuid', nullable: true })
+  supersedesCertificateId?: string | null
+
+  @Property({ name: 'superseded_by_certificate_id', type: 'uuid', nullable: true })
+  supersededByCertificateId?: string | null
+
+  @Property({ name: 'superseded_at', type: Date, nullable: true })
+  supersededAt?: Date | null
+
+  @Property({ name: 'superseded_by_user_id', type: 'uuid', nullable: true })
+  supersededByUserId?: string | null
+
+  @Property({ name: 'supersede_reason', type: 'text', nullable: true })
+  supersedeReason?: string | null
+
+  @Property({ name: 'voided_at', type: Date, nullable: true })
+  voidedAt?: Date | null
+
+  @Property({ name: 'voided_by_user_id', type: 'uuid', nullable: true })
+  voidedByUserId?: string | null
+
+  @Property({ name: 'void_reason', type: 'text', nullable: true })
+  voidReason?: string | null
+
+  @Property({ name: 'void_reason_code', type: 'text', nullable: true })
+  voidReasonCode?: CertificateVoidReasonCode | null
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
+
+  /** Optimistic-lock version for reissue and void. */
+  @Property({ name: 'updated_at', type: Date, onUpdate: () => new Date() })
+  updatedAt: Date = new Date()
+}
+
+/** Append-only history of a certificate: issued, superseded, voided (REQ-618). */
+@Entity({ tableName: 'itad_certificate_events' })
+@Index({ name: 'itad_certificate_events_certificate_idx', properties: ['tenantId', 'organizationId', 'certificate', 'createdAt'] })
+export class ItadCertificateEvent {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadCertificate, { fieldName: 'certificate_id' })
+  certificate!: ItadCertificate
+
+  @Property({ type: 'text' })
+  kind!: CertificateEventKind
+
+  @Property({ type: 'text', nullable: true })
+  reason?: string | null
+
+  @Property({ name: 'related_certificate_id', type: 'uuid', nullable: true })
+  relatedCertificateId?: string | null
+
+  /** `null` = the system. */
+  @Property({ name: 'actor_user_id', type: 'uuid', nullable: true })
+  actorUserId?: string | null
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
 }

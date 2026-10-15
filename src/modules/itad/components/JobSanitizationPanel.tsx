@@ -292,6 +292,7 @@ function ResultDialog({ jobId, assets, onClose, onDone }: { jobId: string; asset
   const [result, setResult] = React.useState<'PASS' | 'FAIL'>('PASS')
   const [verificationMethod, setVerificationMethod] = React.useState<ItadVerificationMethod>('full_verification')
   const [notes, setNotes] = React.useState('')
+  const [mediaText, setMediaText] = React.useState('')
   const [file, setFile] = React.useState<File | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -299,6 +300,7 @@ function ResultDialog({ jobId, assets, onClose, onDone }: { jobId: string; asset
     setResult('PASS')
     setVerificationMethod('full_verification')
     setNotes('')
+    setMediaText('')
     setFile(null)
     setSubmitting(false)
     setError(null)
@@ -323,7 +325,8 @@ function ResultDialog({ jobId, assets, onClose, onDone }: { jobId: string; asset
       ? await apiCall(`${base}/runs/${encodeURIComponent(openRunIds[0])}/result`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(fields),
+          // Media identifiers belong to one device's run; bulk results never carry them.
+          body: JSON.stringify({ ...fields, mediaIdentifiers: mediaText.split('\n').map((line) => line.trim()).filter(Boolean) }),
         })
       : await apiCall<{ runs?: Array<{ runId: string }> }>(`${base}/bulk-result`, {
           method: 'POST',
@@ -409,6 +412,17 @@ function ResultDialog({ jobId, assets, onClose, onDone }: { jobId: string; asset
               >
                 <Textarea value={notes} maxLength={2000} onChange={(event) => setNotes(event.target.value)} />
               </FormField>
+              {assets && assets.length === 1 ? (
+                <FormField
+                  label={t('itad.sanitization.fields.mediaIdentifiers', 'Media identifiers')}
+                  description={t(
+                    'itad.sanitization.fields.mediaIdentifiersHint',
+                    'Optional. One per line, e.g. the serial of each drive (at most 10). Shown on the certificate.',
+                  )}
+                >
+                  <Textarea value={mediaText} rows={3} onChange={(event) => setMediaText(event.target.value)} />
+                </FormField>
+              ) : null}
               <FormField
                 label={t('itad.sanitization.fields.evidence', 'Evidence file')}
                 description={t('itad.sanitization.fields.evidenceHint', 'Optional, e.g. the tool report (at most 10 MB).')}
