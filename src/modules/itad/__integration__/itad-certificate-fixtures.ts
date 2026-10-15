@@ -156,6 +156,35 @@ export async function voidCertificate(
   })
 }
 
+export type JobCertificatesBody = {
+  items: CertificateItem[]
+  counts: { dataBearing: number; sanitized: number; required: number; issued: number; missing: number }
+  missingAssets: Array<{ id: string; serial: string }>
+  issue: { allowed: boolean }
+}
+
+export type IssueMissingBody = {
+  issued: Array<{ assetId: string; serial: string; certificateId: string; certificateNumber: string }>
+  failed: Array<{ assetId: string; serial: string; status: number; code: string | null; error: string | null }>
+}
+
+export async function jobCertificatesOk(request: APIRequestContext, token: string, jobId: string, query = '') {
+  const response = await apiRequest(request, 'GET', `${base(jobId)}/certificates${query ? `?${query}` : ''}`, { token })
+  expect(response.status()).toBe(200)
+  return (await readJsonSafe<JobCertificatesBody>(response))!
+}
+
+export async function issueMissing(request: APIRequestContext, token: string, jobId: string, locale: unknown = 'en') {
+  return apiRequest(request, 'POST', `${base(jobId)}/certificates/issue-missing`, { token, data: { locale } })
+}
+
+export async function issueMissingOk(request: APIRequestContext, token: string, jobId: string, locale = 'en') {
+  const response = await issueMissing(request, token, jobId, locale)
+  const body = await readJsonSafe<IssueMissingBody>(response)
+  expect(response.status(), `issue-missing failed: ${JSON.stringify(body)}`).toBe(200)
+  return body!
+}
+
 /** The asset's certificate with this id, from a fresh listing. */
 export async function certificateById(request: APIRequestContext, token: string, jobId: string, assetId: string, id: string) {
   const body = await assetCertificatesOk(request, token, jobId, assetId)

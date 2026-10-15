@@ -57,6 +57,7 @@ type ConditionView = {
   manualAllowed: boolean
   canConfirm: boolean
   detailKey: string | null
+  detailParams?: Record<string, number> | null
 }
 
 type ActionView = {
@@ -104,8 +105,10 @@ function blockedReason(t: Translate, action: ActionView, canTransition: boolean)
   const needsSupervisor = action.conditions.some((condition) => condition.state === 'confirmation_required' && !condition.canConfirm)
   if (needsSupervisor) return t('itad.jobs.transition.blocked.needsConfirmation', 'Requires a supervisor confirmation')
   // A data condition names what is missing (e.g. no manifest, duplicates to resolve).
-  const unmetDetail = action.conditions.find((condition) => condition.state === 'unmet' && condition.detailKey)?.detailKey
-  if (unmetDetail) return t(unmetDetail, t('itad.jobs.transition.blocked.unmet', 'Required conditions are not met'))
+  const unmet = action.conditions.find((condition) => condition.state === 'unmet' && condition.detailKey)
+  if (unmet?.detailKey) {
+    return t(unmet.detailKey, t('itad.jobs.transition.blocked.unmet', 'Required conditions are not met'), unmet.detailParams ?? undefined)
+  }
   return t('itad.jobs.transition.blocked.unmet', 'Required conditions are not met')
 }
 
@@ -281,7 +284,7 @@ export function JobStatusPanel({ job, onChanged }: { job: ItadJobListItem; onCha
                       const stateLabel = condition.state === 'met'
                         ? t('itad.jobs.conditions.state.met', 'Met')
                         : condition.state === 'unmet'
-                          ? t(condition.detailKey ?? 'itad.jobs.conditions.state.unmet', 'Not met')
+                          ? t(condition.detailKey ?? 'itad.jobs.conditions.state.unmet', 'Not met', condition.detailParams ?? undefined)
                           : t('itad.jobs.conditions.state.confirmation_required', 'Requires confirmation')
                       return (
                         <div key={condition.key} className="space-y-2 rounded-md border p-3">

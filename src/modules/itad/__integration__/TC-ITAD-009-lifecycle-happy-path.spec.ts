@@ -42,13 +42,9 @@ test.describe('TC-ITAD-009: ITAD job lifecycle happy path', () => {
       expect(
         await transitionOk(request, token, id, { action: 'start_closeout', confirmations: [CONFIRM('allAssetsProcessed')] }),
       ).toBe('closeout_review')
-      expect(
-        await transitionOk(request, token, id, {
-          action: 'complete',
-          // noBlockingExceptions is a data condition since the exceptions spec (no open exception here).
-          confirmations: [CONFIRM('requiredDocumentsComplete')],
-        }),
-      ).toBe('completed')
+      // noBlockingExceptions (exceptions spec) and requiredDocumentsComplete (certificates spec)
+      // are data conditions: no open exception, and the one device carries no data.
+      expect(await transitionOk(request, token, id, { action: 'complete' })).toBe('completed')
 
       const done = await getJob(request, token, id)
       expect(done?.status).toBe('completed')
@@ -62,7 +58,7 @@ test.describe('TC-ITAD-009: ITAD job lifecycle happy path', () => {
       expect(items.map((item) => item.action)).toEqual([
         'complete', 'start_closeout', 'start_processing', 'start_receiving', 'dispatch', 'schedule',
       ])
-      expect(items[0].confirmations.map((entry) => entry.condition)).toEqual(['requiredDocumentsComplete'])
+      expect(items[0].confirmations).toEqual([])
       // receivingComplete is a data condition: start_processing carries no manual confirmation.
       expect(items[2].confirmations).toEqual([])
       // Names are decrypted display values, never stored ciphertext (`iv:data:tag:v1`).

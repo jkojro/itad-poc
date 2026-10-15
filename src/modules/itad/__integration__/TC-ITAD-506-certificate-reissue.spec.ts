@@ -104,7 +104,7 @@ test.describe('TC-ITAD-506: certificate reissue', () => {
 
       // Correcting a certificate after completion is a normal case.
       await transitionOk(request, token, job.id, { action: 'start_closeout', confirmations: [CONFIRM('allAssetsProcessed')] })
-      await transitionOk(request, token, job.id, { action: 'complete', confirmations: [CONFIRM('requiredDocumentsComplete')] })
+      await transitionOk(request, token, job.id, { action: 'complete' })
       const afterCompletion = await reissuePreviewOk(request, token, job.id, reissuedBody.id)
       const completed = await reissueCertificate(request, token, job.id, latest, {
         reason: 'Corrected after completion',

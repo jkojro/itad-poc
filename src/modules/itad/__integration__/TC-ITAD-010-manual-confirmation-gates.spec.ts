@@ -88,9 +88,18 @@ test.describe('TC-ITAD-010: manual confirmation and transition permissions', () 
       expect(duplicate.status()).toBe(400)
       expect(await errorCode(duplicate)).toBe('itad.jobs.errors.confirmation_duplicate')
 
-      const unrelated = await postTransition(request, adminToken, jobId, {
+      // requiredDocumentsComplete is a data condition since the certificates spec.
+      const dataCondition = await postTransition(request, adminToken, jobId, {
         action: 'start_closeout',
         confirmations: [CONFIRM('allAssetsProcessed'), CONFIRM('requiredDocumentsComplete')],
+      })
+      expect(dataCondition.status()).toBe(400)
+      expect(await errorCode(dataCondition)).toBe('itad.jobs.errors.confirmation_not_allowed')
+
+      const unrelated = await postTransition(request, adminToken, jobId, {
+        action: 'hold',
+        reason: 'QA unrelated confirmation',
+        confirmations: [CONFIRM('allAssetsProcessed')],
       })
       expect(unrelated.status()).toBe(400)
       expect(await errorCode(unrelated)).toBe('itad.jobs.errors.confirmation_not_required')

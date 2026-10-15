@@ -2,10 +2,14 @@ import { createHash } from 'node:crypto'
 import type { EntityManager, FilterQuery } from '@mikro-orm/postgresql'
 import type { QueryEngine } from '@open-mercato/shared/lib/query/types'
 import { ItadAsset, ItadCertificate, ItadSanitizationRun, type ItadJob } from '../data/entities'
+import type { DocumentFacts } from '../domain/job-conditions'
+import type { ItadJobStatus } from '../domain/job-types'
 import {
   canonicalSourceJson,
+  certificateCounts,
   decideEligibility,
   sourceDifferences,
+  type CertificateCounts,
   type CertificateDifference,
   type CertificateLocale,
   type CertificateSourceData,
@@ -246,4 +250,50 @@ export async function loadReissueSource(
       previewHash: sourceDataHash(source),
     },
   }
+}
+
+export type CertificateRequirement = {
+  counts: Omit<CertificateCounts, 'missingAssetIds'>
+  missingAssets: Array<{ id: string; serial: string }>
+}
+
+/**
+ * Required, issued and missing certificates of a job (spec "Required certificates"):
+ * active, data-bearing, sanitized assets need an `issued` certificate; none for a
+ * cancelled job. Pass the transaction's EntityManager when the result guards a write.
+ */
+export async function loadCertificateRequirement(
+  em: EntityManager,
+  scope: Scope,
+  job: { id: string; status: ItadJobStatus },
+): Promise<CertificateRequirement> {
+  const assets = await em.find(
+    ItadAsset,
+    { tenantId: scope.tenantId, organizationId: scope.organizationId, job: job.id } as FilterQuery<ItadAsset>,
+    { fields: ['id', 'serial', 'dataBearing', 'status', 'deletedAt'], orderBy: { serial: 'asc' } },
+  )
+  const issued = await em.find(
+    ItadCertificate,
+    { tenantId: scope.tenantId, organizationId: scope.organizationId, job: job.id, status: 'issued' } as FilterQuery<ItadCertificate>,
+    { fields: ['id', 'asset'] },
+  )
+  const certified = new Set(issued.map((row) => certificateAssetId(row as ItadCertificate)))
+  const { missingAssetIds, ...counts } = certificateCounts(
+    job.status,
+    assets.map((asset) => ({
+      id: asset.id,
+      dataBearing: asset.dataBearing ?? null,
+      status: asset.status,
+      deleted: Boolean(asset.deletedAt),
+      hasIssuedCertificate: certified.has(asset.id),
+    })),
+  )
+  const serials = new Map(assets.map((asset) => [asset.id, asset.serial]))
+  return { counts, missingAssets: missingAssetIds.map((id) => ({ id, serial: serials.get(id) ?? '' })) }
+}
+
+/** Facts for `requiredDocumentsComplete` (certificates spec REQ-611, REQ-612). */
+export async function loadDocumentFacts(em: EntityManager, scope: Scope, job: { id: string; status: ItadJobStatus }): Promise<DocumentFacts> {
+  const { counts } = await loadCertificateRequirement(em, scope, job)
+  return { missingCertificates: counts.missing }
 }

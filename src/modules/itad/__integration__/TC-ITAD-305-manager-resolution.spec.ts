@@ -62,8 +62,8 @@ test.describe('TC-ITAD-305: manager resolution of missing and unexpected', () =>
       expect((await listManifestItems(request, token, jobId, 'reconciliation=missing')).items.map((item) => item.serial)).toEqual([`RB${tag}`])
       expect((await listAssets(request, token, jobId, 'reconciliation=unexpected')).items.map((asset) => asset.serial)).toEqual([`RU${tag}`])
 
-      // Nothing OPEN → complete passes with only the documents confirmation (AC-406).
-      const complete = await postTransition(request, token, jobId, { action: 'complete', confirmations: [CONFIRM('requiredDocumentsComplete')] })
+      // Nothing OPEN and no data-bearing device → complete passes from data alone (AC-406).
+      const complete = await postTransition(request, token, jobId, { action: 'complete' })
       expect(complete.status(), JSON.stringify(await readJsonSafe(complete))).toBe(200)
       jobId = null
     } finally {

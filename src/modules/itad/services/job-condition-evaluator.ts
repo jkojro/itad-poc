@@ -5,6 +5,7 @@ import { isCompanyInScope } from '../module-integrations/customers'
 import { loadReceivingFacts } from './reconciliation-reader'
 import { loadProcessingFacts } from './sanitization-reader'
 import { loadExceptionFacts } from './exception-reader'
+import { loadDocumentFacts } from './certificate-reader'
 
 /**
  * Builds the facts lookups the job conditions need (manifest spec "Architecture"):
@@ -23,5 +24,6 @@ export function buildConditionDeps(input: {
     loadReceivingFacts: (jobId) => loadReceivingFacts(em, scope, jobId),
     loadProcessingFacts: (jobId) => loadProcessingFacts(em, scope, jobId),
     loadExceptionFacts: (jobId) => loadExceptionFacts(em, scope, jobId),
+    loadDocumentFacts: (job) => loadDocumentFacts(em, scope, job),
   }
 }

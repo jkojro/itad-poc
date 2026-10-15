@@ -57,12 +57,12 @@ test.describe('TC-ITAD-301: missing and unexpected become exceptions at start_pr
 
       // Closeout review is reachable; completing is not while exceptions are OPEN (AC-406).
       expect(await transitionOk(request, token, jobId, { action: 'start_closeout', confirmations: [CONFIRM('allAssetsProcessed')] })).toBe('closeout_review')
-      const blocked = await postTransition(request, token, jobId, { action: 'complete', confirmations: [CONFIRM('requiredDocumentsComplete')] })
+      const blocked = await postTransition(request, token, jobId, { action: 'complete' })
       expect(blocked.status()).toBe(400)
       expect(await readJsonSafe(blocked)).toMatchObject({ code: 'itad.jobs.errors.condition_unmet', conditions: ['noBlockingExceptions'] })
       const manual = await postTransition(request, token, jobId, {
         action: 'complete',
-        confirmations: [CONFIRM('noBlockingExceptions'), CONFIRM('requiredDocumentsComplete')],
+        confirmations: [CONFIRM('noBlockingExceptions')],
       })
       expect(await readJsonSafe(manual)).toMatchObject({ code: 'itad.jobs.errors.confirmation_not_allowed', condition: 'noBlockingExceptions' })
 
