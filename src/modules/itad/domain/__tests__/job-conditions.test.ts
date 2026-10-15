@@ -13,6 +13,7 @@ const deps = (
   loadReceivingFacts: async () => facts,
   loadProcessingFacts: async () => processing,
   loadExceptionFacts: async () => ({ openExceptions: 0 }),
+  loadDocumentFacts: async () => ({ missingCertificates: 0 }),
   ...overrides,
 })
 const validCustomer = deps()
@@ -74,26 +75,33 @@ describe('decideTransition (spec TEST-002)', () => {
     })
   })
 
-  it('needs the documents confirmation of complete; exceptions come from data (exceptions spec E4-031)', async () => {
-    const partial = await decideTransition({ job: job({ status: 'closeout_review' }), action: 'complete', deps: validCustomer })
-    expect(partial).toMatchObject({ ok: false, rejection: { code: 'condition_unmet', conditions: ['requiredDocumentsComplete'] } })
-    const confirmed = await decideTransition({
+  it('completes from data alone: documents and exceptions are data conditions (certificates spec REQ-612)', async () => {
+    const decision = await decideTransition({ job: job({ status: 'closeout_review' }), action: 'complete', deps: validCustomer })
+    expect(decision).toMatchObject({ ok: true, target: 'completed', confirmations: [] })
+  })
+
+  it('blocks complete while certificates are missing; a manual confirmation is not allowed (REQ-611)', async () => {
+    const missing = deps({ loadDocumentFacts: async () => ({ missingCertificates: 1 }) })
+    const blocked = await decideTransition({ job: job({ status: 'closeout_review' }), action: 'complete', deps: missing })
+    expect(blocked).toMatchObject({ ok: false, rejection: { code: 'condition_unmet', conditions: ['requiredDocumentsComplete'] } })
+    expect(blocked.evaluations).toContainEqual({
+      key: 'requiredDocumentsComplete',
+      state: 'unmet',
+      detailKey: 'itad.jobs.conditions.detail.missingCertificates',
+      detailParams: { count: 1 },
+    })
+    const manual = await decideTransition({
       job: job({ status: 'closeout_review' }),
       action: 'complete',
       confirmations: [{ condition: 'requiredDocumentsComplete', comment: 'all documents filed' }],
       deps: validCustomer,
     })
-    expect(confirmed).toMatchObject({ ok: true, target: 'completed' })
+    expect(manual).toMatchObject({ ok: false, rejection: { code: 'confirmation_not_allowed', condition: 'requiredDocumentsComplete' } })
   })
 
   it('blocks complete while an exception is open; a manual confirmation is not allowed', async () => {
     const withOpen = deps({ loadExceptionFacts: async () => ({ openExceptions: 2 }) })
-    const blocked = await decideTransition({
-      job: job({ status: 'closeout_review' }),
-      action: 'complete',
-      confirmations: [{ condition: 'requiredDocumentsComplete', comment: 'all documents filed' }],
-      deps: withOpen,
-    })
+    const blocked = await decideTransition({ job: job({ status: 'closeout_review' }), action: 'complete', deps: withOpen })
     expect(blocked).toMatchObject({ ok: false, rejection: { code: 'condition_unmet', conditions: ['noBlockingExceptions'] } })
     expect(blocked.evaluations).toContainEqual({
       key: 'noBlockingExceptions',
@@ -111,7 +119,7 @@ describe('decideTransition (spec TEST-002)', () => {
 
   it.each([
     ['duplicate', [{ condition: 'allAssetsProcessed', comment: 'one' }, { condition: 'allAssetsProcessed', comment: 'two' }], 'confirmation_duplicate'],
-    ['not required by the action', [{ condition: 'requiredDocumentsComplete', comment: 'done' }], 'confirmation_not_required'],
+    ['data condition', [{ condition: 'requiredDocumentsComplete', comment: 'done' }], 'confirmation_not_allowed'],
     ['unknown condition', [{ condition: 'madeUp', comment: 'done' }], 'confirmation_not_required'],
     ['missing comment', [{ condition: 'allAssetsProcessed', comment: '' }], 'comment_required'],
     ['too short comment', [{ condition: 'allAssetsProcessed', comment: 'ok' }], 'comment_required'],
@@ -123,6 +131,17 @@ describe('decideTransition (spec TEST-002)', () => {
       deps: validCustomer,
     })
     expect(decision).toMatchObject({ ok: false, rejection: { code } })
+  })
+
+  it('rejects a manual confirmation the action does not require', async () => {
+    const decision = await decideTransition({
+      job: job({ status: 'processing' }),
+      action: 'hold',
+      reason: 'waiting for the customer',
+      confirmations: [{ condition: 'allAssetsProcessed', comment: 'all erased' }],
+      deps: validCustomer,
+    })
+    expect(decision).toMatchObject({ ok: false, rejection: { code: 'confirmation_not_required', condition: 'allAssetsProcessed' } })
   })
 
   it('requires a reason for hold, cancel and backward moves', async () => {

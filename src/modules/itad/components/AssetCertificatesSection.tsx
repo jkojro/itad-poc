@@ -7,7 +7,7 @@ import { Button } from '@open-mercato/ui/primitives/button'
 import { FormField } from '@open-mercato/ui/primitives/form-field'
 import { Textarea } from '@open-mercato/ui/primitives/textarea'
 import { Spinner } from '@open-mercato/ui/primitives/spinner'
-import { StatusBadge, type StatusMap } from '@open-mercato/ui/primitives/status-badge'
+import { StatusBadge } from '@open-mercato/ui/primitives/status-badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@open-mercato/ui/primitives/select'
 import {
   Dialog,
@@ -33,6 +33,13 @@ import {
 } from '../domain/certificates'
 import type { ItadJobStatus } from '../domain/job-types'
 import type { CertificateListItem, ReissuePreview } from '../services/certificate-reader'
+import {
+  CERTIFICATE_LOCALE_LABELS as LOCALE_LABELS,
+  CERTIFICATE_STATUS_VARIANTS as STATUS_VARIANTS,
+  certificatePdfHref,
+  certificateStatusLabel as statusLabel,
+  formatCertificateDateTime as formatDateTime,
+} from './certificate-ui'
 import { methodLabel } from './sanitization-ui'
 
 type Translate = ReturnType<typeof useT>
@@ -46,25 +53,12 @@ type AssetCertificates = {
   void: { allowed: boolean }
 }
 
-const STATUS_VARIANTS: StatusMap<CertificateStatus> = { issued: 'success', superseded: 'neutral', void: 'error' }
-const STATUS_LABELS: Record<CertificateStatus, string> = { issued: 'Issued', superseded: 'Superseded', void: 'Void' }
-const LOCALE_LABELS: Record<CertificateLocale, string> = { pl: 'Polski', en: 'English' }
 const DETAIL_LABELS: Record<EligibilityDetail, string> = {
   not_data_bearing: 'The device is not marked as carrying data.',
   not_sanitized: 'The device is not sanitized yet.',
   asset_voided: 'The device was removed from the job.',
   no_pass_run: 'There is no completed sanitization run with the result PASS.',
   job_status: 'Certificates cannot be issued in the current job status.',
-}
-
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) return '—'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
-}
-
-function statusLabel(t: Translate, status: CertificateStatus) {
-  return t(`itad.certificates.status.${status}`, STATUS_LABELS[status])
 }
 
 const FIELD_LABELS: Record<CertificateSourceField, [string, string]> = {
@@ -587,7 +581,7 @@ export function AssetCertificatesSection({
                 ) : null}
                 <a
                   className="ml-auto underline underline-offset-2"
-                  href={`${base}/certificates/${encodeURIComponent(item.id)}/pdf`}
+                  href={certificatePdfHref(jobId, item.id)}
                   target="_blank"
                   rel="noreferrer"
                 >

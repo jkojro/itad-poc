@@ -25,6 +25,8 @@ export type ConditionEvaluation = {
   state: ConditionState
   /** Translation key explaining an `unmet` state. */
   detailKey?: string
+  /** Values for the `detailKey` message, e.g. `{ count }`. */
+  detailParams?: Record<string, number>
 }
 
 export type ConditionJob = {
@@ -45,6 +47,13 @@ export type ConditionDeps = {
   loadProcessingFacts: (jobId: string) => Promise<ProcessingFacts>
   /** Open exceptions of the job (exceptions spec E4-031); read inside the caller's transaction. */
   loadExceptionFacts: (jobId: string) => Promise<ExceptionFacts>
+  /** Required certificates of the job (certificates spec); read inside the caller's transaction. */
+  loadDocumentFacts: (job: { id: string; status: ItadJobStatus }) => Promise<DocumentFacts>
+}
+
+export type DocumentFacts = {
+  /** Active, data-bearing, sanitized assets without an `issued` certificate. */
+  missingCertificates: number
 }
 
 export type ProcessingFacts = {
@@ -59,13 +68,6 @@ type ConditionDefinition = {
   manualAllowed: boolean
   evaluate: (job: ConditionJob, deps: ConditionDeps) => Promise<ConditionEvaluation>
 }
-
-const manualCondition = (key: ItadJobConditionKey): ConditionDefinition => ({
-  key,
-  source: 'manual',
-  manualAllowed: true,
-  evaluate: async () => ({ key, state: 'confirmation_required' }),
-})
 
 /**
  * Module-internal condition registry (spec "Conditions"). Later specs switch an
@@ -128,7 +130,24 @@ export const ITAD_JOB_CONDITIONS: Record<ItadJobConditionKey, ConditionDefinitio
         : { key: 'noBlockingExceptions', state: 'met' }
     },
   },
-  requiredDocumentsComplete: manualCondition('requiredDocumentsComplete'),
+  // Certificates spec REQ-611/612: met exactly when every active, data-bearing, sanitized
+  // asset has an `issued` certificate; it can no longer be confirmed by hand.
+  requiredDocumentsComplete: {
+    key: 'requiredDocumentsComplete',
+    source: 'data',
+    manualAllowed: false,
+    evaluate: async (job, deps) => {
+      const facts = await deps.loadDocumentFacts(job)
+      return facts.missingCertificates > 0
+        ? {
+            key: 'requiredDocumentsComplete',
+            state: 'unmet',
+            detailKey: 'itad.jobs.conditions.detail.missingCertificates',
+            detailParams: { count: facts.missingCertificates },
+          }
+        : { key: 'requiredDocumentsComplete', state: 'met' }
+    },
+  },
 }
 
 export function isConditionKey(value: unknown): value is ItadJobConditionKey {

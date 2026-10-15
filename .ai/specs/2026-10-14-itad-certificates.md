@@ -1,7 +1,7 @@
 # ITAD Certificates of Data Sanitization
 
 **Date**: 2026-10-14
-**Status**: Ready
+**Status**: Implemented — all three phases verified (2026-10-15)
 
 > Spec 6 of the app-owned `itad` module. It follows `2026-10-02-itad-jobs.md`, `2026-10-05-itad-manifest-reconciliation.md`, `2026-10-09-itad-asset-sanitization.md`, `2026-10-11-itad-exceptions.md` and `2026-10-12-itad-pickup-calendar.md`.
 >
@@ -481,3 +481,8 @@ Validation per phase:
   - the fonts are embedded in full instead of as a subset: with `subset: true` most glyphs did not draw although text extraction was exact;
   - a unit test reads the embedded font programs and checks a drawable glyph for every printed character;
   - certificates issued before the fix keep their stored PDF (REQ-606, REQ-619); a reissue produces a correct one.
+- **2026-10-15, phase 3 implemented:**
+  - "Issue all missing" runs one `itad.certificates.issue` per missing asset from the route, so each certificate keeps its own transaction, number, PDF and audit entry; there is no separate `issue_missing` command. The response also carries the serial, and for a failure the HTTP status and message;
+  - the bulk call refuses a job status that allows no new issue with `certificate_not_eligible` (`job_status`) before trying any asset;
+  - `GET /api/itad/jobs/{id}/certificates` also returns `issue: { allowed }` and accepts `?status=`;
+  - `ConditionEvaluation.detailParams` (`{ count }`) carries the number of missing certificates to the status panel and the `complete` dialog.

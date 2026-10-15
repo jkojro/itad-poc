@@ -3,6 +3,7 @@ import { apiRequest, getAuthToken } from '@open-mercato/core/helpers/integration
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
 import { readJsonSafe } from '@open-mercato/core/helpers/integration/generalFixtures'
 import { advanceToReceiving, CONFIRM, createSchedulableJob, postTransition, transitionOk, uniqueSuffix } from './itad-job-fixtures'
+import { issueMissingOk } from './itad-certificate-fixtures'
 import { csv, importManifestOk } from './itad-manifest-fixtures'
 import { getReconciliation, listAssets, scanOk } from './itad-receiving-fixtures'
 import { resolveExceptionApi } from './itad-exception-fixtures'
@@ -84,15 +85,22 @@ test.describe('TC-ITAD-210: Epic 3 acceptance — from scan to sanitized closeou
         ['sanitization_failed', 'resolved', 'retry_approved'],
         ['unexpected_asset', 'open', null],
       ])
-      const blocked = await postTransition(request, token, jobId, { action: 'complete', confirmations: [CONFIRM('requiredDocumentsComplete')] })
+      // Since the certificates spec the ten sanitized devices also need certificates.
+      const blocked = await postTransition(request, token, jobId, { action: 'complete' })
       expect(blocked.status()).toBe(400)
-      expect(await readJsonSafe(blocked)).toMatchObject({ code: 'itad.jobs.errors.condition_unmet', conditions: ['noBlockingExceptions'] })
+      expect(await readJsonSafe(blocked)).toMatchObject({
+        code: 'itad.jobs.errors.condition_unmet',
+        conditions: ['noBlockingExceptions', 'requiredDocumentsComplete'],
+      })
       // A manager accepts the unexpected device; then the job completes.
       const unexpectedException = (await readJsonSafe<{ items: Array<{ id: string; type: string; updatedAt: string }> }>(
         await apiRequest(request, 'GET', `/api/itad/jobs/${jobId}/exceptions?status=open`, { token }),
       ))!.items[0]
       expect((await resolveExceptionApi(request, token, jobId, unexpectedException, 'accepted_into_job', 'Customer asked to wipe it too')).status()).toBe(200)
-      expect(await transitionOk(request, token, jobId, { action: 'complete', confirmations: [CONFIRM('requiredDocumentsComplete')] })).toBe('completed')
+      const certificates = await issueMissingOk(request, token, jobId)
+      expect(certificates).toMatchObject({ failed: [] })
+      expect(certificates.issued).toHaveLength(10)
+      expect(await transitionOk(request, token, jobId, { action: 'complete' })).toBe('completed')
       jobId = null
     } finally {
       if (jobId) await postTransition(request, token, jobId, { action: 'cancel', reason: 'QA cleanup' }).catch(() => undefined)

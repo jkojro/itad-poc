@@ -68,6 +68,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
           manualAllowed,
           canConfirm: evaluation.state === 'confirmation_required' && manualAllowed && canConfirm,
           detailKey: evaluation.detailKey ?? null,
+          detailParams: evaluation.detailParams ?? null,
         }
       })
       const satisfiable = conditions.every((condition) => condition.state === 'met' || condition.canConfirm)
@@ -150,6 +151,8 @@ const conditionSchema = z.object({
   manualAllowed: z.boolean(),
   canConfirm: z.boolean(),
   detailKey: z.string().nullable(),
+  /** Values for the `detailKey` message, e.g. `{ count }` of missing certificates. */
+  detailParams: z.record(z.string(), z.number()).nullable(),
 })
 
 const transitionsResponseSchema = z.object({

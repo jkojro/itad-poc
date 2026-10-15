@@ -3,6 +3,7 @@ import { apiRequest, getAuthToken } from '@open-mercato/core/helpers/integration
 import { createCompanyFixture, deleteEntityIfExists } from '@open-mercato/core/helpers/integration/crmFixtures'
 import { readJsonSafe } from '@open-mercato/core/helpers/integration/generalFixtures'
 import { advanceToReceiving, CONFIRM, createSchedulableJob, postTransition, transitionOk, uniqueSuffix } from './itad-job-fixtures'
+import { issueMissingOk } from './itad-certificate-fixtures'
 import { csv, importManifestOk } from './itad-manifest-fixtures'
 import { scanAction, scanOk } from './itad-receiving-fixtures'
 import { approveRetry, bulkResult, bulkStart, currentAssets, recordResult, startRunOk } from './itad-sanitization-fixtures'
@@ -62,14 +63,19 @@ test.describe('TC-ITAD-310: Epic 4 acceptance — exceptions from receiving to c
       expect(await transitionOk(request, token, jobId, { action: 'start_closeout', confirmations: [CONFIRM('allAssetsProcessed')] })).toBe('closeout_review')
 
       // Blocked while MISSING and UNEXPECTED are OPEN (AC-406).
-      const blocked = await postTransition(request, token, jobId, { action: 'complete', confirmations: [CONFIRM('requiredDocumentsComplete')] })
-      expect(await readJsonSafe(blocked)).toMatchObject({ code: 'itad.jobs.errors.condition_unmet', conditions: ['noBlockingExceptions'] })
+      const blocked = await postTransition(request, token, jobId, { action: 'complete' })
+      expect(await readJsonSafe(blocked)).toMatchObject({
+        code: 'itad.jobs.errors.condition_unmet',
+        conditions: ['noBlockingExceptions', 'requiredDocumentsComplete'],
+      })
       open = await listExceptions(request, token, jobId, 'status=open')
       for (const entry of open.items) {
         const outcome = entry.type === 'missing_from_delivery' ? 'lost_in_transit' : 'accepted_into_job'
         expect((await resolveExceptionApi(request, token, jobId, entry, outcome, 'Agreed with the customer')).status()).toBe(200)
       }
-      expect(await transitionOk(request, token, jobId, { action: 'complete', confirmations: [CONFIRM('requiredDocumentsComplete')] })).toBe('completed')
+      // Certificates spec: every sanitized data-bearing device needs a certificate first.
+      expect((await issueMissingOk(request, token, jobId)).failed).toEqual([])
+      expect(await transitionOk(request, token, jobId, { action: 'complete' })).toBe('completed')
 
       const all = await listExceptions(request, token, jobId)
       expect(all.items.map((entry) => [entry.type, entry.resolutionOutcome]).sort()).toEqual([
@@ -81,7 +87,7 @@ test.describe('TC-ITAD-310: Epic 4 acceptance — exceptions from receiving to c
       const history = await apiRequest(request, 'GET', `/api/itad/jobs/${jobId}/history`, { token })
       const completed = (await readJsonSafe<{ items: Array<{ action: string; confirmations: Array<{ condition: string }> }> }>(history))!.items[0]
       expect(completed.action).toBe('complete')
-      expect(completed.confirmations.map((entry) => entry.condition)).toEqual(['requiredDocumentsComplete'])
+      expect(completed.confirmations).toEqual([])
       const failed = all.items.find((entry) => entry.type === 'sanitization_failed')!
       expect((await exceptionDetail(request, token, jobId, failed.id)).events.map((event) => event.kind)).toEqual(['created', 'resolved'])
 
