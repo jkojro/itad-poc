@@ -8,9 +8,8 @@ import type { CertificateSnapshot } from '../domain/certificates'
  * Renders a Certificate of Data Sanitization (certificates spec "PDF"). A function of the
  * snapshot and the labels only: the stored PDF is generated once at issue and never again.
  *
- * Text is drawn exactly as stored, in Noto Sans (OFL, `assets/fonts/`) embedded as a
- * subset, so Latin with every European diacritic, Greek and Cyrillic print faithfully
- * (REQ-622). Characters without a glyph are refused before issue (`createGlyphChecker`),
+ * Text is drawn exactly as stored, in Noto Sans (OFL, `assets/fonts/`) embedded in full,
+ * so Latin with every European diacritic, Greek and Cyrillic print faithfully (REQ-622). Characters without a glyph are refused before issue (`createGlyphChecker`),
  * never substituted. Long values wrap and pages break; nothing is truncated.
  */
 const FONT_DIR = path.join(process.cwd(), 'src', 'modules', 'itad', 'assets', 'fonts')
@@ -173,9 +172,11 @@ export async function renderCertificatePdf(snapshot: CertificateSnapshot, t: Tra
   const bytes = await loadFontBytes()
   const doc = await PDFDocument.create()
   doc.registerFontkit(fontkit)
+  // Embedded in full: the `@pdf-lib/fontkit` subsetter writes a Noto Sans program whose
+  // glyphs mostly do not draw, while the text layer still reads correctly.
   const fonts: Fonts = {
-    regular: await doc.embedFont(bytes.regular, { subset: true }),
-    bold: await doc.embedFont(bytes.bold, { subset: true }),
+    regular: await doc.embedFont(bytes.regular, { subset: false }),
+    bold: await doc.embedFont(bytes.bold, { subset: false }),
   }
   const issuedAt = new Date(snapshot.issuedAt)
   doc.setTitle(`${t('itad.certificates.pdf.title', 'Certificate of Data Sanitization')} ${snapshot.certificateNumber}`)

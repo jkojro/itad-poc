@@ -3,6 +3,8 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from '@jest/globals'
+import fontkit from '@pdf-lib/fontkit'
+import { PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef, decodePDFRawStream } from 'pdf-lib'
 import type { CertificateSnapshot } from '../../domain/certificates'
 import { createGlyphChecker, renderCertificatePdf, wrapText, type Translate } from '../certificate-pdf'
 
@@ -47,7 +49,41 @@ function extractPages(bytes: Uint8Array): string[][] {
   return JSON.parse(execFileSync(process.execPath, [script, file], { encoding: 'utf8' })) as string[][]
 }
 
+/**
+ * The TrueType programs embedded in a PDF (the `/FontFile2` of each font descriptor).
+ * Text extraction reads `/ToUnicode` and passes even when the glyphs cannot be drawn, so
+ * the drawing side is checked on the font programs themselves.
+ */
+async function embeddedFontPrograms(bytes: Uint8Array) {
+  const doc = await PDFDocument.load(bytes)
+  const programs = []
+  for (const [, object] of doc.context.enumerateIndirectObjects()) {
+    if (!(object instanceof PDFDict) || object.get(PDFName.of('Type')) !== PDFName.of('FontDescriptor')) continue
+    const ref = object.get(PDFName.of('FontFile2'))
+    const stream = ref instanceof PDFRef ? doc.context.lookup(ref) : null
+    if (stream instanceof PDFRawStream) programs.push(fontkit.create(Buffer.from(decodePDFRawStream(stream).decode())))
+  }
+  return programs
+}
+
 describe('renderCertificatePdf (certificates spec "PDF", REQ-622)', () => {
+  it('embeds font programs that draw every printed character', async () => {
+    const bytes = await renderCertificatePdf(snapshot(), translate)
+    const programs = await embeddedFontPrograms(bytes)
+    expect(programs).toHaveLength(2)
+    const printed = 'Certificate of Data Sanitization CDS-2026-00001 Müller & Söhne Česká společnost Ștefan Αθήνα ООО Ромашка Zażółć gęślą jaźń'
+    for (const font of programs) {
+      // A program without `cmap` (a broken subset) cannot map any character to a glyph.
+      const mapped = Boolean((font as unknown as { directory: { tables: Record<string, unknown> } }).directory.tables.cmap)
+      const missing = [...new Set(printed.replace(/\s/g, ''))].filter((char) => {
+        if (!mapped) return true
+        const glyph = font.glyphForCodePoint(char.codePointAt(0) as number)
+        return glyph.id === 0 || glyph.path.toSVG() === ''
+      })
+      expect(missing).toEqual([])
+    }
+  })
+
   it('prints every snapshot text exactly, in every supported script', async () => {
     const bytes = await renderCertificatePdf(snapshot(), translate)
     expect(Buffer.from(bytes.slice(0, 5)).toString('latin1')).toBe('%PDF-')

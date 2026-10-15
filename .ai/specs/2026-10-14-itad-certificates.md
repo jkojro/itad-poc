@@ -185,7 +185,7 @@ The certificate row stores the ids of the asset, job and source run, and of the 
 ### PDF (`services/certificate-pdf.ts`, `pdf-lib` + `@pdf-lib/fontkit`)
 
 - **Library.** `pdf-lib` builds the document and `@pdf-lib/fontkit` embeds TrueType fonts. Both are MIT-licensed, pure JavaScript and run server-side only. They are new dependencies, approved with Q12.
-- **Font.** Noto Sans Regular and Bold (SIL Open Font License 1.1), stored in `src/modules/itad/assets/fonts/` with the `OFL.txt` licence file next to them. They are embedded **subset** (`subset: true`), so a certificate carries only the glyphs it uses. Noto Sans covers Latin with all European diacritics (including `Ș`, `Ț`, `Ő`, `Ű`), Greek, Cyrillic and typographic punctuation.
+- **Font.** Noto Sans Regular and Bold (SIL Open Font License 1.1), stored in `src/modules/itad/assets/fonts/` with the `OFL.txt` licence file next to them. They are embedded **in full** (`subset: false`): the `@pdf-lib/fontkit` subsetter writes a Noto Sans program whose glyphs mostly do not draw, although the text layer still reads correctly. A certificate PDF is therefore about 0.5 MB. Noto Sans covers Latin with all European diacritics (including `Ș`, `Ț`, `Ő`, `Ű`), Greek, Cyrillic and typographic punctuation.
 - **No substitution, no loss (REQ-622):**
   - Every snapshot text is drawn as the exact source string.
   - Before rendering, each code point is checked with fontkit `hasGlyphForCodePoint` against the embedded font. Scripts outside Noto Sans, such as CJK, Arabic or Hebrew, are **not printed wrongly**: the issue is refused with 422 `certificate_unprintable_characters`, naming the fields. This is a coverage limit of the shipped font, not a data error.
@@ -204,6 +204,7 @@ The certificate row stores the ids of the asset, job and source run, and of the 
 - **Tests:**
   - the PDF parses and contains the number;
   - text extracted with `pdfjs-dist` (already in the project) is **exactly** `Müller & Söhne`, `Česká společnost`, `Ștefan Industries`, `Αθήνα Systems` and a Cyrillic name;
+  - the embedded font programs have a drawable glyph for every printed character (text extraction alone passes even when glyphs do not draw);
   - a 100-character token wraps without losing a character;
   - 10 long media identifiers break onto a second page;
   - a CJK string refuses the issue with `certificate_unprintable_characters` instead of printing anything wrong.
@@ -221,7 +222,7 @@ Each row records the actor and the time. Opening or downloading a certificate wr
 
 ```
 domain/certificates.ts            pure: eligibility, required/missing, snapshot shape, status transitions
-services/certificate-pdf.ts        snapshot → PDF bytes with pdf-lib + fontkit, embedded Noto Sans (subset), wrapping, pages
+services/certificate-pdf.ts        snapshot → PDF bytes with pdf-lib + fontkit, embedded Noto Sans (full), wrapping, pages
 assets/fonts/                      NotoSans-Regular.ttf, NotoSans-Bold.ttf, OFL.txt
 services/certificate-reader.ts     certificates of an asset / job, counts, condition facts
 services/certificate-writer.ts     issue / supersede / void inside a command's transaction; number allocation
@@ -472,3 +473,7 @@ Validation per phase:
   - the fallback-font note now covers shaping and BiDi for RTL and complex scripts;
   - the sequence table already supports kinds;
   - status: Ready.
+- **2026-10-15, fix: certificate glyphs:**
+  - the fonts are embedded in full instead of as a subset: with `subset: true` most glyphs did not draw although text extraction was exact;
+  - a unit test reads the embedded font programs and checks a drawable glyph for every printed character;
+  - certificates issued before the fix keep their stored PDF (REQ-606, REQ-619); a reissue produces a correct one.
