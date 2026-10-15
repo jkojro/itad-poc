@@ -164,6 +164,9 @@ export type ItadCertificateErrorCode =
   | 'certificate_not_found'
   | 'locale_invalid'
   | 'media_identifiers_invalid'
+  | 'certificate_not_issued'
+  | 'certificate_preview_stale'
+  | 'reason_required'
 
 /** Coded certificate error (certificates spec "Errors"); same body shape as the other itad errors. */
 export function itadCertificateError(

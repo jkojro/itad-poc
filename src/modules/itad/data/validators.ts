@@ -357,3 +357,22 @@ export const itadCertificateIssueSchema = z.object({
   locale: z.enum(CERTIFICATE_LOCALES),
 })
 export type ItadCertificateIssueInput = z.infer<typeof itadCertificateIssueSchema>
+
+/** Durable input of `itad.certificates.reissue` (certificates spec "Reissue and void"). */
+export const itadCertificateReissueSchema = z.object({
+  jobId: z.string().uuid(),
+  certificateId: z.string().uuid(),
+  locale: z.enum(CERTIFICATE_LOCALES),
+  reason: z.string().max(2000),
+  /** From the reissue preview; empty or different → `certificate_preview_stale`. */
+  previewHash: z.string().max(128),
+})
+export type ItadCertificateReissueInput = z.infer<typeof itadCertificateReissueSchema>
+
+/** Durable input of `itad.certificates.void`. */
+export const itadCertificateVoidSchema = z.object({
+  jobId: z.string().uuid(),
+  certificateId: z.string().uuid(),
+  reason: z.string().max(2000),
+})
+export type ItadCertificateVoidInput = z.infer<typeof itadCertificateVoidSchema>
