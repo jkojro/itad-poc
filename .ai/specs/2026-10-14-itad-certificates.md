@@ -473,6 +473,10 @@ Validation per phase:
   - the fallback-font note now covers shaping and BiDi for RTL and complex scripts;
   - the sequence table already supports kinds;
   - status: Ready.
+- **2026-10-15, phase 2 implemented:**
+  - `GET …/assets/{assetId}/certificates` also returns `jobStatus`, `reissue: { allowed, detail }` and `void: { allowed }`, and each item carries `supersededAt`, `supersededBy` and `voidedBy`, so the asset section can offer reissue and void and show the history (additive);
+  - the reissue preview returns `{ certificateId, certificateNumber, source, differences, previewHash }`; `certificateNumber` is the current certificate's number, never a new one;
+  - a void on reclassification stores the classification reason as `void_reason` and `reclassified_non_data_bearing` as `void_reason_code`.
 - **2026-10-15, fix: certificate glyphs:**
   - the fonts are embedded in full instead of as a subset: with `subset: true` most glyphs did not draw although text extraction was exact;
   - a unit test reads the embedded font programs and checks a drawable glyph for every printed character;

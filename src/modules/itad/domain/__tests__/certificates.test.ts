@@ -1,13 +1,17 @@
 import { describe, expect, it } from '@jest/globals'
 import {
   buildSnapshot,
+  canonicalSourceJson,
   certificateActionAllowed,
+  certificateReason,
   certificateCounts,
+  decideCertificateChange,
   decideEligibility,
   formatCertificateNumber,
   latestPassRun,
   normalizeMediaIdentifiers,
   printableFields,
+  sourceDifferences,
   unprintableFields,
   type CertificateRun,
   type CertificateSourceData,
@@ -202,5 +206,60 @@ describe('normalizeMediaIdentifiers', () => {
   it('rejects more than 10 or a value over 100 characters', () => {
     expect(normalizeMediaIdentifiers(Array.from({ length: 11 }, (_, i) => `M${i}`))).toBeNull()
     expect(normalizeMediaIdentifiers(['x'.repeat(101)])).toBeNull()
+  })
+})
+
+describe('certificateReason (spec "Reissue and void")', () => {
+  it('trims and requires 3 to 1000 characters', () => {
+    expect(certificateReason('  wrong customer name  ')).toBe('wrong customer name')
+    expect(certificateReason('ab')).toBe(false)
+    expect(certificateReason('   ')).toBe(false)
+    expect(certificateReason(null)).toBe(false)
+    expect(certificateReason('x'.repeat(1001))).toBe(false)
+  })
+})
+
+describe('decideCertificateChange', () => {
+  it('allows reissue and void of an issued certificate, also after completion', () => {
+    expect(decideCertificateChange({ status: 'issued' }, { status: 'processing' }, 'reissue')).toEqual({ ok: true })
+    expect(decideCertificateChange({ status: 'issued' }, { status: 'completed' }, 'reissue')).toEqual({ ok: true })
+    expect(decideCertificateChange({ status: 'issued' }, { status: 'cancelled' }, 'void')).toEqual({ ok: true })
+    expect(decideCertificateChange({ status: 'issued' }, { status: 'on_hold', statusBeforeHold: 'closeout_review' }, 'void')).toEqual({ ok: true })
+  })
+
+  it.each(['superseded', 'void'] as const)('refuses a %s certificate', (status) => {
+    expect(decideCertificateChange({ status }, { status: 'processing' }, 'reissue')).toEqual({ ok: false, code: 'certificate_not_issued' })
+    expect(decideCertificateChange({ status }, { status: 'processing' }, 'void')).toEqual({ ok: false, code: 'certificate_not_issued' })
+  })
+
+  it('refuses where the job status allows no change', () => {
+    expect(decideCertificateChange({ status: 'issued' }, { status: 'receiving' }, 'void')).toEqual({
+      ok: false,
+      code: 'certificate_not_eligible',
+      detail: 'job_status',
+    })
+  })
+})
+
+describe('sourceDifferences and canonicalSourceJson (reissue preview)', () => {
+  it('lists only the changed fields, in a fixed order', () => {
+    const next = { ...source, customerName: 'Müller Group', mediaIdentifiers: ['NVME-A'], sourceRunId: 'r2' }
+    expect(sourceDifferences(source, next)).toEqual([
+      { field: 'customerName', from: 'Müller & Söhne', to: 'Müller Group' },
+      { field: 'mediaIdentifiers', from: ['NVME-A', 'NVME-B'], to: ['NVME-A'] },
+      { field: 'sourceRunId', from: 'r1', to: 'r2' },
+    ])
+    expect(sourceDifferences(source, { ...source, mediaIdentifiers: [...source.mediaIdentifiers] })).toEqual([])
+  })
+
+  it('compares a snapshot by its source fields only', () => {
+    const snapshot = buildSnapshot(source, { certificateNumber: 'CDS-2026-00001', issuedAt: at('2026-10-14T10:00:00.000Z'), issuedBy: 'Maria', locale: 'pl' })
+    expect(sourceDifferences(snapshot, source)).toEqual([])
+  })
+
+  it('gives the same JSON whatever the key order, and a different one for different data', () => {
+    const reordered = Object.fromEntries(Object.entries(source).reverse()) as CertificateSourceData
+    expect(canonicalSourceJson(reordered)).toBe(canonicalSourceJson(source))
+    expect(canonicalSourceJson({ ...source, jobName: 'Other' })).not.toBe(canonicalSourceJson(source))
   })
 })

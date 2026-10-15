@@ -6,7 +6,7 @@ import type { RbacService } from '@open-mercato/core/modules/auth/services/rbacS
 import { enforceCommandOptimisticLock } from '@open-mercato/shared/lib/crud/optimistic-lock-command'
 import { resolveTranslations } from '@open-mercato/shared/lib/i18n/server'
 import { createLogger } from '@open-mercato/shared/lib/logger'
-import { ItadAsset, ItadAssetStatusTransition, ItadIntakeScan, ItadManifestItem, type ItadJob } from '../data/entities'
+import { ItadAsset, ItadAssetStatusTransition, ItadCertificate, ItadIntakeScan, ItadManifestItem, type ItadJob } from '../data/entities'
 import {
   ITAD_ASSET_SYSTEM_FIELDS,
   itadAssetClassifySchema,
@@ -40,6 +40,7 @@ import {
 import { validateSerial } from '../domain/serial'
 import { emitItadEvent, type ItadEventId } from '../events'
 import { assetError } from '../lib/asset-errors'
+import { voidCertificate } from '../services/certificate-writer'
 import { openException, resolveOpenExceptions, type ExceptionChange } from '../services/exception-writer'
 import { emitExceptionChanges } from './exception-effects'
 import { lockJob } from './job-lock'
@@ -497,6 +498,32 @@ function applyClassification(
   return { assetId: asset.id, from, to: target, source, sanitizationRequired }
 }
 
+type VoidedCertificate = { certificateId: string; certificateNumber: string; assetId: string }
+
+/**
+ * Certificates spec REQ-614: a device reclassified as not carrying data needs no
+ * certificate, so its `issued` one is voided in the classification's transaction with the
+ * system reason code `reclassified_non_data_bearing`, the classifying user and reason.
+ */
+async function voidCertificateOnReclassification(
+  tx: EntityManager,
+  input: { job: ItadJob; assetId: string; actorUserId: string; reason: string | null; now: Date },
+): Promise<VoidedCertificate | null> {
+  const certificate = await tx.findOne(ItadCertificate, {
+    tenantId: input.job.tenantId,
+    organizationId: input.job.organizationId,
+    asset: input.assetId,
+    status: 'issued',
+  } as FilterQuery<ItadCertificate>)
+  if (!certificate) return null
+  voidCertificate(
+    tx,
+    { tenantId: input.job.tenantId, organizationId: input.job.organizationId },
+    { certificate, actorUserId: input.actorUserId, reason: input.reason, reasonCode: 'reclassified_non_data_bearing', now: input.now },
+  )
+  return { certificateId: certificate.id, certificateNumber: certificate.certificateNumber, assetId: input.assetId }
+}
+
 async function emitClassificationEvents(
   changes: ClassificationChange[],
   base: { jobId: string; actorUserId: string; tenantId: string; organizationId: string },
@@ -744,10 +771,15 @@ const classifyAssetsCommand: CommandHandler<ItadAssetClassifyInput, ItadAssetCla
       const changes: ClassificationChange[] = []
       const unchanged: string[] = []
       const exceptionChanges: ExceptionChange[] = []
+      const voidedCertificates: VoidedCertificate[] = []
       for (const { asset, decision } of decisions) {
         if (decision.kind !== 'change') {
           unchanged.push(asset.id)
           continue
+        }
+        if (!input.dataBearing && asset.dataBearing === true) {
+          const voided = await voidCertificateOnReclassification(tx, { job, assetId: asset.id, actorUserId, reason, now })
+          if (voided) voidedCertificates.push(voided)
         }
         // Q8: a device in review that does not carry data no longer needs the failed
         // sanitization handled; its open SANITIZATION_FAILED is resolved with this reason.
@@ -778,12 +810,19 @@ const classifyAssetsCommand: CommandHandler<ItadAssetClassifyInput, ItadAssetCla
         )
       }
       await tx.flush()
-      return { job, changes, unchanged, exceptionChanges }
+      return { job, changes, unchanged, exceptionChanges, voidedCertificates }
     })
 
     const base = { jobId: outcome.job.id, actorUserId, tenantId: scope.tenantId, organizationId: scope.organizationId }
     await emitClassificationEvents(outcome.changes, base, reason)
     await emitExceptionChanges(outcome.exceptionChanges, actorUserId)
+    for (const voided of outcome.voidedCertificates) {
+      try {
+        await emitItadEvent('itad.certificate.voided', { ...voided, voidReasonCode: 'reclassified_non_data_bearing', ...base })
+      } catch (err) {
+        logger.error('Failed to emit itad.certificate.voided', { err })
+      }
+    }
     return {
       jobId: outcome.job.id,
       tenantId: scope.tenantId,
