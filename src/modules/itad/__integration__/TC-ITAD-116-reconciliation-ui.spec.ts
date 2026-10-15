@@ -60,7 +60,7 @@ test.describe('TC-ITAD-116: reconciliation in the UI and serial lookup page', ()
       await expect(nameInput).not.toBeFocused()
 
       await page.goto('/backend/itad/assets')
-      await page.getByPlaceholder('Serial number or its beginning').fill(`rx${tag.toLowerCase()}`)
+      await page.getByPlaceholder('Serial number or customer asset tag').fill(`rx${tag.toLowerCase()}`)
       const result = page.getByRole('row').filter({ hasText: `RX${tag}` })
       await expect(result.getByText('Exact match')).toBeVisible()
       await result.getByRole('link').click()

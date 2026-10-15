@@ -215,7 +215,10 @@ export const itadAssetListSchema = z.object({
 
 /** Cross-job serial lookup: exact or prefix match on the normalized serial. */
 export const itadAssetLookupSchema = z.object({
-  serial: z.string().trim().max(200),
+  /** Serial number or customer asset tag (operations dashboard spec "Asset search"). */
+  q: z.string().trim().max(200).optional(),
+  /** Alias of `q`, kept for compatibility. */
+  serial: z.string().trim().max(200).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 })

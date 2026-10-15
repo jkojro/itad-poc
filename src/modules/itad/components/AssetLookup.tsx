@@ -1,10 +1,11 @@
 "use client"
 import * as React from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy'
 import { DataTable } from '@open-mercato/ui/backend/DataTable'
+import { FilterBar } from '@open-mercato/ui/backend/FilterBar'
 import { RowActions } from '@open-mercato/ui/backend/RowActions'
 import { Alert, AlertDescription } from '@open-mercato/ui/primitives/alert'
 import { StatusBadge } from '@open-mercato/ui/primitives/status-badge'
@@ -12,8 +13,9 @@ import { readApiResultOrThrow } from '@open-mercato/ui/backend/utils/apiCall'
 import { useOrganizationScopeVersion } from '@open-mercato/shared/lib/frontend/useOrganizationScope'
 import { useT } from '@open-mercato/shared/lib/i18n/context'
 import { normalizeSerial } from '../domain/serial'
-import type { ItadJobStatus } from '../domain/job-types'
+import type { ItadAssetStatus, ItadJobStatus } from '../domain/job-types'
 import { ITAD_ASSET_ENTITY_ID } from '../lib/constants'
+import { ASSET_STATUS_VARIANTS, assetStatusLabel } from './data-bearing-ui'
 import { ITAD_JOB_STATUS_FALLBACK_LABELS, ITAD_JOB_STATUS_VARIANTS, itadJobStatusLabelKey } from './job-status'
 
 type Translate = ReturnType<typeof useT>
@@ -24,11 +26,16 @@ const PAGE_SIZE = 25
 type LookupRow = {
   id: string
   serial: string
-  status: string
+  customerAssetTag: string | null
+  manufacturer: string | null
+  model: string | null
+  status: ItadAssetStatus
+  matchedOn: 'serial' | 'customerAssetTag'
   exactMatch: boolean
   receivedAt: string
   jobId: string
   jobReference: string
+  jobName: string
   jobStatus: ItadJobStatus
   customerName: string | null
 }
@@ -41,6 +48,7 @@ function buildColumns(t: Translate): ColumnDef<LookupRow>[] {
     {
       id: 'serial',
       header: t('itad.manifest.field.serial', 'Serial number'),
+      meta: { truncate: false },
       cell: ({ row }) => (
         <span className="flex flex-wrap items-center gap-2">
           <span className="font-mono">{row.original.serial}</span>
@@ -49,14 +57,16 @@ function buildColumns(t: Translate): ColumnDef<LookupRow>[] {
       ),
     },
     {
-      id: 'job',
-      header: t('itad.assets.lookup.job', 'Job'),
-      cell: ({ row }) => (
-        // The row opens the device; this link opens the job, so it must not reach the row.
-        <Link className="underline underline-offset-2" href={receivingHref(row.original.jobId)} onClick={(event) => event.stopPropagation()}>
-          {row.original.jobReference}
-        </Link>
-      ),
+      id: 'customerAssetTag',
+      header: t('itad.assets.lookup.tag', 'Customer asset tag'),
+      cell: ({ row }) =>
+        row.original.customerAssetTag ? <span className="font-mono">{row.original.customerAssetTag}</span> : <span className="text-muted-foreground">—</span>,
+    },
+    {
+      id: 'device',
+      header: t('itad.assets.lookup.device', 'Manufacturer / model'),
+      meta: { priority: 3 },
+      cell: ({ row }) => [row.original.manufacturer, row.original.model].filter(Boolean).join(' ') || <span className="text-muted-foreground">—</span>,
     },
     {
       id: 'customer',
@@ -64,31 +74,51 @@ function buildColumns(t: Translate): ColumnDef<LookupRow>[] {
       cell: ({ row }) => row.original.customerName ?? <span className="text-muted-foreground">{t('itad.jobs.customer.deleted', 'Deleted customer')}</span>,
     },
     {
-      id: 'jobStatus',
-      header: t('itad.jobs.table.column.status', 'Status'),
+      id: 'job',
+      header: t('itad.assets.lookup.job', 'Job'),
+      meta: { truncate: false },
       cell: ({ row }) => (
-        <StatusBadge variant={ITAD_JOB_STATUS_VARIANTS[row.original.jobStatus] ?? 'neutral'} dot>
-          {t(itadJobStatusLabelKey(row.original.jobStatus), ITAD_JOB_STATUS_FALLBACK_LABELS[row.original.jobStatus])}
-        </StatusBadge>
+        // The row opens the device; this link opens the job, so it must not reach the row.
+        <span className="block space-y-0.5">
+          <Link className="underline underline-offset-2" href={receivingHref(row.original.jobId)} onClick={(event) => event.stopPropagation()}>
+            {row.original.jobReference}
+          </Link>
+          <span className="block text-xs text-muted-foreground">{row.original.jobName}</span>
+        </span>
       ),
     },
     {
-      id: 'receivedAt',
-      header: t('itad.receiving.assets.receivedAt', 'Received'),
-      cell: ({ row }) => new Date(row.original.receivedAt).toLocaleString(),
+      // Read live on every search; the platform's global search never shows a status.
+      id: 'status',
+      header: t('itad.assets.lookup.status', 'Device status'),
+      meta: { truncate: false },
+      cell: ({ row }) => (
+        <span className="flex flex-wrap gap-1">
+          <StatusBadge variant={ASSET_STATUS_VARIANTS[row.original.status] ?? 'neutral'} dot>
+            {assetStatusLabel(t, row.original.status)}
+          </StatusBadge>
+          <StatusBadge variant={ITAD_JOB_STATUS_VARIANTS[row.original.jobStatus] ?? 'neutral'}>
+            {t(itadJobStatusLabelKey(row.original.jobStatus), ITAD_JOB_STATUS_FALLBACK_LABELS[row.original.jobStatus])}
+          </StatusBadge>
+        </span>
+      ),
     },
   ]
 }
 
 /**
- * Serial lookup across the jobs the user can read (manifest spec REQ-107): exact or
- * prefix match, at least 3 characters; each result opens the job's Receiving tab.
+ * Asset search across the jobs the user can read (manifest spec REQ-107; operations
+ * dashboard spec "Asset search"): serial number or customer asset tag, exact or prefix,
+ * at least 3 characters. Every match is listed with its customer, job and live status;
+ * a row opens the device. The query lives in the URL (`?q=`), so the dashboard search box
+ * and the global search can link here.
  */
 export default function AssetLookup() {
   const t = useT()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const scopeVersion = useOrganizationScopeVersion()
-  const [search, setSearch] = React.useState('')
+  const [search, setSearch] = React.useState(() => searchParams?.get('q') ?? '')
   const [page, setPage] = React.useState(1)
   const columns = React.useMemo(() => buildColumns(t), [t])
   const serial = normalizeSerial(search)
@@ -98,7 +128,7 @@ export default function AssetLookup() {
     queryKey: ['itad-asset-lookup', serial, page, scopeVersion],
     enabled,
     queryFn: async () => {
-      const params = new URLSearchParams({ serial, page: String(page), pageSize: String(PAGE_SIZE) })
+      const params = new URLSearchParams({ q: serial, page: String(page), pageSize: String(PAGE_SIZE) })
       return readApiResultOrThrow(`/api/itad/assets?${params.toString()}`, undefined, {
         errorMessage: t('itad.assets.lookup.error', 'Could not search the assets'),
       })
@@ -111,23 +141,34 @@ export default function AssetLookup() {
 
   return (
     <DataTable<LookupRow>
-      title={t('itad.assets.lookup.title', 'Find a device by serial number')}
+      title={t('itad.assets.lookup.titleSearch', 'Find a device by serial number or customer asset tag')}
       titleHeadingLevel={1}
       columns={columns}
       data={enabled ? data?.items ?? [] : []}
-      searchValue={search}
-      searchPlaceholder={t('itad.assets.lookup.search', 'Serial number or its beginning (at least 3 characters)')}
-      onSearchChange={(value) => {
-        setSearch(value)
-        setPage(1)
-      }}
+      // The search lives in the toolbar, not in DataTable's own search, so the page keeps
+      // its own states: a hint below 3 characters and "No asset found for …" (spec §19).
+      toolbar={(
+        <FilterBar
+          searchValue={search}
+          searchPlaceholder={t('itad.assets.lookup.searchAny', 'Serial number or customer asset tag (at least 3 characters)')}
+          onSearchChange={(value) => {
+            setSearch(value)
+            setPage(1)
+            const params = new URLSearchParams(searchParams?.toString() ?? '')
+            if (value.trim()) params.set('q', value.trim())
+            else params.delete('q')
+            const query = params.toString()
+            router.replace(query ? `?${query}` : '?', { scroll: false })
+          }}
+        />
+      )}
       entityId={ITAD_ASSET_ENTITY_ID}
       extensionTableId="itad.assets.lookup"
       emptyState={(
         <p className="py-8 text-center text-sm text-muted-foreground">
           {enabled
-            ? t('itad.assets.lookup.empty', 'No received device has a serial starting with this text.')
-            : t('itad.assets.lookup.hint', 'Type at least 3 characters of a serial number. Search covers all jobs you can access.')}
+            ? t('itad.assets.lookup.noResult', 'No asset found for "{query}".', { query: search.trim() })
+            : t('itad.assets.lookup.hintAny', 'Type at least 3 characters of a serial number or customer asset tag. Search covers all jobs you can access.')}
         </p>
       )}
       rowActions={(row) => (

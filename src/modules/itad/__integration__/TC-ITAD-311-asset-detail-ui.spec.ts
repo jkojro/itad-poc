@@ -35,7 +35,7 @@ test.describe('TC-ITAD-311: Asset detail page', () => {
 
       // From the serial lookup page: a row opens the device.
       await page.goto('/backend/itad/assets')
-      await page.getByPlaceholder('Serial number or its beginning').fill(asset.serial.toLowerCase())
+      await page.getByPlaceholder('Serial number or customer asset tag').fill(asset.serial.toLowerCase())
       await page.getByRole('row').filter({ hasText: asset.serial }).getByRole('cell').first().click()
       await expect(page).toHaveURL(new RegExp(`/backend/itad/jobs/${jobId}/assets/${asset.id}`))
 
