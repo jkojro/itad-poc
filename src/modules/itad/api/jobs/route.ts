@@ -26,7 +26,7 @@ import { loadUserDisplayNames } from '../../module-integrations/users'
 import type { ItadJobListItem } from '../../components/types'
 import type { EntityManager } from '@mikro-orm/postgresql'
 import { countActiveManifestItems } from '../../services/manifest-import'
-import { countActiveAssets } from '../../services/reconciliation-reader'
+import { countActiveAssets, countMatchedManifestItems } from '../../services/reconciliation-reader'
 import { countSanitizationPending } from '../../services/sanitization-reader'
 import { countOpenExceptions } from '../../services/exception-reader'
 import { loadPickupTaskSummary } from '../../services/pickup-task-reader'
@@ -126,9 +126,10 @@ async function decorateItems(payload: ListPayload, ctx: CrudCtx & { query: ItadJ
   // Derived counter (spec "Derived values"): part of the job summary, needs only `itad.jobs.view`.
   const em = ctx.container.resolve<EntityManager>('em').fork()
   const jobIds = items.map((item) => item.id)
-  const [expectedCounts, receivedCounts, pendingCounts, exceptionCounts] = await Promise.all([
+  const [expectedCounts, receivedCounts, matchedCounts, pendingCounts, exceptionCounts] = await Promise.all([
     countActiveManifestItems(em, tenantId, jobIds),
     countActiveAssets(em, tenantId, jobIds),
+    countMatchedManifestItems(em, tenantId, jobIds),
     countSanitizationPending(em, tenantId, jobIds),
     countOpenExceptions(em, tenantId, 'job_id', jobIds),
   ])
@@ -142,6 +143,9 @@ async function decorateItems(payload: ListPayload, ctx: CrudCtx & { query: ItadJ
     item.customerName = names.get(`${item.organizationId}:${item.customerId}`) ?? null
     item.expectedAssetCount = expectedCounts.get(item.id) ?? 0
     item.receivedAssetCount = receivedCounts.get(item.id) ?? 0
+    // Operations dashboard spec Q3: Received = matched to the manifest; unexpected is separate.
+    item.matchedAssetCount = matchedCounts.get(item.id) ?? 0
+    item.unexpectedAssetCount = Math.max(0, item.receivedAssetCount - item.matchedAssetCount)
     item.sanitizationPendingCount = pendingCounts.get(item.id) ?? 0
     item.openExceptionCount = exceptionCounts.get(item.id) ?? 0
     if (singleRecord) item.editableFields = getEditableFields(item)
@@ -239,6 +243,8 @@ export const { metadata, GET, POST, PUT, DELETE } = makeCrudRoute({
       expectedAssetEstimate: toIntOrNull(item.expected_asset_estimate),
       expectedAssetCount: 0,
       receivedAssetCount: 0,
+      matchedAssetCount: 0,
+      unexpectedAssetCount: 0,
       sanitizationPendingCount: 0,
       openExceptionCount: 0,
       scheduledPickupAt: toIso(item.scheduled_pickup_at),
@@ -292,7 +298,12 @@ const itadJobListItemSchema = z.object({
   heldBy: z.object({ id: z.string().uuid(), name: z.string().nullable() }).nullable(),
   expectedAssetEstimate: z.number().int().nullable(),
   expectedAssetCount: z.number().int(),
-  receivedAssetCount: z.number().int(),
+  receivedAssetCount: z
+    .number()
+    .int()
+    .describe('Deprecated: every active asset of the job (Total intake), unexpected ones included. Use matchedAssetCount for Received.'),
+  matchedAssetCount: z.number().int().describe('Received: active manifest items matched by an active asset'),
+  unexpectedAssetCount: z.number().int().describe('Active assets without an active manifest item'),
   sanitizationPendingCount: z.number().int(),
   openExceptionCount: z.number().int(),
   scheduledPickupAt: z.string().nullable(),

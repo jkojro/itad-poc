@@ -32,6 +32,7 @@ import {
   type ManifestItemRow,
 } from './manifest-types'
 import type { ItadJobListItem } from './types'
+import { useInitialUrlFilters } from './use-url-filters'
 import type { FilterValues } from '@open-mercato/ui/backend/FilterBar'
 import { ReconciliationBadge, reconciliationLabel, useInvalidateReconciliation, useReconciliation } from './reconciliation-ui'
 
@@ -273,7 +274,8 @@ export function JobManifestPanel({
   const [importOpen, setImportOpen] = React.useState(false)
   const [sourceItem, setSourceItem] = React.useState<ManifestItemRow | null>(null)
   const [removeItem, setRemoveItem] = React.useState<ManifestItemRow | null>(null)
-  const [filterValues, setFilterValues] = React.useState<FilterValues>({})
+  const initialFilters = useInitialUrlFilters({ reconciliation: ['matched', 'missing'] })
+  const [filterValues, setFilterValues] = React.useState<FilterValues>(initialFilters)
   const reconciliationFilter = typeof filterValues.reconciliation === 'string' ? filterValues.reconciliation : ''
   const reconciliation = useReconciliation(job.id)
   const invalidateReconciliation = useInvalidateReconciliation(job.id)

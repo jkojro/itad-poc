@@ -41,6 +41,7 @@ import {
 import type { Assignee, ExceptionDetail, ExceptionList, ExceptionRow } from './exception-types'
 import { ReasonDialog } from './ReasonDialog'
 import type { ItadJobListItem } from './types'
+import { useInitialUrlFilters } from './use-url-filters'
 
 type Translate = ReturnType<typeof useT>
 
@@ -400,7 +401,8 @@ export function JobExceptionsPanel({
   const queryClient = useQueryClient()
   const { confirm, ConfirmDialogElement } = useConfirmDialog()
   const [page, setPage] = React.useState(1)
-  const [filterValues, setFilterValues] = React.useState<FilterValues>({ status: 'open' })
+  const initialFilters = useInitialUrlFilters({ status: ['open', 'resolved'], type: ITAD_EXCEPTION_TYPES }, { status: 'open' })
+  const [filterValues, setFilterValues] = React.useState<FilterValues>(initialFilters)
   const [assignTarget, setAssignTarget] = React.useState<ExceptionRow | null>(null)
   const [resolveTarget, setResolveTarget] = React.useState<ExceptionRow | null>(null)
   const [historyTarget, setHistoryTarget] = React.useState<ExceptionRow | null>(null)

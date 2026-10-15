@@ -48,6 +48,7 @@ import {
 } from './sanitization-ui'
 import type { AssetSanitization, SanitizationList, SanitizationRow, ToolSuggestion } from './sanitization-types'
 import type { ItadJobListItem } from './types'
+import { useInitialUrlFilters } from './use-url-filters'
 
 type Translate = ReturnType<typeof useT>
 
@@ -661,7 +662,8 @@ export function JobSanitizationPanel({
   const queryClient = useQueryClient()
   const [search, setSearch] = React.useState('')
   const [page, setPage] = React.useState(1)
-  const [filterValues, setFilterValues] = React.useState<FilterValues>({})
+  const initialFilters = useInitialUrlFilters({ status: SANITIZATION_STATUSES })
+  const [filterValues, setFilterValues] = React.useState<FilterValues>(initialFilters)
   const [startAssets, setStartAssets] = React.useState<SanitizationRow[] | null>(null)
   const [resultAssets, setResultAssets] = React.useState<SanitizationRow[] | null>(null)
   const [evidenceAssets, setEvidenceAssets] = React.useState<SanitizationRow[] | null>(null)
