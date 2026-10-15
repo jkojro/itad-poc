@@ -28,7 +28,7 @@ const SIGNAL_LABELS: Record<AttentionSignalKey, string> = {
   missing_exceptions: '{count} missing',
   unexpected_exceptions: '{count} unexpected',
   data_bearing_unknown: '{count} carries data: not determined',
-  certificates_missing: '{count} certificates missing',
+  certificates_missing: 'Missing certificates: {count}',
 }
 
 export function attentionSignalLabel(t: Translate, key: AttentionSignalKey, count: number): string {

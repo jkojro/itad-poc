@@ -1,7 +1,7 @@
 # ITAD Operations Dashboard & Asset Search
 
 **Date**: 2026-10-15
-**Status**: In progress — Phase 1 implemented and verified (2026-10-15)
+**Status**: In progress — Phases 1–2 implemented and verified (2026-10-15)
 
 > Spec 7 of the app-owned `itad` module (**Epic 7**). It follows `2026-10-02-itad-jobs.md`, `2026-10-05-itad-manifest-reconciliation.md`, `2026-10-09-itad-asset-sanitization.md`, `2026-10-11-itad-exceptions.md`, `2026-10-12-itad-pickup-calendar.md` and `2026-10-14-itad-certificates.md`.
 >
@@ -417,3 +417,8 @@ Validation per phase:
   - the Exceptions tab also reads `status` and `type` from the URL, so signal links can open it filtered;
   - `matchedAssetCount` uses a dedicated grouped query (`countMatchedManifestItems`) with the reconciliation matching rule;
   - the Receiving tab counter formerly labelled "Received" is now "Total intake"; the job summary shows Received (matched) and Unexpected.
+- **2026-10-15, phase 2 implemented:**
+  - `GET /api/itad/operations` also returns `customers` (every customer of the active jobs, before filters) to feed the customer filter;
+  - each non-empty group renders as a `DataTable` whose title carries the group name and count; an empty group shows its heading and "Nothing here.";
+  - the dashboard search box navigates to `/backend/itad/assets?q=`; the ITAD Assets page reads `q` in phase 3;
+  - the "certificates missing" chip reads "Missing certificates: N".
