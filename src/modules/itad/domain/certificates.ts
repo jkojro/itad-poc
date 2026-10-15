@@ -253,3 +253,89 @@ export function normalizeMediaIdentifiers(values: readonly string[] | null | und
   }
   return result.length > MEDIA_IDENTIFIERS_MAX ? null : result
 }
+
+// ─── Reissue and void (spec "Reissue and void") ─────────────────────────────
+
+export const CERTIFICATE_REASON_MIN = 3
+export const CERTIFICATE_REASON_MAX = 1000
+
+/** A required reason for reissue or void: trimmed, 3–1000 characters, else `false`. */
+export function certificateReason(value: string | null | undefined): string | false {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  if (trimmed.length < CERTIFICATE_REASON_MIN || trimmed.length > CERTIFICATE_REASON_MAX) return false
+  return trimmed
+}
+
+export type CertificateChangeDecision =
+  | { ok: true }
+  | { ok: false; code: 'certificate_not_issued' }
+  | { ok: false; code: 'certificate_not_eligible'; detail: 'job_status' }
+
+/** Only an `issued` certificate can be reissued or voided, in a job status that allows it. */
+export function decideCertificateChange(
+  certificate: { status: CertificateStatus },
+  job: CertificateJob,
+  action: 'reissue' | 'void',
+): CertificateChangeDecision {
+  if (certificate.status !== 'issued') return { ok: false, code: 'certificate_not_issued' }
+  if (!certificateActionAllowed(job, action)) return { ok: false, code: 'certificate_not_eligible', detail: 'job_status' }
+  return { ok: true }
+}
+
+/** Source-data fields in a fixed order: what a reissue preview compares and fingerprints. */
+export const CERTIFICATE_SOURCE_FIELDS = [
+  'customerName',
+  'jobReference',
+  'customerReference',
+  'jobName',
+  'assetSerial',
+  'customerAssetTag',
+  'manufacturer',
+  'model',
+  'mediaIdentifiers',
+  'method',
+  'methodDetail',
+  'tool',
+  'toolVersion',
+  'result',
+  'verificationMethod',
+  'startedAt',
+  'completedAt',
+  'startedBy',
+  'resultRecordedBy',
+  'sourceRunId',
+] as const satisfies ReadonlyArray<keyof CertificateSourceData>
+
+export type CertificateSourceField = (typeof CERTIFICATE_SOURCE_FIELDS)[number]
+
+type SourceValue = string | string[] | null
+
+export type CertificateDifference = { field: CertificateSourceField; from: SourceValue; to: SourceValue }
+
+function sameValue(a: SourceValue, b: SourceValue): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    const left = Array.isArray(a) ? a : []
+    const right = Array.isArray(b) ? b : []
+    return left.length === right.length && left.every((value, index) => value === right[index])
+  }
+  return (a ?? null) === (b ?? null)
+}
+
+/** What a reissue would change against the current certificate's snapshot. */
+export function sourceDifferences(current: CertificateSourceData, next: CertificateSourceData): CertificateDifference[] {
+  const differences: CertificateDifference[] = []
+  for (const field of CERTIFICATE_SOURCE_FIELDS) {
+    const from = (current[field] ?? null) as SourceValue
+    const to = (next[field] ?? null) as SourceValue
+    if (!sameValue(from, to)) differences.push({ field, from, to })
+  }
+  return differences
+}
+
+/**
+ * Canonical JSON of the source data (fixed field order, `null` for missing values), so
+ * the same data always gives the same `previewHash`.
+ */
+export function canonicalSourceJson(source: CertificateSourceData): string {
+  return JSON.stringify(CERTIFICATE_SOURCE_FIELDS.map((field) => [field, source[field] ?? null]))
+}

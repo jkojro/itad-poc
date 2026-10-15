@@ -6,7 +6,7 @@ import type { OpenApiRouteDoc } from '@open-mercato/shared/lib/openapi'
 import type { QueryEngine } from '@open-mercato/shared/lib/query/types'
 import type { ItadCertificateIssueResult } from '../../../../../../commands/certificates'
 import type { ItadCertificateIssueInput } from '../../../../../../data/validators'
-import { CERTIFICATE_LOCALES, CERTIFICATE_STATUSES, decideEligibility } from '../../../../../../domain/certificates'
+import { CERTIFICATE_LOCALES, CERTIFICATE_STATUSES, decideCertificateChange, decideEligibility } from '../../../../../../domain/certificates'
 import { certificateError } from '../../../../../../lib/certificate-errors'
 import { runGuardedCommand } from '../../../../../../lib/command-route'
 import { itadRouteErrorResponse, loadReadableJob, resolveItadRouteContext } from '../../../../../../lib/route-context'
@@ -31,10 +31,18 @@ export async function GET(request: Request, { params }: { params: { id: string; 
     const items = await listCertificates(em, route.container.resolve<QueryEngine>('queryEngine'), scope, { jobId: job.id, assetId })
     const { facts } = await loadEligibility(em, scope, job, assetId)
     const decision = decideEligibility(facts)
+    const current = items.find((item) => item.status === 'issued') ?? null
+    const reissue = decideEligibility(facts, 'reissue')
     return NextResponse.json({
       items,
-      currentCertificateId: items.find((item) => item.status === 'issued')?.id ?? null,
+      currentCertificateId: current?.id ?? null,
+      jobStatus: job.status,
       issue: decision.ok ? { allowed: true } : { allowed: false, code: decision.code, detail: 'detail' in decision ? decision.detail : null },
+      reissue: {
+        allowed: Boolean(current) && decideCertificateChange({ status: 'issued' }, job, 'reissue').ok && reissue.ok,
+        detail: !reissue.ok && 'detail' in reissue ? reissue.detail : null,
+      },
+      void: { allowed: Boolean(current) && decideCertificateChange({ status: 'issued' }, job, 'void').ok },
     })
   } catch (err) {
     return itadRouteErrorResponse(err, 'itad.certificates.asset.list')
@@ -79,7 +87,10 @@ const certificateItemSchema = z.object({
   supersedesCertificateId: z.string().uuid().nullable(),
   supersededByCertificateId: z.string().uuid().nullable(),
   supersedeReason: z.string().nullable(),
+  supersededAt: z.string().nullable(),
+  supersededBy: z.object({ id: z.string().uuid(), name: z.string().nullable() }).nullable(),
   voidedAt: z.string().nullable(),
+  voidedBy: z.object({ id: z.string().uuid(), name: z.string().nullable() }).nullable(),
   voidReason: z.string().nullable(),
   voidReasonCode: z.string().nullable(),
   updatedAt: z.string(),
@@ -91,7 +102,7 @@ export const openApi: OpenApiRouteDoc = {
   methods: {
     GET: {
       summary: 'Certificates of one asset',
-      description: 'All certificates of the asset (issued, superseded, void), newest first, the current one, and whether one can be issued now.',
+      description: 'All certificates of the asset (issued, superseded, void), newest first, the current one, and whether a certificate can be issued, and the current one reissued or voided, now.',
       responses: [
         {
           status: 200,
@@ -99,7 +110,10 @@ export const openApi: OpenApiRouteDoc = {
           schema: z.object({
             items: z.array(certificateItemSchema),
             currentCertificateId: z.string().uuid().nullable(),
+            jobStatus: z.string(),
             issue: z.object({ allowed: z.boolean(), code: z.string().optional(), detail: z.string().nullable().optional() }),
+            reissue: z.object({ allowed: z.boolean(), detail: z.string().nullable() }),
+            void: z.object({ allowed: z.boolean() }),
           }),
         },
       ],

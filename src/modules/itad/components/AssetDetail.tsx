@@ -61,7 +61,13 @@ type TimelineItem = {
   }
 }
 
-const FEATURES = ['itad.sanitization.view', 'itad.exceptions.view', 'itad.certificates.view', 'itad.certificates.issue'] as const
+const FEATURES = [
+  'itad.sanitization.view',
+  'itad.exceptions.view',
+  'itad.certificates.view',
+  'itad.certificates.issue',
+  'itad.certificates.manage',
+] as const
 
 const KIND_LABELS: Record<TimelineKind, string> = {
   received: 'Received',
@@ -139,6 +145,7 @@ export function AssetDetail({ jobId, assetId }: { jobId: string; assetId: string
   const canViewExceptions = granted.has('itad.exceptions.view')
   const canViewCertificates = granted.has('itad.certificates.view')
   const canIssueCertificates = granted.has('itad.certificates.issue')
+  const canManageCertificates = granted.has('itad.certificates.manage')
   const base = `/api/itad/jobs/${encodeURIComponent(jobId)}`
   const asset = useQuery<AssetDetailBody>({
     queryKey: ['itad-asset-detail', jobId, assetId],
@@ -276,7 +283,13 @@ export function AssetDetail({ jobId, assetId }: { jobId: string; assetId: string
       ) : null}
 
       {canViewCertificates ? (
-        <AssetCertificatesSection jobId={jobId} assetId={assetId} serial={data.serial} canIssue={canIssueCertificates} />
+        <AssetCertificatesSection
+          jobId={jobId}
+          assetId={assetId}
+          serial={data.serial}
+          canIssue={canIssueCertificates}
+          canManage={canManageCertificates}
+        />
       ) : null}
 
       <Section title={t('itad.timeline.title', 'Timeline')}>

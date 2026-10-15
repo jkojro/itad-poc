@@ -5,6 +5,7 @@ import path from 'node:path'
 import { expect, type APIRequestContext } from '@playwright/test'
 import { apiRequest } from '@open-mercato/core/helpers/integration/api'
 import { readJsonSafe } from '@open-mercato/core/helpers/integration/generalFixtures'
+import { LOCK_HEADER } from './itad-job-fixtures'
 import { currentAssets, recordResult, startRunOk, type DataBearingAsset } from './itad-sanitization-fixtures'
 
 export const CERTIFICATE_NUMBER = /^CDS-\d{4}-\d{5,}$/
@@ -16,12 +17,30 @@ export type CertificateItem = {
   locale: string
   sourceRun: { id: string; method: string; tool: string; toolVersion: string; completedAt: string }
   issuedBy: { id: string; name: string | null }
+  supersedesCertificateId: string | null
+  supersededByCertificateId: string | null
+  supersedeReason: string | null
+  voidReason: string | null
+  voidReasonCode: string | null
+  voidedBy: { id: string; name: string | null } | null
+  updatedAt: string
 }
 
 export type AssetCertificatesBody = {
   items: CertificateItem[]
   currentCertificateId: string | null
+  jobStatus: string
   issue: { allowed: boolean; code?: string; detail?: string | null }
+  reissue: { allowed: boolean; detail: string | null }
+  void: { allowed: boolean }
+}
+
+export type ReissuePreviewBody = {
+  certificateId: string
+  certificateNumber: string
+  source: Record<string, unknown>
+  differences: Array<{ field: string; from: unknown; to: unknown }>
+  previewHash: string
 }
 
 const base = (jobId: string) => `/api/itad/jobs/${encodeURIComponent(jobId)}`
@@ -94,4 +113,53 @@ export function pdfText(bytes: Buffer): string {
 
 export async function errorBody(response: { json: () => Promise<unknown> }) {
   return (await response.json().catch(() => null)) as { code?: string; detail?: string; fields?: string[] } | null
+}
+
+export async function reissuePreview(request: APIRequestContext, token: string, jobId: string, certificateId: string) {
+  return apiRequest(request, 'GET', `${base(jobId)}/certificates/${encodeURIComponent(certificateId)}/reissue-preview`, { token })
+}
+
+export async function reissuePreviewOk(request: APIRequestContext, token: string, jobId: string, certificateId: string) {
+  const response = await reissuePreview(request, token, jobId, certificateId)
+  const body = await readJsonSafe<ReissuePreviewBody>(response)
+  expect(response.status(), `preview failed: ${JSON.stringify(body)}`).toBe(200)
+  return body!
+}
+
+/** `POST …/reissue` with the certificate version in the optimistic-lock header. */
+export async function reissueCertificate(
+  request: APIRequestContext,
+  token: string,
+  jobId: string,
+  certificate: { id: string; updatedAt: string },
+  data: { reason?: string | null; locale?: string; previewHash?: string },
+) {
+  return apiRequest(request, 'POST', `${base(jobId)}/certificates/${encodeURIComponent(certificate.id)}/reissue`, {
+    token,
+    data,
+    headers: { [LOCK_HEADER]: certificate.updatedAt },
+  })
+}
+
+/** `POST …/void` with the certificate version in the optimistic-lock header. */
+export async function voidCertificate(
+  request: APIRequestContext,
+  token: string,
+  jobId: string,
+  certificate: { id: string; updatedAt: string },
+  reason: string | null,
+) {
+  return apiRequest(request, 'POST', `${base(jobId)}/certificates/${encodeURIComponent(certificate.id)}/void`, {
+    token,
+    data: { reason },
+    headers: { [LOCK_HEADER]: certificate.updatedAt },
+  })
+}
+
+/** The asset's certificate with this id, from a fresh listing. */
+export async function certificateById(request: APIRequestContext, token: string, jobId: string, assetId: string, id: string) {
+  const body = await assetCertificatesOk(request, token, jobId, assetId)
+  const item = body.items.find((entry) => entry.id === id)
+  if (!item) throw new Error(`certificate ${id} not listed`)
+  return item
 }

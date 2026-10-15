@@ -8,8 +8,19 @@ jest.mock('@open-mercato/shared/lib/i18n/server', () => ({
 }))
 jest.mock('../jobs', () => ({ ensureScope: jest.fn(), loadJob: jest.fn() }))
 jest.mock('../job-lock', () => ({ lockJob: jest.fn() }))
-jest.mock('../../services/certificate-reader', () => ({ loadEligibility: jest.fn(), loadSourceData: jest.fn() }))
-jest.mock('../../services/certificate-writer', () => ({ insertIssuedCertificate: jest.fn() }))
+jest.mock('../../services/certificate-reader', () => ({
+  loadEligibility: jest.fn(),
+  loadSourceData: jest.fn(),
+  findCertificate: jest.fn(),
+  loadReissueSource: jest.fn(),
+  certificateAssetId: (certificate: { asset: { id: string } }) => certificate.asset.id,
+}))
+jest.mock('../../services/certificate-writer', () => ({
+  insertIssuedCertificate: jest.fn(),
+  markSuperseded: jest.fn(),
+  linkSuccessor: jest.fn(),
+  voidCertificate: jest.fn(),
+}))
 jest.mock('../../services/certificate-pdf', () => ({
   createGlyphChecker: async () => () => true,
   renderCertificatePdf: async () => new Uint8Array([37, 80, 68, 70]),
@@ -26,8 +37,8 @@ import { registerCommand } from '@open-mercato/shared/lib/commands'
 import '../certificates'
 import { ensureScope, loadJob } from '../jobs'
 import { lockJob } from '../job-lock'
-import { loadEligibility, loadSourceData, type LoadedEligibility } from '../../services/certificate-reader'
-import { insertIssuedCertificate } from '../../services/certificate-writer'
+import { findCertificate, loadEligibility, loadReissueSource, loadSourceData, type LoadedEligibility } from '../../services/certificate-reader'
+import { insertIssuedCertificate, linkSuccessor, markSuperseded } from '../../services/certificate-writer'
 import { allocateSequenceValue } from '../../services/job-reference-generator'
 import { resolveAttachmentService } from '../../module-integrations/attachments'
 import { emitItadEvent } from '../../events'
@@ -40,9 +51,11 @@ const ASSET = '44444444-4444-4444-8444-444444444444'
 const ATTACHMENT = 'att-1'
 const CERTIFICATE = 'cert-1'
 
-const issue = (registerCommand as jest.Mock).mock.calls
-  .map(([handler]) => handler as CommandHandler<unknown, { certificateId: string; certificateNumber: string }>)
-  .find((handler) => handler.id === 'itad.certificates.issue')!
+const handlers = (registerCommand as jest.Mock).mock.calls.map(
+  ([handler]) => handler as CommandHandler<unknown, { certificateId: string; certificateNumber: string }>,
+)
+const issue = handlers.find((handler) => handler.id === 'itad.certificates.issue')!
+const reissue = handlers.find((handler) => handler.id === 'itad.certificates.reissue')!
 
 type RunFact = { id: string; result: 'PASS' | 'FAIL'; finishedAt: string }
 
@@ -128,7 +141,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   ;(ensureScope as jest.Mock<typeof ensureScope>).mockResolvedValue({ tenantId: TENANT, organizationId: ORG } as never)
   ;(loadJob as jest.Mock).mockResolvedValue({ id: JOB } as never)
-  ;(lockJob as jest.Mock).mockResolvedValue({ id: JOB } as never)
+  ;(lockJob as jest.Mock).mockResolvedValue({ id: JOB, status: 'processing' } as never)
   ;(loadSourceData as jest.Mock<typeof loadSourceData>).mockResolvedValue(source)
   ;(allocateSequenceValue as jest.Mock).mockResolvedValue(7 as never)
   ;(insertIssuedCertificate as jest.Mock).mockReturnValue({ id: CERTIFICATE })
@@ -175,5 +188,73 @@ describe('itad.certificates.issue re-check in persistLink (certificates spec "Is
     await expect(run(ctx)).rejects.toMatchObject({ status: 409, body: { code: 'itad.certificates.errors.certificate_already_issued' } })
     expect(rolledBack).toEqual([ATTACHMENT])
     expect(emitItadEvent).not.toHaveBeenCalled()
+  })
+})
+
+describe('itad.certificates.reissue (certificates spec "Reissue")', () => {
+  const OLD = 'cert-old'
+  const current = () => ({
+    id: OLD,
+    status: 'issued',
+    certificateNumber: 'CDS-2026-00001',
+    asset: { id: ASSET },
+    updatedAt: new Date('2026-10-14T10:00:00.000Z'),
+  })
+
+  /** Records the order of writes inside `persistLink`. */
+  function setupReissue(previewHash = 'hash-1') {
+    const steps: string[] = []
+    const createScoped = jest.fn(async (input: { persistLink: (tx: unknown, id: string) => Promise<void> }) => {
+      await input.persistLink({ flush: async () => { steps.push('flush') } }, ATTACHMENT)
+      return { id: ATTACHMENT }
+    })
+    ;(resolveAttachmentService as jest.Mock).mockReturnValue({ createScoped })
+    ;(findCertificate as jest.Mock).mockImplementation(async () => current() as never)
+    ;(loadReissueSource as jest.Mock).mockResolvedValue({
+      ok: true,
+      asset: { id: ASSET },
+      run: { id: 'run-1' },
+      source,
+      preview: { certificateId: OLD, certificateNumber: 'CDS-2026-00001', source, differences: [], previewHash },
+    } as never)
+    ;(loadEligibility as jest.Mock<typeof loadEligibility>).mockResolvedValue(eligibility({ hasIssued: true }))
+    ;(markSuperseded as jest.Mock).mockImplementation(() => { steps.push('supersede') })
+    ;(insertIssuedCertificate as jest.Mock).mockImplementation(() => {
+      steps.push('insert')
+      return { id: CERTIFICATE }
+    })
+    ;(linkSuccessor as jest.Mock).mockImplementation(() => { steps.push('link') })
+    const em: Record<string, unknown> = {}
+    em.fork = () => em
+    em.transactional = async (fn: (tx: unknown) => unknown) => fn({})
+    const ctx = {
+      auth: { sub: 'u1', tenantId: TENANT, orgId: ORG },
+      container: { resolve: (name: string) => (name === 'em' ? em : {}) },
+    } as unknown as CommandRuntimeContext
+    return { ctx, createScoped, steps }
+  }
+
+  const runReissue = (ctx: CommandRuntimeContext, input: Record<string, unknown> = {}) =>
+    reissue.execute({ jobId: JOB, certificateId: '55555555-5555-4555-8555-555555555555', locale: 'pl', reason: 'Customer renamed', previewHash: 'hash-1', ...input }, ctx)
+
+  it('supersedes the old certificate before inserting the new one, then links both', async () => {
+    const { ctx, steps } = setupReissue()
+    await expect(runReissue(ctx)).resolves.toMatchObject({ certificateId: CERTIFICATE, supersededCertificateId: OLD })
+    expect(steps).toEqual(['supersede', 'flush', 'insert', 'flush', 'link', 'flush'])
+    expect(insertIssuedCertificate).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ supersedesCertificateId: OLD }))
+    expect(emitItadEvent).toHaveBeenCalledWith('itad.certificate.superseded', expect.objectContaining({ certificateId: OLD, supersededByCertificateId: CERTIFICATE }))
+  })
+
+  it('refuses a stale preview before spending a number', async () => {
+    const { ctx, createScoped } = setupReissue('hash-2')
+    await expect(runReissue(ctx)).rejects.toMatchObject({ status: 409, body: { code: 'itad.certificates.errors.certificate_preview_stale' } })
+    expect(allocateSequenceValue).not.toHaveBeenCalled()
+    expect(createScoped).not.toHaveBeenCalled()
+  })
+
+  it('requires a reason before reading anything', async () => {
+    const { ctx } = setupReissue()
+    await expect(runReissue(ctx, { reason: ' x ' })).rejects.toMatchObject({ status: 400, body: { code: 'itad.certificates.errors.reason_required' } })
+    expect(loadReissueSource).not.toHaveBeenCalled()
   })
 })

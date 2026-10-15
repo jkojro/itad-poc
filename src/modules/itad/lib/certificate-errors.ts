@@ -9,6 +9,9 @@ const CERTIFICATE_ERROR_MESSAGES: Record<ItadCertificateErrorCode, string> = {
   certificate_not_found: 'Certificate not found',
   locale_invalid: 'Choose the certificate language',
   media_identifiers_invalid: 'Enter at most 10 media identifiers of up to 100 characters each',
+  certificate_not_issued: 'Only a valid (issued) certificate can be reissued or voided',
+  certificate_preview_stale: 'The certificate data changed after the preview. Review the new preview and confirm again',
+  reason_required: 'Enter a reason of at least 3 characters',
 }
 
 const STATUS: Record<ItadCertificateErrorCode, 400 | 404 | 409 | 422> = {
@@ -18,6 +21,9 @@ const STATUS: Record<ItadCertificateErrorCode, 400 | 404 | 409 | 422> = {
   certificate_not_found: 404,
   locale_invalid: 400,
   media_identifiers_invalid: 400,
+  certificate_not_issued: 409,
+  certificate_preview_stale: 409,
+  reason_required: 400,
 }
 
 export async function certificateError(code: ItadCertificateErrorCode, details?: Record<string, unknown>): Promise<never> {
