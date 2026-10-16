@@ -1,7 +1,7 @@
 # ITAD Operations Dashboard & Asset Search
 
 **Date**: 2026-10-15
-**Status**: In progress — Phases 1–2 implemented and verified (2026-10-15)
+**Status**: Implemented — all three phases verified (2026-10-15)
 
 > Spec 7 of the app-owned `itad` module (**Epic 7**). It follows `2026-10-02-itad-jobs.md`, `2026-10-05-itad-manifest-reconciliation.md`, `2026-10-09-itad-asset-sanitization.md`, `2026-10-11-itad-exceptions.md`, `2026-10-12-itad-pickup-calendar.md` and `2026-10-14-itad-certificates.md`.
 >
@@ -210,18 +210,18 @@ A summary panel at the top of the job page "Overview" tab, served by `GET /api/i
 
 **Global search (header, any screen):**
 - `src/modules/itad/search.ts` registers entity `itad:itad_asset`:
-  - **`buildSource`**: text = serial, normalized serial, customer asset tag, manufacturer, model, job reference; fields for filtering: job id only. **Status is not indexed at all**, not even as a field.
-  - **`formatResult`**: title = serial; subtitle = "tag · manufacturer model · customer · job reference"; icon `package`.
+  - **strategy**: `tokens` only (Postgres; always available). The tokenized fields are serial, normalized serial, customer asset tag, manufacturer, model and job reference. **Status is never tokenized.**
+  - **`formatResult`**: title = serial; subtitle = "tag · manufacturer model · customer · job reference"; icon `package`. It runs **at search time**, reading the job and the customer live, so names are never stale.
   - **`resolveUrl`**: the asset detail page.
   - **`resolveLinks`**: "Open asset", plus "All matches for this serial" pointing to `/backend/itad/assets?q=<serial>`.
   - **`fieldPolicy`**: everything searchable; no sensitive data.
   - **`aclFeatures`**: `['itad.assets.view']`.
 - **Status is not in the index at all** (neither presenter nor fields). It changes often, and an indexed status would be stale data even when not displayed. The status is shown only where it is read live: the asset page and the ITAD Assets results.
-- **Indexing:**
-  - `search.index_record` is emitted after commit when an asset is created by a scan, when its tag/manufacturer/model is edited, or when it is restored;
-  - when an asset is removed, the delete or hide path the search module provides is used (verified in Phase 3, step 1);
-  - a company rename re-indexes the assets of that company's jobs through a subscriber on the `customers` company update event (event id verified in Phase 3);
-  - existing assets are backfilled with `search reindex` for the entity.
+- **Indexing** (verified in Phase 3, step 1: the token strategy and the search-time presenter read the `query_index` projection, `entity_indexes` + `search_tokens`):
+  - ITAD subscribers on the asset events that change an asset — received, updated, deleted, data-bearing changed, sanitization required, run started / passed / failed / aborted, retry approved — call `services/asset-search-index.ts` after commit;
+  - it emits `query_index.upsert_one` with a `searchTokenDoc` limited to the identifiers above, so the projection stays current and no status is tokenized; a removed asset emits `query_index.delete_one`;
+  - no company-rename subscriber is needed, because the presenter reads the customer name at search time;
+  - existing assets are backfilled with `yarn mercato itad search-reindex-assets --tenant <id> [--org <id>]`, which uses the same identifiers-only token document (a generic `query_index` reindex would tokenize the whole row, status included).
 - **Scope:** the search service filters by tenant and the caller's organizations, and `aclFeatures` requires `itad.assets.view`. An asset outside the caller's scope is never found (REQ-717).
 
 ## Users, permissions and scope
@@ -250,7 +250,7 @@ Every route has `metadata` and `openApi`, is scoped to the tenant and readable o
 
 `counters` = `{ expected, received, missing, unexpected, totalIntake, awaitingWipe, sanitized, failed, sanitizationScope, dataBearingUnknown, unresolvedDuplicates, openExceptions, certificatesRequired, certificatesIssued, certificatesMissing }`.
 
-Errors: 400 for an invalid filter or a search shorter than 3 characters (`query_too_short`); 404 outside scope. No search result is not an error: 200 with an empty list.
+Errors: 400 for an invalid filter or a search shorter than 3 characters (the existing `serial_too_short` code is kept for compatibility); 404 outside scope. No search result is not an error: 200 with an empty list.
 
 ## UI and interaction contracts
 
@@ -316,7 +316,7 @@ The brief's AC-701 … AC-706 apply unchanged (quick overview, sanitization stat
 - **Serial in a job outside the caller's organizations.** Not found (REQ-717); the empty state says "No asset found".
 - **More than 500 active jobs.** `truncated: true` and a message; filters narrow the set.
 - **Search index behind** (worker delay, failed index event). The header search may briefly miss a new asset. The "ITAD Assets" page queries the database and always finds it; the header search's "All matches" link leads there.
-- **Company renamed.** The global search subtitle refreshes through the re-index subscriber. If that fails, the ITAD Assets page still shows the live name.
+- **Company renamed.** The global search subtitle is computed at search time, so it shows the new name immediately.
 
 ## Risks & Impact Review
 
@@ -329,7 +329,7 @@ The brief's AC-701 … AC-706 apply unchanged (quick overview, sanitization stat
 - **Query cost:** grouped queries over active jobs only (tens to hundreds). Indexes on `(tenant, org, job_id, status)` already exist on assets, exceptions and certificates. The 500 cap bounds the worst case.
 - **Search dependency:** the global search entry relies on the installed `search` module and its worker. If indexing lags, the ITAD Assets page is the always-correct fallback.
 - **Rollback:**
-  - remove `search.ts` and run `search reindex`;
+  - remove `search.ts` and the asset search subscribers; `query_index` purge for `itad:itad_asset` clears the projection;
   - hide the Operations page;
   - the jobs list can switch back to `receivedAssetCount`.
 
@@ -422,3 +422,8 @@ Validation per phase:
   - each non-empty group renders as a `DataTable` whose title carries the group name and count; an empty group shows its heading and "Nothing here.";
   - the dashboard search box navigates to `/backend/itad/assets?q=`; the ITAD Assets page reads `q` in phase 3;
   - the "certificates missing" chip reads "Missing certificates: N".
+- **2026-10-15, phase 3 implemented:**
+  - step 1 verified the platform search: the token strategy and the presenter read the `query_index` projection, so assets are projected with `query_index.upsert_one` / `delete_one` from asset-event subscribers, with an identifiers-only `searchTokenDoc`; the presenter runs at search time, which makes a company-rename subscriber unnecessary; the global search uses the `tokens` strategy only;
+  - backfill is an ITAD CLI command, `itad search-reindex-assets`, instead of the generic reindex (which would tokenize the status);
+  - the asset lookup keeps its `serial_too_short` error code; `serial` stays an alias of `q`;
+  - the ITAD Assets page puts its search in the table toolbar, so it keeps its own states: a hint below 3 characters and "No asset found for …".
