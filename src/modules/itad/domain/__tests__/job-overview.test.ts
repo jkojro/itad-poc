@@ -86,8 +86,15 @@ describe('attention model (Q4, D7, D8, D9)', () => {
     expect(buildJobOverview(job('processing'), certificates)).toMatchObject({ severity: 'none', signals: [] })
   })
 
-  it('marks undecided data-bearing orange', () => {
-    expect(buildJobOverview(job('receiving'), source({ dataBearingUnknown: 3 })).severity).toBe('orange')
+  it('treats undecided data-bearing while receiving as work remaining, orange after receiving (D10)', () => {
+    const receiving = buildJobOverview(job('receiving'), source({ dataBearingUnknown: 4 }))
+    expect(receiving.counters.dataBearingUnknown).toBe(4)
+    expect(receiving).toMatchObject({ severity: 'none', group: 'in_progress', signals: [] })
+    expect(buildJobOverview(job('on_hold', 'receiving'), source({ dataBearingUnknown: 4 })).severity).toBe('none')
+    expect(buildJobOverview(job('processing'), source({ dataBearingUnknown: 3 }))).toMatchObject({
+      severity: 'orange',
+      signals: [{ key: 'data_bearing_unknown', severity: 'orange', count: 3 }],
+    })
   })
 
   it('evaluates an on-hold job as its pre-hold status', () => {

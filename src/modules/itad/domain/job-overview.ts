@@ -3,7 +3,7 @@ import type { ItadJobStatus } from './job-types'
 /**
  * Operations overview of jobs (operations dashboard spec, Epic 7). Pure: counters are
  * computed from source counts at read time and never stored (REQ-701, REQ-719).
- * Counters state facts; attention states problems (D9): a resolved missing or accepted
+ * Counters state facts; attention states problems (D9, D10): a resolved missing or accepted
  * unexpected device stays in its reconciliation counter but needs no action.
  */
 
@@ -118,7 +118,9 @@ export function effectiveStatus(job: OverviewJob): ItadJobStatus {
  * What needs action now. Severity comes from the kind of problem, never from the bare
  * number of open exceptions (Q4). Missing while receiving is progress (D7); after
  * receiving, missing and unexpected need action only while their exception is open
- * (D9); missing certificates block only closeout (D8).
+ * (D9); missing certificates block only closeout (D8). Undecided data-bearing is
+ * receiving work, blocked at `start_processing` by `receivingComplete`; only after
+ * receiving does it need action (D10).
  */
 export function attentionSignals(job: OverviewJob, counters: JobOverviewCounters): AttentionSignal[] {
   const status = effectiveStatus(job)
@@ -134,7 +136,7 @@ export function attentionSignals(job: OverviewJob, counters: JobOverviewCounters
     add('missing_exceptions', 'orange', counters.openMissingExceptions)
     add('unexpected_exceptions', 'orange', counters.openUnexpectedExceptions)
   }
-  add('data_bearing_unknown', 'orange', counters.dataBearingUnknown)
+  if (afterReceiving) add('data_bearing_unknown', 'orange', counters.dataBearingUnknown)
   if (status === 'closeout_review') add('certificates_missing', 'orange', counters.certificatesMissing)
   return signals
 }
