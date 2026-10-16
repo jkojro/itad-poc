@@ -22,11 +22,37 @@ type RichTextLike = { richText: Array<{ text?: string }> }
 const SPREADSHEETML_MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
 const PREFIXED_MAIN_NAMESPACE = /xmlns:([A-Za-z_][\w.-]*)="http:\/\/schemas\.openxmlformats\.org\/spreadsheetml\/2006\/main"/
 
+/** An internal relationship with an absolute part name (`Target="/xl/tables/table1.xml"`). */
+const ABSOLUTE_RELATIONSHIP = /<Relationship\b[^>]*>/g
+
+/** Path of `target` (a part name without the leading `/`) relative to the `from` directory. */
+function relativePartPath(from: string, target: string): string {
+  const fromParts = from ? from.split('/') : []
+  const targetParts = target.split('/')
+  let common = 0
+  while (common < fromParts.length && common < targetParts.length - 1 && fromParts[common] === targetParts[common]) common += 1
+  return [...fromParts.slice(common).map(() => '..'), ...targetParts.slice(common)].join('/')
+}
+
 /**
- * Valid OOXML may bind the SpreadsheetML namespace to a prefix (`<x:workbook>`, as
- * written by .NET Open XML SDK based exporters). Excel reads that, `exceljs` does not:
- * it finds no sheets. Rewrite such parts to the default namespace before loading.
- * Returns the original bytes when no part uses a prefix.
+ * Relationship parts may name their targets absolutely (`/xl/tables/table1.xml`), as .NET
+ * Open XML SDK exporters do. `exceljs` only resolves relative targets: a worksheet's table
+ * is then not found and loading throws. Rewrite internal targets relative to the source
+ * part (`xl/worksheets/_rels/sheet1.xml.rels` → `../tables/table1.xml`).
+ */
+function relativizeRelationshipTargets(relsPath: string, xml: string): string {
+  const sourceDir = relsPath.replace(/(^|\/)_rels\/[^/]+$/, '')
+  return xml.replace(ABSOLUTE_RELATIONSHIP, (element) => {
+    if (/\bTargetMode="External"/.test(element)) return element
+    return element.replace(/\bTarget="\/([^"]*)"/, (_match, target: string) => `Target="${relativePartPath(sourceDir, target)}"`)
+  })
+}
+
+/**
+ * Valid OOXML that Excel reads but `exceljs` does not, as written by .NET Open XML SDK
+ * based exporters: the SpreadsheetML namespace bound to a prefix (`<x:workbook>`, exceljs
+ * finds no sheets) and absolute relationship targets (see `relativizeRelationshipTargets`).
+ * Rewrite such parts before loading. Returns the original bytes when nothing changes.
  */
 export async function normalizeSpreadsheetMlPrefixes(buffer: Buffer): Promise<Buffer> {
   const loaded = (await import('jszip')) as unknown as { default?: typeof import('jszip') } & typeof import('jszip')
@@ -36,12 +62,16 @@ export async function normalizeSpreadsheetMlPrefixes(buffer: Buffer): Promise<Bu
   for (const entry of Object.values(zip.files)) {
     if (entry.dir || !/\.(xml|rels)$/i.test(entry.name)) continue
     const xml = await entry.async('string')
-    const match = PREFIXED_MAIN_NAMESPACE.exec(xml)
-    if (!match) continue
-    const prefix = match[1]
-    const normalized = xml
-      .replace(new RegExp(`<(/?)${prefix}:`, 'g'), '<$1')
-      .replace(`xmlns:${prefix}="${SPREADSHEETML_MAIN}"`, `xmlns="${SPREADSHEETML_MAIN}"`)
+    let normalized = xml
+    const match = PREFIXED_MAIN_NAMESPACE.exec(normalized)
+    if (match) {
+      const prefix = match[1]
+      normalized = normalized
+        .replace(new RegExp(`<(/?)${prefix}:`, 'g'), '<$1')
+        .replace(`xmlns:${prefix}="${SPREADSHEETML_MAIN}"`, `xmlns="${SPREADSHEETML_MAIN}"`)
+    }
+    if (/\.rels$/i.test(entry.name)) normalized = relativizeRelationshipTargets(entry.name, normalized)
+    if (normalized === xml) continue
     zip.file(entry.name, normalized)
     changed = true
   }

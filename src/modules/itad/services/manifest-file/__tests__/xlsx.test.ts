@@ -27,6 +27,32 @@ async function toPrefixedNamespace(buffer: Buffer): Promise<Buffer> {
   return zip.generateAsync({ type: 'nodebuffer' })
 }
 
+/**
+ * Rewrites every internal relationship target to an absolute part name (`/xl/tables/table1.xml`),
+ * as .NET Open XML SDK exporters write it; valid OOXML that Excel reads.
+ */
+async function toAbsoluteRelationshipTargets(buffer: Buffer): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(buffer)
+  for (const entry of Object.values(zip.files)) {
+    if (entry.dir || !entry.name.endsWith('.rels')) continue
+    const sourceDir = entry.name.replace(/(^|\/)_rels\/[^/]+$/, '')
+    const xml = await entry.async('string')
+    zip.file(
+      entry.name,
+      xml.replace(/Target="([^"/][^"]*)"(?![^>]*TargetMode="External")/g, (_match, target: string) => {
+        const parts = [...(sourceDir ? sourceDir.split('/') : []), ...target.split('/')]
+        const resolved: string[] = []
+        for (const part of parts) {
+          if (part === '..') resolved.pop()
+          else if (part && part !== '.') resolved.push(part)
+        }
+        return `Target="/${resolved.join('/')}"`
+      }),
+    )
+  }
+  return zip.generateAsync({ type: 'nodebuffer' })
+}
+
 describe('toManifestCell (TEST-102, XLSX part)', () => {
   it('turns cell values into logical text with reader flags', () => {
     expect(toManifestCell('ABC 1')).toEqual({ value: 'ABC 1' })
@@ -92,6 +118,33 @@ describe('readManifestFile — XLSX (TEST-102, XLSX part)', () => {
     expect(result.sheet.rows.map((row) => row.map((cell) => cell.value))).toEqual([
       ['Serial Number', 'Manufacturer'],
       ['ABC 123', 'Dell'],
+    ])
+  })
+
+  it('reads .NET exports with absolute relationship targets and an Excel table', async () => {
+    const plain = await workbookBuffer((workbook) => {
+      const sheet = workbook.addWorksheet('ACME Manifest')
+      sheet.addTable({
+        name: 'ManifestTable',
+        ref: 'A1',
+        columns: [{ name: 'Serial Number' }, { name: 'Asset Tag' }],
+        rows: [
+          ['SN-001', 'FIN-001'],
+          ['SN-002', 'FIN-002'],
+        ],
+      })
+    })
+    const exported = await toPrefixedNamespace(await toAbsoluteRelationshipTargets(plain))
+    const rels = await (await JSZip.loadAsync(exported)).file('xl/worksheets/_rels/sheet1.xml.rels')!.async('string')
+    expect(rels).toContain('Target="/xl/tables/')
+
+    const result = await readManifestFile({ fileName: 'dotnet-table.xlsx', buffer: exported })
+    if (!result.ok) throw new Error(result.code)
+    expect(result.sheets).toEqual(['ACME Manifest'])
+    expect(result.sheet.rows.map((row) => row.map((cell) => cell.value))).toEqual([
+      ['Serial Number', 'Asset Tag'],
+      ['SN-001', 'FIN-001'],
+      ['SN-002', 'FIN-002'],
     ])
   })
 

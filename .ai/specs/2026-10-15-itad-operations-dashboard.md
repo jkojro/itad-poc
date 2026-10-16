@@ -39,6 +39,7 @@ Two personas, two workflows, one epic:
 | D7 | Missing during receiving | **Confirmed.** While the job is `receiving` (or on hold from it), Missing is **receiving progress**, not attention: halfway through scanning, 400 of 500 devices are "missing" by definition. From `processing` on, attention comes from **open** MISSING_FROM_DELIVERY exceptions (see D9). |
 | D8 | Missing certificates | **Confirmed.** Missing certificates are attention only in `closeout_review` (or on hold from it), where they block `complete`. In `processing` a sanitized device without a certificate yet is normal work, and the number is shown without a colour. |
 | D9 | Resolved missing / unexpected | **Decided (review 2026-10-15).** A missing device resolved as `not_shipped`, `lost_in_transit` or `manifest_error`, or an unexpected device `accepted_into_job` (Epic 4), stays in the Missing / Unexpected counter, because reconciliation is a physical fact. It no longer needs action, so attention after receiving comes from **open** exceptions of those types, not from the raw counters. |
+| D10 | Data-bearing unknown during receiving | **Decided (2026-10-16).** While the job is `receiving` (or on hold from it), assets with `dataBearing` not decided are **work remaining**, not attention: the count is shown without a colour. `receivingComplete` still blocks `start_processing` until the count is zero. If such assets exist in `processing` or `closeout_review`, they are an orange attention signal. Consistent with D7. |
 
 ## Problem Statement
 
@@ -96,7 +97,7 @@ All counters cover **active** rows only (not soft-deleted) and are computed at r
 
 The tiles **must not be summed**: Open exceptions overlaps Missing, Unexpected, Failed and Unresolved duplicates.
 
-### Attention model (Q4, D7, D8)
+### Attention model (Q4, D7, D8, D10)
 
 | Severity | Signal | Links to |
 |---|---|---|
@@ -105,16 +106,16 @@ The tiles **must not be summed**: Open exceptions overlaps Missing, Unexpected, 
 | **orange**: discrepancy, missing information or closeout work | `receiving`: Unexpected > 0 | Receiving tab, filter unexpected |
 | **orange** | `processing`, `closeout_review`: open missing exceptions > 0 (D7, D9) | Exceptions tab, open, type missing |
 | **orange** | `processing`, `closeout_review`: open unexpected exceptions > 0 (D9) | Exceptions tab, open, type unexpected |
-| **orange** | Data-bearing unknown > 0 | Receiving tab, filter "data-bearing unknown" |
+| **orange** | `processing`, `closeout_review`: Data-bearing unknown > 0 (D10) | Receiving tab, filter "data-bearing unknown" |
 | **orange** | Certificates missing > 0, in `closeout_review` (D8) | Documents tab |
-| progress, no colour | Awaiting wipe > 0; Missing while `receiving`; certificates missing while `processing`; Missing / Unexpected after their exceptions are resolved | the matching tab |
+| progress, no colour | Awaiting wipe > 0; Missing and Data-bearing unknown while `receiving` (D7, D10); certificates missing while `processing`; Missing / Unexpected after their exceptions are resolved | the matching tab |
 | none | none of the above | — |
 
 - A job's **severity** is the highest of its signals (red > orange > none).
 - **Open exceptions** never set a colour. They are always shown as a number linking to the Exceptions tab.
 - A job **on hold** is evaluated against its pre-hold status and always carries a visible "On hold" badge.
 - `draft`, `scheduled` and `in_transit` have no intake yet, so they carry no reconciliation signal.
-- **Data-bearing unknown** stays orange in every status for now, because it blocks the end of receiving. Treating it as "work remaining" during receiving, like D7, was considered and left open; it does not affect Phase 1.
+- **Data-bearing unknown** during receiving is work remaining (D10); the end of receiving is guarded by the `receivingComplete` blocker `dataBearingUndecided`, not by a colour.
 
 ### Groups and order (Q2, REQ-721)
 
@@ -427,3 +428,4 @@ Validation per phase:
   - backfill is an ITAD CLI command, `itad search-reindex-assets`, instead of the generic reindex (which would tokenize the status);
   - the asset lookup keeps its `serial_too_short` error code; `serial` stays an alias of `q`;
   - the ITAD Assets page puts its search in the table toolbar, so it keeps its own states: a hint below 3 characters and "No asset found for …".
+- **2026-10-16, D10:** data-bearing unknown is work remaining while `receiving` (or on hold from it), shown without a colour; it stays an orange signal in `processing` and `closeout_review`. `receivingComplete` keeps blocking `start_processing`. Covered by unit tests and TC-ITAD-610.
