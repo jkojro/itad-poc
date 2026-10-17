@@ -21,6 +21,8 @@ import { RUN_RESULT_VARIANTS, methodLabel, runResultLabel, verificationLabel } f
 import type { AssetSanitization } from './sanitization-types'
 import { useGrantedFeatures } from './use-granted-features'
 import { AssetCertificatesSection } from './AssetCertificatesSection'
+import { AskAssistantButton } from './AskAssistantButton'
+import { ITAD_ASSET_ENTITY_ID } from '../lib/constants'
 
 type Translate = ReturnType<typeof useT>
 type Actor = { id: string; name: string | null } | null
@@ -181,6 +183,9 @@ export function AssetDetail({ jobId, assetId }: { jobId: string; assetId: string
           <StatusBadge variant={ASSET_STATUS_VARIANTS[data.status]} dot>{assetStatusLabel(t, data.status)}</StatusBadge>
           <ReconciliationBadge t={t} state={data.reconciliation} />
           {data.deleted ? <StatusBadge variant="neutral">{t('itad.receiving.duplicates.assetRemoved', 'Asset removed')}</StatusBadge> : null}
+          <div className="ml-auto">
+            <AskAssistantButton pageContext={{ pageId: 'itad.asset', entityType: ITAD_ASSET_ENTITY_ID, recordId: data.id }} />
+          </div>
         </div>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
