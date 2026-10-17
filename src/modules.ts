@@ -22,6 +22,7 @@ export const enabledModules: ModuleEntry[] = [
   { id: 'currencies', from: '@open-mercato/core' },
   { id: 'feature_toggles', from: '@open-mercato/core' },
   { id: 'customers', from: '@open-mercato/core' },
+  { id: 'ai_assistant', from: '@open-mercato/ai-assistant' },
 ]
 
 enabledModules.push({ id: 'itad', from: '@app' })

@@ -23,6 +23,7 @@ import { JobReceivingPanel } from './JobReceivingPanel'
 import { JobSanitizationPanel } from './JobSanitizationPanel'
 import { JobDocumentsPanel } from './JobDocumentsPanel'
 import { JobOverviewPanel } from './JobOverviewPanel'
+import { ItadAssistantPanel } from './ItadAssistantPanel'
 import { JobExceptionsPanel } from './JobExceptionsPanel'
 import { useGrantedFeatures } from './use-granted-features'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@open-mercato/ui/primitives/tabs'
@@ -480,7 +481,14 @@ export function JobDetailForm({ id }: { id: string }) {
         title={job ? `${job.internalReference} · ${job.name}` : t('itad.jobs.detail.title', 'ITAD job')}
         titleHeadingLevel={1}
         backHref={LIST_HREF}
-        contentHeader={job ? <JobOverviewPanel job={job} /> : undefined}
+        contentHeader={
+          job ? (
+            <div className="space-y-4">
+              <JobOverviewPanel job={job} />
+              <ItadAssistantPanel jobId={job.id} />
+            </div>
+          ) : undefined
+        }
         entityId={ENTITY_ID}
         injectionSpotId="crud-form:itad.itad_job"
         fields={fields}

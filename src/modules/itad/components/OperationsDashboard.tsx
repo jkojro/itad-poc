@@ -25,6 +25,7 @@ import {
 import type { ItadJobStatus } from '../domain/job-types'
 import { ITAD_JOB_STATUS_FALLBACK_LABELS, ITAD_JOB_STATUS_VARIANTS, itadJobStatusLabelKey } from './job-status'
 import { ATTENTION_VARIANTS, attentionSignalLabel } from './JobOverviewPanel'
+import { AskAssistantButton } from './AskAssistantButton'
 
 type Translate = ReturnType<typeof useT>
 
@@ -268,7 +269,10 @@ export function OperationsDashboard() {
     <div className="space-y-6" data-testid="itad-operations">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">{t('itad.operations.title', 'Operations')}</h1>
-        <AssetSearchBox />
+        <div className="flex flex-wrap items-center gap-2">
+          <AskAssistantButton pageContext={{ pageId: 'itad.operations' }} />
+          <AssetSearchBox />
+        </div>
       </div>
       <FilterBar
         filters={filters}
