@@ -115,7 +115,9 @@ operator ──▶ AI chat (launcher · inline panel on job page)
 | `itad.reschedule_pickup` | write | A4 → `itad.jobs.update` (`scheduledPickupAt`) | `itad.jobs.manage` |
 
 Tool rules:
-- **Scope:** every tool resolves the tenant and the caller's readable organizations from the request context, never from model input. A record outside scope is "not found", identical to a missing record.
+- **Scope:** every tool resolves the tenant and the caller's readable organizations from the request context, never from model input. A record outside scope is "not found", identical to a missing record: tools read "not found" from a 404, so every ITAD route they call must answer an out-of-organization record with 404, never 403 (contract test TC-ITAD-817).
+- **Feature check in the route helper:** `runItadRoute` refuses any extra (sub-route) feature the caller does not hold, so degradation never depends on each call site checking first.
+- **Errors:** tool errors carry stable codes (`not_found`, `forbidden`, `conflict`, `route_failed`) and a generic message ("Asset lookup failed"); a route's raw error goes to the log, never to the model or the user.
 - **Composite reads respect every data type's feature:** a tool that joins jobs with exceptions, sanitization or certificates requires only its base feature, and **degrades** the parts the caller may not see: counts stay (they are job facts, as on the dashboard), record details are replaced by `{ hidden: 'no_permission', count }`. Example: with `itad.jobs.view` but no `itad.exceptions.view`, blockers say "2 open exceptions block completion" without their references or reasons. Mapping: exceptions → `itad.exceptions.view`, sanitization runs → `itad.sanitization.view`, certificates → `itad.certificates.view`, assets → `itad.assets.view`.
 - **Write scope:** a write handler takes `organizationId` from the loaded record, asserts it is one of the caller's readable organizations, and runs the command in that organization's scope; anything else fails closed. Every write checks that the exception or asset belongs to the given `jobId`.
 - **Re-check at execute:** because the framework re-checks only the agent's features and ITAD commands rely on route checks, the shared write helper re-checks, at confirm time and before the command: the tool's `requiredFeatures` for the confirming user in the record's organization, the record's organization still being readable by that user, and the confirming user being the **creator of the pending action**. Any failure → 403, nothing written.
@@ -284,6 +286,7 @@ Each phase leaves the app working; phase 1 alone is a useful read-only assistant
    - **TC-ITAD-805:** a user without `itad.sanitization.view` gets 403 for `get_sanitization_summary`; a user with `itad.jobs.view` but without `itad.exceptions.view` gets blockers and focus today with exception counts and `hidden: no_permission` instead of references, and an asset history without the exception section; a job outside scope returns "not found"; the agent's resolved tool list equals its allowlist (no Code Mode or generic tools).
    - **TC-ITAD-806:** an exception reason containing an injected instruction comes back only inside `untrustedText`.
    - **TC-ITAD-807:** `get_focus_today` without filters covers all active jobs in scope, with filters (customer, status, failed) only matching ones, and echoes the applied filters. Page context (job and asset in scope, none out of scope) is a unit test of `resolvePageContext`, since the chat route needs a model.
+   - **TC-ITAD-817:** route scope contract — for every ITAD route the tools call, a record of another organization answers 404 exactly like a nonexistent one, and the tools return `found: false` / `none` for both.
    - **TC-ITAD-808 (UI):** the job page shows the inline panel with the job context and suggestions; the asset page and the dashboard show "Ask the assistant", which opens the dock; without a provider it shows "not configured" and the job page, its tabs and the dashboard work as before.
 
 **Phase 2:**
@@ -315,7 +318,7 @@ Validation per phase: `yarn generate && yarn typecheck && yarn lint && yarn ds:c
 | REQ | Phase | Test |
 |---|---|---|
 | AI-REQ-01, 03 | 1 | TC-ITAD-801, 804 |
-| AI-REQ-02 | 1–2 | TC-ITAD-801, 805, 812 |
+| AI-REQ-02 | 1–2 | TC-ITAD-801, 805, 812, 817 |
 | AI-REQ-04 | 1 | TC-ITAD-802 |
 | AI-REQ-05 | 1 | TC-ITAD-804 |
 | AI-REQ-06 | 1 | TC-ITAD-805; agent definition unit test |
@@ -351,3 +354,4 @@ Validation per phase: `yarn generate && yarn typecheck && yarn lint && yarn ds:c
   - `get_focus_today` takes one `status` per call (the in-process runner sends scalar query values); assigned exceptions are read for the attention jobs (at most 25);
   - the inline panel is collapsed by default, so the chat bundle loads only when opened; "not configured" comes from `aiConfigured` on `GET /api/ai_assistant/ai/agents`;
   - page context is covered by a `resolvePageContext` unit test (TC-ITAD-807 keeps the filter cases).
+- **2026-10-18, phase 1 review applied:** `runItadRoute` enforces every extra feature itself (defense in depth); route scope contract TC-ITAD-817 (out-of-organization = 404 = nonexistent, all 10 routes); stable tool error codes with generic messages, raw route errors only logged; `/itad` prefix check matches `/itad` or `/itad/…` only.
