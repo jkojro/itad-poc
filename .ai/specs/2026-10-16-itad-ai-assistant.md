@@ -1,7 +1,7 @@
 # ITAD AI Assistant
 
 **Date**: 2026-10-16
-**Status**: In progress — phase 1 implemented (2026-10-17)
+**Status**: In progress — phases 1–2 implemented (2026-10-18)
 
 > Spec 8 of the app-owned `itad` module (**Epic 8**). It follows `2026-10-15-itad-operations-dashboard.md` and reuses its read model.
 >
@@ -259,6 +259,8 @@ No new ITAD tables and no ITAD migration. The `ai_assistant` module brings its o
 ## Known limitations
 
 - **Cancel by another user (framework).** The installed cancel route loads a pending action by tenant and organization, not by creator, so operator B can cancel operator A's pending action. It changes no domain data, so it is accepted for the PoC. **Production TODO:** creator-only cancel, either upstream in `ai_assistant` (preferred) or through a supported interceptor on the cancel route; tracked as a follow-up issue when Epic 8 merges.
+- **Direct tool calls skip approval (framework).** `POST /api/ai_assistant/tools/execute` runs a tool handler directly, also for mutation tools, without a pending action. ITAD write tools refuse without a confirmed pending action of their own (`approval_required`, covered by TC-ITAD-810), but the gap is in the framework and applies to other modules' write tools. **Production TODO:** report upstream; route mutation tools through `prepareMutation` there.
+- **Invalid input on a tampered pending action** answers Confirm with a 500 (`confirm_internal_error`) and writes nothing: the framework re-reads the preview at Confirm, and the ITAD preview refuses that input again. Through the model such a row cannot be created, because the preview refuses it at prepare.
 - **Corrections metric** is read manually (see "Audit and observability").
 
 ## Phasing
@@ -361,3 +363,9 @@ Validation per phase: `yarn generate && yarn typecheck && yarn lint && yarn ds:c
   - focus filters are positive-only (`true` or absent); `activeJobsReturned` replaces `activeJobsConsidered`; assigned exceptions report `coversAllAttentionJobs` and `jobsChecked` (at most 25 attention jobs are checked, a TODO marks the per-job reads);
   - `find_jobs` prefers an exact internal reference, then an exact customer reference, then search results;
   - unsanitized blocking records are read per status with the record limit (failed first); the customer draft handles jobs without a manifest quantity and follows the request locale (PL/EN covered in TC-ITAD-804).
+- **2026-10-18, phase 2 implemented:**
+  - step 1 verified: the command bus merges a caller's `metadata.context` into the action log entry, so the four commands need no change; `runGuardedCommand` takes an optional `metadata`;
+  - preview vs. execute: `prepareMutation` and the confirm-time re-check call `loadBeforeRecord` with the same context, and a throw at confirm becomes a 500. So input problems (outcome not allowed for the type, record not in the job, reason, time format, time zone) refuse the preview, while state problems (exception no longer open, job status, time passed) show the preview as blocked with version `ineligible:<code>`: a state change after an eligible preview reads as `stale_version` (412) at Confirm, and the handler re-checks everything before the command (`lib/ai-write-rules.ts`);
+  - the handler runs only for a confirmed pending action of this tool, prepared by the confirming user; it re-checks the tool's features fresh from the database in the record's organization, the job's readability (404 out of scope) and the previewed version, then runs the existing command through the mutation guard with the AI audit context (`ai-tools/_writes.ts`);
+  - the framework keeps only `recordId` and `commandName` of a handler result on the pending action;
+  - tests seed the pending action row as the framework's own tests do (no public route creates one) and use the real confirm / cancel routes; the preview shape is covered by unit tests of `loadBeforeRecord`; audit entries are read through the audit API (their columns are encrypted at rest).

@@ -10,7 +10,7 @@ import { ITAD_ASSET_ENTITY_ID, ITAD_JOB_ENTITY_ID } from './lib/constants'
 /**
  * `itad.operations_assistant` (AI assistant spec, Epic 8). One persona for the ITAD
  * operations team: answers from live ITAD data through an explicit tool allowlist.
- * Phase 1 is read only; writes arrive in phase 2 behind the approval card.
+ * Every write goes through the approval card: the operator confirms a preview first.
  */
 
 const AGENT_ID = 'itad.operations_assistant'
@@ -30,7 +30,9 @@ const READ_TOOLS = [
 
 const DRAFT_TOOLS = ['itad.generate_customer_status_summary'] as const
 
-export const ITAD_ASSISTANT_ALLOWED_TOOLS: readonly string[] = [...READ_TOOLS, ...DRAFT_TOOLS, 'meta.describe_agent']
+const WRITE_TOOLS = ['itad.resolve_exception', 'itad.reschedule_pickup'] as const
+
+export const ITAD_ASSISTANT_ALLOWED_TOOLS: readonly string[] = [...READ_TOOLS, ...DRAFT_TOOLS, ...WRITE_TOOLS, 'meta.describe_agent']
 
 const PROMPT_SECTIONS: Array<{ name: string; content: string }> = [
   {
@@ -77,7 +79,13 @@ const PROMPT_SECTIONS: Array<{ name: string; content: string }> = [
     name: 'mutationPolicy',
     content: [
       'CHANGES',
-      'You cannot change ITAD data. When the user asks for a change, explain where it is done in ITAD (use the links from tool results).',
+      '- You change data only through the write tools; each one shows the operator a preview to Confirm or Cancel. Never claim a change happened until the result says done: true.',
+      '- Use record ids from read tools only. When the record is ambiguous, ask which one first.',
+      '- Resolve exception: only open missing-from-delivery or unexpected exceptions. Map the wording to an allowed outcome',
+      '  (not shipped → not_shipped, lost → lost_in_transit, wrong manifest → manifest_error, accept into the job → accepted_into_job);',
+      '  anything else is not offered — list the allowed outcomes. The reason is the operator\'s own words; ask when they gave none.',
+      '- Reschedule pickup: resolve the date and time in the operator\'s time zone and pass it with timeZone; ask when the date is unclear.',
+      '- When a preview says it cannot be applied, or a change fails, say why in plain words and offer the link.',
     ].join('\n'),
   },
   {
@@ -125,13 +133,14 @@ const agent: AiAgentDefinition = {
   moduleId: 'itad',
   label: 'ITAD Operations Assistant',
   description:
-    'Answers questions about ITAD operations from live data: what needs attention today, why a job is blocked, what happened to a device, and drafts customer status updates. Read only.',
+    'Answers questions about ITAD operations from live data — what needs attention today, why a job is blocked, what happened to a device — drafts customer status updates, and proposes changes (resolve an exception, reschedule a pickup) that the operator confirms.',
   systemPrompt: PROMPT_SECTIONS.map((section) => section.content).join('\n\n'),
   allowedTools: [...ITAD_ASSISTANT_ALLOWED_TOOLS],
   executionMode: 'chat',
   requiredFeatures: ['itad.jobs.view'],
-  readOnly: true,
-  mutationPolicy: 'read-only',
+  readOnly: false,
+  // Every write needs the operator's Confirm; a tenant override can downgrade to read-only.
+  mutationPolicy: 'confirm-required',
   loop: {
     maxSteps: 8,
     budget: { maxToolCalls: 12, maxWallClockMs: 60_000, maxTokens: 16_000 },
