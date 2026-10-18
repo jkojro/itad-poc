@@ -65,6 +65,11 @@ test.describe('TC-ITAD-804: AI read tools', () => {
       const draft = await aiToolOk(request, token, 'itad.generate_customer_status_summary', { jobId: job.id })
       expect(draft).toMatchObject({ found: true, sent: false })
       expect(draft.draft).toContain(reference)
+      // The draft follows the user's language (request locale), like the rest of the UI.
+      const polish = await aiToolOk(request, token, 'itad.generate_customer_status_summary', { jobId: job.id }, { Cookie: 'locale=pl' })
+      expect(polish.draft).toContain(`Status ${reference}`)
+      expect(polish.draft).toContain('Przyjęto')
+      expect(draft.draft).toContain('Received')
 
       // Receiving job: missing devices are progress; undecided devices are counted.
       const receiving = await createSchedulableJob(request, token, companyId, `QA AI receiving ${suffix}`)

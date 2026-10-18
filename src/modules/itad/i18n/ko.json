@@ -8,6 +8,7 @@
   "itad.ai.status.certificates": "삭제 인증서 {required}건 중 {issued}건을 발급했습니다.",
   "itad.ai.status.heading": "{reference} 상태: {status}.",
   "itad.ai.status.received": "예상 장비 {expected}대 중 {received}대를 수령했습니다.",
+  "itad.ai.status.receivedNoManifest": "장비 {count}대를 수령했습니다. 매니페스트에 예상 수량이 없었습니다.",
   "itad.ai.status.sanitized": "데이터 저장 장비 {scope}대 중 {sanitized}대의 데이터 삭제를 완료했습니다.",
   "itad.ai.status.unexpected": "매니페스트에 없던 장비 {count}대가 도착했습니다.",
   "itad.ai.suggestion.blockers": "이 작업을 완료할 수 없는 이유는?",

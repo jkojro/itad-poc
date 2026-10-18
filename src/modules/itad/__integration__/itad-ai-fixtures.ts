@@ -15,14 +15,21 @@ export async function runAiTool<T = Record<string, unknown>>(
   token: string,
   toolName: string,
   args: Record<string, unknown> = {},
+  headers?: Record<string, string>,
 ): Promise<AiToolResponse<T>> {
-  const response = await apiRequest(request, 'POST', '/api/ai_assistant/tools/execute', { token, data: { toolName, args } })
+  const response = await apiRequest(request, 'POST', '/api/ai_assistant/tools/execute', { token, data: { toolName, args }, headers })
   return { status: response.status(), body: await readJsonSafe<AiToolResponse<T>['body']>(response) }
 }
 
 // Tool results are open-ended JSON; tests assert on the fields they need.
-export async function aiToolOk<T = any>(request: APIRequestContext, token: string, toolName: string, args: Record<string, unknown> = {}): Promise<T> {
-  const { status, body } = await runAiTool<T>(request, token, toolName, args)
+export async function aiToolOk<T = any>(
+  request: APIRequestContext,
+  token: string,
+  toolName: string,
+  args: Record<string, unknown> = {},
+  headers?: Record<string, string>,
+): Promise<T> {
+  const { status, body } = await runAiTool<T>(request, token, toolName, args, headers)
   expect(status, `${toolName} failed: ${JSON.stringify(body)}`).toBe(200)
   expect(body?.success).toBe(true)
   return body!.result as T

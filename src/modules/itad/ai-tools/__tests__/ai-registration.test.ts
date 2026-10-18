@@ -28,4 +28,11 @@ describe('itad.operations_assistant registration', () => {
       expect(tool.requiredFeatures?.length).toBeGreaterThan(0)
     }
   })
+
+  it('accepts only positive focus filters, so "without failures" is never silently ignored', () => {
+    const focus = aiTools.find((tool) => tool.name === 'itad.get_focus_today')!
+    expect(focus.inputSchema.safeParse({ filters: { failed: true } }).success).toBe(true)
+    expect(focus.inputSchema.safeParse({ filters: { failed: false } }).success).toBe(false)
+    expect(focus.inputSchema.safeParse({}).success).toBe(true)
+  })
 })

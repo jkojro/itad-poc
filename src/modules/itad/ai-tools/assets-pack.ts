@@ -137,7 +137,7 @@ const getAssetHistoryTool: AiToolDefinition = defineItadTool({
       await runItadRoute<{ items: TimelineItem[] }>(ctx, getAssetHistoryTool, { method: 'GET', path: `${base}/timeline` }),
       'Asset timeline',
     )
-    let certificates: ReturnType<typeof bounded> | ReturnType<typeof hidden> = hidden(0)
+    let certificates: ReturnType<typeof bounded> | ReturnType<typeof hidden> = hidden()
     if (can(ctx, 'itad.certificates.view')) {
       const data = routeData(
         await runItadRoute<{ items: CertificateItem[] }>(ctx, getAssetHistoryTool, { method: 'GET', path: `${base}/certificates` }, ['itad.certificates.view']),

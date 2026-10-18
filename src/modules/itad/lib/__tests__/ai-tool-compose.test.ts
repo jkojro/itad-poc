@@ -59,10 +59,10 @@ describe('toFocusToday (US-AI-01)', () => {
       ],
       truncated: false,
       appliedFilters: { failed: true },
-      assigned: [],
+      assigned: { items: [], jobsChecked: 2, jobsNeedingAttention: 2 },
     })
     expect(result.appliedFilters).toEqual({ failed: true })
-    expect(result.activeJobsConsidered).toBe(3)
+    expect(result.activeJobsReturned).toBe(3)
     expect(result.jobs.items.map((job) => [job.reference, job.severity, job.reasons[0].signal])).toEqual([
       ['ITAD-2026-00001', 'red', 'failed'],
       ['ITAD-2026-00003', 'orange', 'missing_exceptions'],
@@ -70,8 +70,16 @@ describe('toFocusToday (US-AI-01)', () => {
   })
 
   it('hides assigned exceptions from a caller without the exceptions feature', () => {
-    const result = toFocusToday({ items: [], truncated: false, appliedFilters: {}, assigned: { hidden: 'no_permission', count: 0 } })
-    expect(result.assignedToMe).toEqual({ hidden: 'no_permission', count: 0 })
+    const result = toFocusToday({ items: [], truncated: false, appliedFilters: {}, assigned: { hidden: 'no_permission' } })
+    expect(result.assignedToMe).toEqual({ hidden: 'no_permission' })
+  })
+
+  it('says when assigned exceptions were not read for every attention job', () => {
+    const assigned = { items: [], jobsChecked: 25, jobsNeedingAttention: 30 }
+    expect(toFocusToday({ items: [], truncated: false, appliedFilters: {}, assigned }).assignedToMe).toMatchObject({
+      coversAllAttentionJobs: false,
+      jobsChecked: 25,
+    })
   })
 })
 
@@ -178,9 +186,9 @@ describe('summaries', () => {
       counters: counters({ activeAssets: 15, dataBearingUnknown: 2 }),
     })
     expect(summary).toMatchObject({ awaitingWipe: 3, inProgress: 1, sanitized: 4, failedNeedsReview: 2, dataBearingInScope: 10, undecided: 2, notDataBearing: 3 })
+    // Without the overview the value is unknown, not zero: no count.
     expect(toSanitizationSummary({ counts: { required: 0, inProgress: 0, sanitized: 0, reviewRequired: 0 }, counters: null }).undecided).toEqual({
       hidden: 'no_permission',
-      count: 0,
     })
   })
 
@@ -196,5 +204,12 @@ describe('summaries', () => {
     expect(text).toBe(
       'Status of ITAD-2026-00042 (PO-7): Processing. Received 9 of 10 expected devices. 1 devices arrived that were not on the manifest. Data erasure completed for 6 of 9 data-bearing devices. 4 of 6 erasure certificates issued.',
     )
+    const noManifest = composeCustomerStatus(t, {
+      reference: 'ITAD-2026-00043',
+      customerReference: null,
+      statusLabel: 'Receiving',
+      counters: counters({ activeAssets: 15 }, 'receiving'),
+    })
+    expect(noManifest).toBe('Status of ITAD-2026-00043: Receiving. 15 devices have been received; no manifest quantity was expected.')
   })
 })

@@ -8,6 +8,7 @@
   "itad.ai.status.certificates": "{issued} von {required} Löschzertifikaten ausgestellt.",
   "itad.ai.status.heading": "Status von {reference}: {status}.",
   "itad.ai.status.received": "{received} von {expected} erwarteten Geräten eingegangen.",
+  "itad.ai.status.receivedNoManifest": "{count} Geräte sind eingegangen; im Manifest war keine Menge erwartet.",
   "itad.ai.status.sanitized": "Datenlöschung für {sanitized} von {scope} datentragenden Geräten abgeschlossen.",
   "itad.ai.status.unexpected": "{count} Geräte sind eingegangen, die nicht im Manifest standen.",
   "itad.ai.suggestion.blockers": "Warum kann dieser Auftrag nicht abgeschlossen werden?",

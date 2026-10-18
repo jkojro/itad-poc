@@ -26,11 +26,11 @@ test.describe('TC-ITAD-807: AI focus filters', () => {
       expect(failed.jobs.items.map((job: { jobId: string }) => job.jobId)).toEqual([jobs.red.id])
 
       const closeout = await aiToolOk(request, token, 'itad.get_focus_today', { filters: { customerId: companyId, status: 'closeout_review' } })
-      expect(closeout.activeJobsConsidered).toBe(1)
+      expect(closeout.activeJobsReturned).toBe(1)
       expect(closeout.jobs.items.map((job: { jobId: string }) => job.jobId)).toEqual([jobs.orange.id])
 
       const receiving = await aiToolOk(request, token, 'itad.get_focus_today', { filters: { customerId: companyId, status: 'receiving' } })
-      expect(receiving).toMatchObject({ activeJobsConsidered: 1, jobs: { items: [], total: 0 } })
+      expect(receiving).toMatchObject({ activeJobsReturned: 1, jobs: { items: [], total: 0 } })
     } finally {
       await deleteEntityIfExists(request, token, '/api/customers/companies', companyId)
     }

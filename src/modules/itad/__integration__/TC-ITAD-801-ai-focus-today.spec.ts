@@ -28,16 +28,16 @@ test.describe('TC-ITAD-801: AI focus today', () => {
 
       const focus = await aiToolOk(request, token, 'itad.get_focus_today', { filters: { customerId: companyId } })
       expect(focus.appliedFilters).toEqual({ customerId: companyId })
-      expect(focus.activeJobsConsidered).toBe(5)
+      expect(focus.activeJobsReturned).toBe(5)
       expect(focus.jobs.items.map((job: { jobId: string }) => job.jobId)).toEqual([jobs.red.id, jobs.orange.id])
       const [red, orange] = focus.jobs.items
       expect(red).toMatchObject({ severity: 'red', reasons: [expect.objectContaining({ signal: 'failed', count: 1 })] })
       expect(orange).toMatchObject({ severity: 'orange', reasons: [expect.objectContaining({ signal: 'certificates_missing', count: 1 })] })
-      expect(focus.assignedToMe).toMatchObject({ items: [], total: 0 })
+      expect(focus.assignedToMe).toMatchObject({ items: [], total: 0, coversAllAttentionJobs: true, jobsChecked: 2 })
 
       const everything = await aiToolOk(request, token, 'itad.get_focus_today')
       expect(everything.appliedFilters).toEqual({})
-      expect(everything.activeJobsConsidered).toBeGreaterThanOrEqual(5)
+      expect(everything.activeJobsReturned).toBeGreaterThanOrEqual(5)
 
       orgBId = await createOrganizationFixture(request, token, { name: `QA AI Org B ${suffix}`, tenantId })
       const outsider = await tokenWithFeatures(request, token, {

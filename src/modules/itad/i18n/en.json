@@ -8,6 +8,7 @@
   "itad.ai.status.certificates": "{issued} of {required} erasure certificates issued.",
   "itad.ai.status.heading": "Status of {reference}: {status}.",
   "itad.ai.status.received": "Received {received} of {expected} expected devices.",
+  "itad.ai.status.receivedNoManifest": "{count} devices have been received; no manifest quantity was expected.",
   "itad.ai.status.sanitized": "Data erasure completed for {sanitized} of {scope} data-bearing devices.",
   "itad.ai.status.unexpected": "{count} devices arrived that were not on the manifest.",
   "itad.ai.suggestion.blockers": "Why can't this job be completed?",

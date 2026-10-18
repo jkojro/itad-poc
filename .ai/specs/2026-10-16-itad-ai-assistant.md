@@ -99,7 +99,7 @@ operator ──▶ AI chat (launcher · inline panel on job page)
 | Tool | Kind | Reads / calls | Feature |
 |---|---|---|---|
 | `itad.find_jobs` | read | job by internal reference, customer reference, customer or name; several → candidates | `itad.jobs.view` |
-| `itad.get_focus_today` | read | operations read model: jobs needing attention (red, orange), each with its signals as the reason, plus the caller's assigned open exceptions (US-AI-01). Optional typed input `filters` (`customerId`, `status`, `openExceptions`, `missing`, `failed`, `missingCertificates`) with the operations endpoint's semantics, set only from what the user said (Q7); the result echoes the applied filters | `itad.jobs.view`; assigned exceptions need `itad.exceptions.view` |
+| `itad.get_focus_today` | read | operations read model: jobs needing attention (red, orange), each with its signals as the reason, plus the caller's assigned open exceptions (US-AI-01). Optional typed input `filters` (`customerId`, `status`, and the positive-only flags `openExceptions`, `missing`, `failed`, `missingCertificates` — `true` or absent) with the operations endpoint's semantics, set only from what the user said (Q7); the result echoes the applied filters | `itad.jobs.view`; assigned exceptions need `itad.exceptions.view` |
 | `itad.get_job_summary` | read | job, status, pickup, overview counters and signals | `itad.jobs.view` |
 | `itad.get_job_blockers` | read | every gate of the job's next transition and of `complete`: met / unmet, with the blocking records (US-AI-02) | `itad.jobs.view`; blocking records per type need their view feature |
 | `itad.get_reconciliation_summary` | read | Expected / Received / Missing / Unexpected / Total intake and open missing / unexpected exceptions, with the D7 / D9 meaning as structured flags | `itad.jobs.view`; exception references need `itad.exceptions.view` |
@@ -355,3 +355,9 @@ Validation per phase: `yarn generate && yarn typecheck && yarn lint && yarn ds:c
   - the inline panel is collapsed by default, so the chat bundle loads only when opened; "not configured" comes from `aiConfigured` on `GET /api/ai_assistant/ai/agents`;
   - page context is covered by a `resolvePageContext` unit test (TC-ITAD-807 keeps the filter cases).
 - **2026-10-18, phase 1 review applied:** `runItadRoute` enforces every extra feature itself (defense in depth); route scope contract TC-ITAD-817 (out-of-organization = 404 = nonexistent, all 10 routes); stable tool error codes with generic messages, raw route errors only logged; `/itad` prefix check matches `/itad` or `/itad/…` only.
+- **2026-10-18, tools and composers review applied:**
+  - domain checks: a duplicate flagged as a different device stays a `duplicate_serial` exception, so the duplicate blocker list is complete (flagged ones are labelled); `awaitingWipe` already includes in-progress assets; every open exception blocks `complete` (E4-031);
+  - `hidden` without a count means the value itself may not be read (`undecided`, `notDataBearing`, assigned exceptions, certificates); with a count, the number is known but the records are hidden;
+  - focus filters are positive-only (`true` or absent); `activeJobsReturned` replaces `activeJobsConsidered`; assigned exceptions report `coversAllAttentionJobs` and `jobsChecked` (at most 25 attention jobs are checked, a TODO marks the per-job reads);
+  - `find_jobs` prefers an exact internal reference, then an exact customer reference, then search results;
+  - unsanitized blocking records are read per status with the record limit (failed first); the customer draft handles jobs without a manifest quantity and follows the request locale (PL/EN covered in TC-ITAD-804).

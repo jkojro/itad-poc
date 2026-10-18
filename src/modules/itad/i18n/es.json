@@ -8,6 +8,7 @@
   "itad.ai.status.certificates": "Emitidos {issued} de {required} certificados de borrado.",
   "itad.ai.status.heading": "Estado de {reference}: {status}.",
   "itad.ai.status.received": "Recibidos {received} de {expected} dispositivos esperados.",
+  "itad.ai.status.receivedNoManifest": "Se han recibido {count} dispositivos; el manifiesto no indicaba una cantidad esperada.",
   "itad.ai.status.sanitized": "Borrado de datos completado en {sanitized} de {scope} dispositivos con datos.",
   "itad.ai.status.unexpected": "Llegaron {count} dispositivos que no estaban en el manifiesto.",
   "itad.ai.suggestion.blockers": "¿Por qué no se puede completar este trabajo?",

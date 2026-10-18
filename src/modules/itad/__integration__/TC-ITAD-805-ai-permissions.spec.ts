@@ -42,7 +42,7 @@ test.describe('TC-ITAD-805: AI tool permissions and degradation', () => {
 
       const focus = await aiToolOk(request, jobsOnly, 'itad.get_focus_today', { filters: { customerId: companyId } })
       expect(focus.jobs.items).toHaveLength(3)
-      expect(focus.assignedToMe).toEqual({ hidden: 'no_permission', count: 0 })
+      expect(focus.assignedToMe).toEqual({ hidden: 'no_permission' })
 
       const assetsOnly = await tokenWithFeatures(request, token, {
         label: 'assets',
@@ -54,7 +54,7 @@ test.describe('TC-ITAD-805: AI tool permissions and degradation', () => {
       })
       const history = await aiToolOk(request, assetsOnly, 'itad.get_asset_history', { jobId: historyJob.id, assetId: failed.id })
       expect(history.sections).toEqual({ sanitization: 'hidden', exceptions: 'hidden' })
-      expect(history.certificates).toEqual({ hidden: 'no_permission', count: 0 })
+      expect(history.certificates).toEqual({ hidden: 'no_permission' })
       const events = history.timeline.items.map((entry: { event: string }) => entry.event)
       expect(events).toContain('received')
       expect(events.filter((event: string) => event.startsWith('exception_') || event.startsWith('sanitization_'))).toEqual([])

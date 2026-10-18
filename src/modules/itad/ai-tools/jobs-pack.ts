@@ -17,6 +17,7 @@ import {
   untrusted,
   AI_BLOCKER_RECORD_LIMIT,
   type AssignedException,
+  type AssignedLookup,
   type BlockingRecord,
   type BlockingRecordKind,
   type BlockingRecords,
@@ -39,10 +40,16 @@ type OverviewResponse = {
   group: string
 }
 type JobsListResponse = { items: ItadJobListItem[]; total: number }
-type ExceptionListResponse = { items: Array<{ id: string; type: string; serial: string; assetId: string | null }>; total: number }
+type ExceptionListResponse = {
+  items: Array<{ id: string; type: string; serial: string; assetId: string | null; context?: { flaggedDifferentDevice?: boolean } }>
+  total: number
+}
 type AssetListResponse = { items: Array<{ id: string; serial: string }>; total: number }
 type SanitizationListResponse = { items: Array<{ id: string; serial: string; status: string }>; total: number }
 type JobCertificatesResponse = { missingAssets: Array<{ id: string; serial: string }> }
+
+/** Attention jobs whose assigned exceptions are read; more are reported as not all checked. */
+const ASSIGNED_LOOKUP_JOB_LIMIT = 25
 
 const jobIdInput = z.object({ jobId: z.string().uuid().describe('ITAD job id, from find_jobs or the page context.') })
 
@@ -69,11 +76,15 @@ const findJobsTool: AiToolDefinition = defineItadTool({
   requiredFeatures: ['itad.jobs.view'],
   isMutation: false,
   handler: async (input: { query: string }, ctx) => {
-    const query = isUuid(input.query) ? { id: input.query, pageSize: 10 } : { search: input.query, pageSize: 10 }
-    const response = await runItadRoute<JobsListResponse>(ctx, findJobsTool, { method: 'GET', path: '/jobs', query })
+    const search = isUuid(input.query) ? { id: input.query, pageSize: 10 } : { search: input.query, pageSize: 10 }
+    const response = await runItadRoute<JobsListResponse>(ctx, findJobsTool, { method: 'GET', path: '/jobs', query: search })
     const data = routeData(response, 'Job search') ?? { items: [], total: 0 }
-    const exact = data.items.filter((job) => job.internalReference.toLowerCase() === input.query.toLowerCase())
-    const candidates = (exact.length === 1 ? exact : data.items).map((job) => ({
+    // Exact internal reference first, then exact customer reference, then the search results.
+    const query = input.query.trim().toLowerCase()
+    const byReference = data.items.filter((job) => job.internalReference.toLowerCase() === query)
+    const byCustomerReference = data.items.filter((job) => job.customerReference?.toLowerCase() === query)
+    const exact = byReference.length > 0 ? byReference : byCustomerReference
+    const candidates = (exact.length > 0 ? exact : data.items).map((job) => ({
       jobId: job.id,
       reference: job.internalReference,
       customerReference: job.customerReference,
@@ -83,7 +94,7 @@ const findJobsTool: AiToolDefinition = defineItadTool({
       scheduledPickupAt: job.scheduledPickupAt,
       link: jobHref(job.id),
     }))
-    return { status: lookupStatus(candidates.length), candidates: bounded(candidates, exact.length === 1 ? 1 : data.total) }
+    return { status: lookupStatus(candidates.length), candidates: bounded(candidates, exact.length > 0 ? exact.length : data.total) }
   },
 })
 
@@ -94,10 +105,11 @@ const focusInput = z.object({
     .object({
       customerId: z.string().uuid().optional(),
       status: z.enum(ACTIVE_JOB_STATUSES).optional(),
-      openExceptions: z.boolean().optional(),
-      missing: z.boolean().optional(),
-      failed: z.boolean().optional(),
-      missingCertificates: z.boolean().optional(),
+      // Positive filters only, as in the operations endpoint: "jobs with failures", never "without".
+      openExceptions: z.literal(true).optional(),
+      missing: z.literal(true).optional(),
+      failed: z.literal(true).optional(),
+      missingCertificates: z.literal(true).optional(),
     })
     .optional()
     .describe('Only filters the user explicitly asked for. Omit to cover every active job.'),
@@ -125,12 +137,15 @@ const getFocusTodayTool: AiToolDefinition = defineItadTool({
       query,
     })
     const data = requireRouteData(response, 'Operations')
-    const attention = data.items.filter((item) => item.severity !== 'none').slice(0, 25)
+    const attention = data.items.filter((item) => item.severity !== 'none')
+    const checked = attention.slice(0, ASSIGNED_LOOKUP_JOB_LIMIT)
 
-    let assigned: AssignedException[] | ReturnType<typeof hidden>
+    let assigned: AssignedLookup | ReturnType<typeof hidden>
     if (can(ctx, 'itad.exceptions.view')) {
-      assigned = []
-      for (const job of attention) {
+      const items: AssignedException[] = []
+      // TODO: one request per attention job (at most 25); replace with an aggregate read if
+      // "what should I focus on" becomes a production hot path.
+      for (const job of checked) {
         const list = routeData(
           await runItadRoute<ExceptionListResponse>(
             ctx,
@@ -141,7 +156,7 @@ const getFocusTodayTool: AiToolDefinition = defineItadTool({
           'Assigned exceptions',
         )
         for (const exception of list?.items ?? []) {
-          assigned.push({
+          items.push({
             exceptionId: exception.id,
             jobId: job.id,
             jobReference: job.internalReference,
@@ -151,8 +166,9 @@ const getFocusTodayTool: AiToolDefinition = defineItadTool({
           })
         }
       }
+      assigned = { items, jobsChecked: checked.length, jobsNeedingAttention: attention.length }
     } else {
-      assigned = hidden(0)
+      assigned = hidden()
     }
     return toFocusToday({ items: data.items, truncated: data.truncated, appliedFilters: filters, assigned })
   },
@@ -224,22 +240,28 @@ async function loadBlockingRecords(
         await runItadRoute<ExceptionListResponse>(ctx, tool, { method: 'GET', path: `/jobs/${jobId}/exceptions`, query }, [feature]),
         'Open exceptions',
       )
+      // A duplicate flagged as a different device stays a DUPLICATE_SERIAL exception (the flag is on the scan).
       return (data?.items ?? []).map((exception) => ({
         id: exception.id,
-        label: `${exception.type}: ${exception.serial}`,
+        label: `${exception.type}: ${exception.serial}${exception.context?.flaggedDifferentDevice ? ' (flagged as a different device)' : ''}`,
         link: jobHref(jobId, `tab=exceptions&status=open&type=${exception.type}`),
       }))
     }
     case 'unsanitized_assets': {
-      const data = routeData(
-        await runItadRoute<SanitizationListResponse>(ctx, tool, { method: 'GET', path: `/jobs/${jobId}/sanitization`, query: { pageSize: 100 } }, [feature]),
-        'Sanitization',
-      )
-      return (data?.items ?? [])
-        .filter((asset) => asset.status !== 'sanitized')
-        .map((asset) => ({ id: asset.id, label: `${asset.serial} (${asset.status})`, link: assetHref(jobId, asset.id) }))
+      // Failed first (they need a decision), then in progress, then awaiting; each read is bounded.
+      const records: BlockingRecord[] = []
+      for (const status of ['review_required', 'sanitization_in_progress', 'sanitization_required']) {
+        const data = routeData(
+          await runItadRoute<SanitizationListResponse>(ctx, tool, { method: 'GET', path: `/jobs/${jobId}/sanitization`, query: { status, pageSize: limit } }, [feature]),
+          'Sanitization',
+        )
+        for (const asset of data?.items ?? []) records.push({ id: asset.id, label: `${asset.serial} (${asset.status})`, link: assetHref(jobId, asset.id) })
+        if (records.length >= limit) break
+      }
+      return records.slice(0, limit)
     }
     case 'missing_certificates': {
+      // The certificates route returns every missing device; the composer bounds what the model gets.
       const data = routeData(
         await runItadRoute<JobCertificatesResponse>(ctx, tool, { method: 'GET', path: `/jobs/${jobId}/certificates` }, [feature]),
         'Certificates',

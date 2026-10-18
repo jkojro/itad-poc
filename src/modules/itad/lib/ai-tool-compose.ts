@@ -16,10 +16,11 @@ export const AI_BLOCKER_RECORD_LIMIT = 10
 /** Record free text (reasons, notes) is truncated before it reaches the model. */
 export const AI_TEXT_LIMIT = 500
 
-export type Hidden = { hidden: 'no_permission'; count: number }
+/** `count` present: the number is known but the records are not shown; absent: the value itself may not be read. */
+export type Hidden = { hidden: 'no_permission'; count?: number }
 export type Bounded<T> = { items: T[]; total: number; truncated: boolean }
 
-export const hidden = (count: number): Hidden => ({ hidden: 'no_permission', count })
+export const hidden = (count?: number): Hidden => (count === undefined ? { hidden: 'no_permission' } : { hidden: 'no_permission', count })
 
 export function bounded<T>(items: readonly T[], total = items.length, limit = AI_LIST_LIMIT): Bounded<T> {
   const kept = items.slice(0, limit)
@@ -77,6 +78,9 @@ export type FocusFilters = {
 
 export type AssignedException = { exceptionId: string; jobId: string; jobReference: string; type: string; serial: string; link: string }
 
+/** Assigned open exceptions, read for at most `jobsChecked` of the `jobsNeedingAttention` jobs. */
+export type AssignedLookup = { items: readonly AssignedException[]; jobsChecked: number; jobsNeedingAttention: number }
+
 /**
  * Jobs that need attention, in the operations order (red, then orange), each with its
  * signals as the reason. `assigned` is `null` when the caller may not see exceptions.
@@ -85,12 +89,12 @@ export function toFocusToday(input: {
   items: readonly OperationsItem[]
   truncated: boolean
   appliedFilters: FocusFilters
-  assigned: readonly AssignedException[] | Hidden
+  assigned: AssignedLookup | Hidden
 }) {
   const attention = input.items.filter((item) => item.severity !== 'none')
   return {
     appliedFilters: input.appliedFilters,
-    activeJobsConsidered: input.items.length,
+    activeJobsReturned: input.items.length,
     sourceTruncated: input.truncated,
     jobs: bounded(
       attention.map((item) => ({
@@ -105,7 +109,15 @@ export function toFocusToday(input: {
         link: jobHref(item.id),
       })),
     ),
-    assignedToMe: Array.isArray(input.assigned) ? bounded(input.assigned) : input.assigned,
+    assignedToMe:
+      'hidden' in input.assigned
+        ? input.assigned
+        : {
+            ...bounded(input.assigned.items),
+            // Not every attention job was checked: the list may be incomplete.
+            coversAllAttentionJobs: input.assigned.jobsChecked >= input.assigned.jobsNeedingAttention,
+            jobsChecked: input.assigned.jobsChecked,
+          },
   }
 }
 
@@ -277,8 +289,8 @@ export function toSanitizationSummary(input: { counts: SanitizationCounts; count
     sanitized: counts.sanitized,
     failedNeedsReview: counts.reviewRequired,
     dataBearingInScope: dataBearing,
-    undecided: counters ? counters.dataBearingUnknown : hidden(0),
-    notDataBearing: counters ? Math.max(0, counters.totalIntake - dataBearing - counters.dataBearingUnknown) : hidden(0),
+    undecided: counters ? counters.dataBearingUnknown : hidden(),
+    notDataBearing: counters ? Math.max(0, counters.totalIntake - dataBearing - counters.dataBearingUnknown) : hidden(),
   }
 }
 
@@ -297,15 +309,17 @@ export function composeCustomerStatus(
   const { counters } = input
   const reference = input.customerReference ? `${input.reference} (${input.customerReference})` : input.reference
   const lines = [t('itad.ai.status.heading', 'Status of {reference}: {status}.', { reference, status: input.statusLabel })]
-  if (counters.expected > 0 || counters.totalIntake > 0) {
+  if (counters.expected > 0) {
     lines.push(
       t('itad.ai.status.received', 'Received {received} of {expected} expected devices.', {
         received: counters.received,
         expected: counters.expected,
       }),
     )
+  } else if (counters.totalIntake > 0) {
+    lines.push(t('itad.ai.status.receivedNoManifest', '{count} devices have been received; no manifest quantity was expected.', { count: counters.totalIntake }))
   }
-  if (counters.unexpected > 0) {
+  if (counters.expected > 0 && counters.unexpected > 0) {
     lines.push(t('itad.ai.status.unexpected', '{count} devices arrived that were not on the manifest.', { count: counters.unexpected }))
   }
   if (counters.sanitizationScope > 0) {
