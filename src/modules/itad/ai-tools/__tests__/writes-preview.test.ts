@@ -107,4 +107,36 @@ describe('itad.reschedule_pickup preview (A4)', () => {
       ),
     ).rejects.toMatchObject({ code: 'timezone_invalid' })
   })
+
+  it('reads a local time in the given zone: the model sends the time as the operator said it', async () => {
+    responses.push(job())
+    const day = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)
+    const preview = await rescheduleTool.loadBeforeRecord!(
+      { jobId: '11111111-1111-4111-8111-111111111111', scheduledPickupAt: `${day}T13:00`, timeZone: 'Europe/Warsaw' } as never,
+      ctx,
+    )
+    const stored = new Date(String(preview!.after!.scheduledPickupAt))
+    // 13:00 in Warsaw is 11:00 or 12:00 UTC, depending on summer time.
+    expect([11, 12]).toContain(stored.getUTCHours())
+    expect(String(preview!.display!.after!.scheduledPickupAt)).toContain('13:00 Europe/Warsaw')
+    await expect(
+      rescheduleTool.loadBeforeRecord!({ jobId: '11111111-1111-4111-8111-111111111111', scheduledPickupAt: `${day}T13:00` } as never, ctx),
+    ).rejects.toMatchObject({ code: 'timezone_required' })
+  })
+
+  it('refuses a long past time with the current time, so the model can fix the date; a just-passed one is shown blocked', async () => {
+    responses.push(job())
+    const refused = rescheduleTool.loadBeforeRecord!(
+      { jobId: '11111111-1111-4111-8111-111111111111', scheduledPickupAt: '2024-12-04T12:00', timeZone: 'Europe/Warsaw' } as never,
+      ctx,
+    )
+    await expect(refused).rejects.toMatchObject({ code: 'time_in_past' })
+    await expect(refused).rejects.toThrow(/it is now .*Europe\/Warsaw/)
+    responses.push(job())
+    const justPassed = await rescheduleTool.loadBeforeRecord!(
+      { jobId: '11111111-1111-4111-8111-111111111111', scheduledPickupAt: new Date(Date.now() - 60_000).toISOString(), timeZone: 'Europe/Warsaw' } as never,
+      ctx,
+    )
+    expect(justPassed).toMatchObject({ recordVersion: 'ineligible:time_in_past', after: { blocked: 'time_in_past' } })
+  })
 })
