@@ -8,7 +8,8 @@ import { confirmAction, deletePendingActions, seedPendingAction } from './itad-a
 /**
  * TC-ITAD-811 (AI assistant spec AC-AI-09, AI-REQ-15): a confirmed reschedule changes only
  * the pickup of a scheduled job; once receiving started, or when the time has passed,
- * the preview is blocked and Confirm changes nothing.
+ * the preview is blocked and Confirm changes nothing. A local time with its zone (how the
+ * model passes "13:00 Warsaw") is stored as the right instant.
  */
 test.describe('TC-ITAD-811: AI reschedule pickup', () => {
   test('changes only the pickup of a scheduled job; blocked in receiving or in the past', async ({ request }) => {
@@ -55,8 +56,17 @@ test.describe('TC-ITAD-811: AI reschedule pickup', () => {
       expect(locked.body?.mutationResult?.error?.message).toContain('can no longer be rescheduled')
       expect((await getJob(request, token, receiving.id))!.scheduledPickupAt).toBe(receivingBefore.scheduledPickupAt)
 
-      // A time in the past is refused at execute, whatever the preview said.
-      const past = await confirmAction(request, token, await seed(job.id, new Date(Date.now() - 3_600_000).toISOString(), 'ineligible:time_in_past'))
+      // A local time in the operator's zone: 13:00 in Warsaw on a winter date is 12:00 UTC.
+      const winterDay = `${new Date().getUTCFullYear() + 1}-01-15`
+      const localBefore = (await getJob(request, token, job.id))!
+      const local = await confirmAction(request, token, await seed(job.id, `${winterDay}T13:00`, localBefore.updatedAt))
+      expect(local.body, JSON.stringify(local.body)).toMatchObject({ ok: true })
+      expect((await getJob(request, token, job.id))!.scheduledPickupAt).toBe(`${winterDay}T12:00:00.000Z`)
+      await confirmAction(request, token, await seed(job.id, target.toISOString(), (await getJob(request, token, job.id))!.updatedAt))
+
+      // A time that passed after the preview (here 2 minutes ago) is refused at execute,
+      // whatever the preview said. (Older times are refused already at prepare.)
+      const past = await confirmAction(request, token, await seed(job.id, new Date(Date.now() - 120_000).toISOString(), 'ineligible:time_in_past'))
       expect(past.body?.ok).toBe(false)
       expect(past.body?.mutationResult?.error?.message).toContain('in the past')
       expect((await getJob(request, token, job.id))!.scheduledPickupAt).toBe(target.toISOString())
