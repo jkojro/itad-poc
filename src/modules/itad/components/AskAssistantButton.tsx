@@ -4,6 +4,7 @@ import { Button } from '@open-mercato/ui/primitives/button'
 import { AiIcon } from '@open-mercato/ui/ai/AiIcon'
 import { useAiDock } from '@open-mercato/ui/ai/AiDock'
 import { useAiChatSessions } from '@open-mercato/ui/ai/AiChatSessions'
+import { listAiServerConversations, updateAiServerConversation } from '@open-mercato/ui/ai/conversation-store'
 import { useT } from '@open-mercato/shared/lib/i18n/context'
 import { getCurrentOrganizationScope, subscribeOrganizationScopeChanged } from '@open-mercato/shared/lib/frontend/organizationEvents'
 import { shouldRebindDock, type ItadPageContext } from '../lib/ai-page-context'
@@ -59,12 +60,42 @@ function useOrganizationScopeReady(): boolean {
  * When the dock is bound to another ITAD page, it is re-bound here as soon as this page
  * opens. Hidden when the user cannot use the assistant; disabled without an AI provider.
  */
+/** Lets the framework finish creating the default tab it opens on a full page load. */
+const CLEANUP_DELAY_MS = 2000
+
+/**
+ * Closes open assistant conversations that are empty and untitled — default tabs the dock
+ * opens on its own (e.g. on every full page load) and leftovers of earlier pages. A
+ * conversation with any message or a title is never touched; nothing is lost.
+ */
+async function closeEmptyAssistantTabs(
+  sessionsRef: React.MutableRefObject<ReturnType<typeof useAiChatSessions>>,
+  keepConversationId: string | null,
+): Promise<void> {
+  const conversations = await listAiServerConversations({ limit: 100 }).catch(() => null)
+  if (!conversations) return
+  const sessions = sessionsRef.current
+  const open = sessions.getOpenSessions(ITAD_ASSISTANT_AGENT_ID)
+  const active = sessions.getActiveSession(ITAD_ASSISTANT_AGENT_ID)
+  for (const conversation of conversations) {
+    if (conversation.agentId !== ITAD_ASSISTANT_AGENT_ID || conversation.status !== 'open') continue
+    if (conversation.isOwner === false || conversation.lastMessageAt || conversation.title) continue
+    if (conversation.conversationId === keepConversationId || conversation.conversationId === active?.conversationId) continue
+    const local = open.find((session) => session.conversationId === conversation.conversationId)
+    if (local) sessions.closeSession(local.id)
+    else await updateAiServerConversation(conversation.conversationId, { status: 'closed' }).catch(() => null)
+  }
+}
+
 export function AskAssistantButton({ pageContext, pageLabel }: { pageContext: ItadPageContext; pageLabel: string }) {
   const t = useT()
   const assistant = useItadAssistant()
   const dock = useAiDock()
   const sessions = useAiChatSessions()
   const scopeReady = useOrganizationScopeReady()
+  // Async work (cleanup) must see the latest tabs, not the ones of the render that started it.
+  const sessionsRef = React.useRef(sessions)
+  sessionsRef.current = sessions
 
   const bindHere = React.useCallback(() => {
     const map = readPageSessions()
@@ -76,13 +107,26 @@ export function AskAssistantButton({ pageContext, pageLabel }: { pageContext: It
     const known = map[key]
       ? [...sessions.getOpenSessions(ITAD_ASSISTANT_AGENT_ID), ...sessions.getClosedSessions(ITAD_ASSISTANT_AGENT_ID)].find((session) => session.id === map[key])
       : undefined
+    let boundConversationId: string | null = known?.conversationId ?? null
+    let newTitle: string | null = null
     if (known?.status === 'closed') sessions.reopenSession(known.id)
     else if (known) sessions.setActiveSession(known.id)
     else {
       const created = sessions.createSession(ITAD_ASSISTANT_AGENT_ID)
       sessions.renameSession(created.id, pageLabel)
       writePageSessions({ ...map, [key]: created.id })
+      boundConversationId = created.conversationId
+      newTitle = pageLabel
     }
+    window.setTimeout(() => {
+      // The framework's rename cannot reach the server for a tab created in the same tick
+      // (and the conversation is created asynchronously), so the page name is stored here,
+      // once the conversation exists; without it the tab comes back dated after a reload.
+      const titled = boundConversationId && newTitle
+        ? updateAiServerConversation(boundConversationId, { title: newTitle }).catch(() => null)
+        : Promise.resolve(null)
+      void titled.then(() => closeEmptyAssistantTabs(sessionsRef, boundConversationId))
+    }, CLEANUP_DELAY_MS)
     dock.dock({
       agent: ITAD_ASSISTANT_AGENT_ID,
       label: t('itad.ai.pageAssistantLabel', 'Page assistant · {page}', { page: pageLabel }),
@@ -102,6 +146,16 @@ export function AskAssistantButton({ pageContext, pageLabel }: { pageContext: It
     autoBoundKey.current = key
     bindHere()
   }, [rebind, key, bindHere])
+
+  // Dock already bound to this page (e.g. after a reload): only tidy the default tabs.
+  const boundHere =
+    scopeReady && assistant.state === 'ready' && docked?.agent === ITAD_ASSISTANT_AGENT_ID && !rebind && docked.pageContext?.recordId === pageContext.recordId
+  React.useEffect(() => {
+    if (!boundHere) return
+    // Idempotent, so a repeated effect run (strict mode) is harmless.
+    const timer = window.setTimeout(() => void closeEmptyAssistantTabs(sessionsRef, null), CLEANUP_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [boundHere, key])
 
   if (assistant.state === 'hidden') return null
   const notConfigured = assistant.state === 'not_configured'
