@@ -5,6 +5,7 @@ import { AiIcon } from '@open-mercato/ui/ai/AiIcon'
 import { useAiDock } from '@open-mercato/ui/ai/AiDock'
 import { useAiChatSessions } from '@open-mercato/ui/ai/AiChatSessions'
 import { useT } from '@open-mercato/shared/lib/i18n/context'
+import { getCurrentOrganizationScope, subscribeOrganizationScopeChanged } from '@open-mercato/shared/lib/frontend/organizationEvents'
 import { shouldRebindDock, type ItadPageContext } from '../lib/ai-page-context'
 import { ITAD_ASSISTANT_AGENT_ID, useItadAssistant } from './use-itad-assistant'
 
@@ -36,6 +37,20 @@ function writePageSessions(map: Record<string, string>): void {
 const pageKey = (context: ItadPageContext) => `${context.pageId}:${context.recordId}`
 
 /**
+ * The dock's tabs are stored per tenant and organization; on a full page load they start in
+ * a temporary unscoped bucket until the topbar resolves the scope. Binding before that would
+ * close and open tabs in the wrong bucket (and leave a stray default tab in the real one).
+ */
+function useOrganizationScopeReady(): boolean {
+  const [ready, setReady] = React.useState(() => Boolean(getCurrentOrganizationScope().tenantId))
+  React.useEffect(() => {
+    if (getCurrentOrganizationScope().tenantId) setReady(true)
+    return subscribeOrganizationScopeChanged((detail) => setReady(Boolean(detail.tenantId)))
+  }, [])
+  return ready
+}
+
+/**
  * "Ask the page assistant" (AI assistant spec Q8). Opens the assistant dock bound to this
  * page — the global launcher is page-agnostic — with this page's own conversation, so a
  * previous page's thread never answers for this one. One conversation per page, at most
@@ -49,6 +64,7 @@ export function AskAssistantButton({ pageContext, pageLabel }: { pageContext: It
   const assistant = useItadAssistant()
   const dock = useAiDock()
   const sessions = useAiChatSessions()
+  const scopeReady = useOrganizationScopeReady()
 
   const bindHere = React.useCallback(() => {
     const map = readPageSessions()
@@ -76,7 +92,7 @@ export function AskAssistantButton({ pageContext, pageLabel }: { pageContext: It
   }, [dock, pageContext, pageLabel, sessions, t])
 
   const docked = dock.state.assistant
-  const rebind = assistant.state === 'ready' && shouldRebindDock(docked, ITAD_ASSISTANT_AGENT_ID, pageContext)
+  const rebind = scopeReady && assistant.state === 'ready' && shouldRebindDock(docked, ITAD_ASSISTANT_AGENT_ID, pageContext)
   // Re-bind once per page: effects can run twice before the dock and session state settle
   // (React strict mode, re-renders), and a second run would open a second tab.
   const autoBoundKey = React.useRef<string | null>(null)
@@ -93,7 +109,7 @@ export function AskAssistantButton({ pageContext, pageLabel }: { pageContext: It
     <Button
       type="button"
       variant="outline"
-      disabled={assistant.state !== 'ready'}
+      disabled={assistant.state !== 'ready' || !scopeReady}
       title={notConfigured ? t('itad.ai.notConfigured', 'The AI assistant is not configured. Ask an administrator to set up an AI provider.') : undefined}
       onClick={bindHere}
       data-testid="itad-ask-assistant"
