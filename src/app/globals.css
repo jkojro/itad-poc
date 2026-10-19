@@ -1146,3 +1146,12 @@ body[data-demo-feedback-fab="visible"] main {
 .om-mdx-editor .cm-dropCursor {
   border-left-color: var(--foreground);
 }
+
+/* AI chat (installed @open-mercato/ui): a message's content column has no `min-width: 0`,
+   so a non-wrapping tool-call caption widens the message past a narrow dock and the right
+   edge is clipped — including the approval card's Confirm button. Let the column and the
+   captions (already `truncate`) shrink. Remove once fixed upstream. */
+.group\/message[data-role] > .flex-1,
+.group\/message[data-role] .truncate {
+  min-width: 0;
+}
