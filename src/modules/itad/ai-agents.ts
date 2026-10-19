@@ -3,6 +3,7 @@ import type {
   AiAgentDefinition,
   AiAgentPageContextInput,
 } from '@open-mercato/ai-assistant/modules/ai_assistant/lib/ai-agent-definition'
+import { AiPendingActionRepository } from '@open-mercato/ai-assistant/modules/ai_assistant/data/repositories/AiPendingActionRepository'
 import type { RbacService } from '@open-mercato/core/modules/auth/services/rbacService'
 import { ItadAsset, ItadJob } from './data/entities'
 import { ITAD_ASSET_ENTITY_ID, ITAD_JOB_ENTITY_ID } from './lib/constants'
@@ -82,6 +83,9 @@ const PROMPT_SECTIONS: Array<{ name: string; content: string }> = [
       'CHANGES',
       '- You change data only through the write tools; each one shows the operator a preview to Confirm or Cancel. Never claim a change happened until the result says done: true.',
       '- Use record ids from read tools only. When the record is ambiguous, ask which one first.',
+      '- Every change request — a new one, a corrected one or the same one repeated — needs a new write tool call in this turn. Earlier previews may',
+      '  have been cancelled, confirmed or expired, and you are not told which. Say a change awaits confirmation only when a write tool call',
+      '  in this turn returned pending-confirmation; never repeat that from an earlier answer.',
       '- Resolve exception: only open missing-from-delivery or unexpected exceptions. Map the wording to an allowed outcome',
       '  (not shipped → not_shipped, lost → lost_in_transit, wrong manifest → manifest_error, accept into the job → accepted_into_job);',
       '  anything else is not offered — list the allowed outcomes. The reason is the operator\'s own words; ask when they gave none.',
@@ -106,8 +110,32 @@ const PROMPT_SECTIONS: Array<{ name: string; content: string }> = [
  */
 async function resolvePageContext(input: AiAgentPageContextInput): Promise<string | null> {
   const page = await describePage(input)
+  if (!page) return null
   // The prompt is static; the model needs today's date to resolve "tomorrow" or a date without a year.
-  return page ? `${page} The current time is ${new Date().toISOString()} (UTC).` : null
+  return [page, `The current time is ${new Date().toISOString()} (UTC).`, await describePendingChanges(input)].filter(Boolean).join(' ')
+}
+
+/**
+ * The model is never told that the operator cancelled a preview (or that it expired), so
+ * from the history alone it repeats "awaiting your confirmation" without proposing again —
+ * and no card appears. Each turn states which of the user's changes really await Confirm.
+ */
+async function describePendingChanges(input: AiAgentPageContextInput): Promise<string | null> {
+  if (!input.tenantId || !input.userId) return null
+  try {
+    const em = input.container.resolve<EntityManager>('em').fork()
+    const now = Date.now()
+    const pending = (
+      await new AiPendingActionRepository(em).listPendingForAgent(AGENT_ID, { tenantId: input.tenantId, organizationId: input.organizationId }, 20)
+    ).filter((action) => action.createdByUserId === input.userId && new Date(action.expiresAt).getTime() > now)
+    if (pending.length === 0) {
+      return 'No change of this user awaits confirmation now: every earlier preview was confirmed, cancelled or expired. A change request needs a new write tool call.'
+    }
+    const listed = pending.map((action) => `${action.toolName} for record ${action.targetRecordId ?? 'unknown'}`).join('; ')
+    return `Changes awaiting the user's Confirm now: ${listed}. Any other or changed request needs a new write tool call.`
+  } catch {
+    return null
+  }
 }
 
 async function describePage(input: AiAgentPageContextInput): Promise<string | null> {
@@ -156,6 +184,11 @@ const agent: AiAgentDefinition = {
   allowedTools: [...ITAD_ASSISTANT_ALLOWED_TOOLS],
   executionMode: 'chat',
   requiredFeatures: ['itad.jobs.view'],
+  // The framework default (Claude Haiku 4.5) repeats "awaiting your confirmation" from the
+  // history without proposing again after a cancelled preview (0–1 of 4 live trials); Haiku
+  // 5.5 proposes every time (4 of 4), at the same cost tier. Tenants can still override it.
+  defaultProvider: 'anthropic',
+  defaultModel: 'claude-haiku-5-5',
   readOnly: false,
   // Every write needs the operator's Confirm; a tenant override can downgrade to read-only.
   mutationPolicy: 'confirm-required',
