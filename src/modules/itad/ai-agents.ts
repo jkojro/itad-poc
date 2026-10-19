@@ -6,6 +6,7 @@ import type {
 import type { RbacService } from '@open-mercato/core/modules/auth/services/rbacService'
 import { ItadAsset, ItadJob } from './data/entities'
 import { ITAD_ASSET_ENTITY_ID, ITAD_JOB_ENTITY_ID } from './lib/constants'
+import { ITAD_OPERATIONS_DASHBOARD_ENTITY } from './lib/ai-page-context'
 
 /**
  * `itad.operations_assistant` (AI assistant spec, Epic 8). One persona for the ITAD
@@ -98,9 +99,19 @@ const PROMPT_SECTIONS: Array<{ name: string; content: string }> = [
   },
 ]
 
-/** Page context (spec Q3, Q8): "this job" / "this asset" for the open record, only when the user may read it. */
+/**
+ * Page context (spec Q3, Q8): "this job" / "this asset" for the open record, only when the
+ * user may read it; on the Operations Dashboard, that questions cover every active job.
+ */
 async function resolvePageContext(input: AiAgentPageContextInput): Promise<string | null> {
   if (!input.tenantId || !input.userId || !input.recordId) return null
+  if (input.entityType === ITAD_OPERATIONS_DASHBOARD_ENTITY) {
+    return [
+      'The user is on the ITAD Operations Dashboard, which lists every active job in their scope.',
+      'Questions like "what needs attention" are about all active jobs: use itad.get_focus_today without filters unless the user states some.',
+      'No single job is open; ask which job when a question needs one.',
+    ].join(' ')
+  }
   if (input.entityType !== ITAD_JOB_ENTITY_ID && input.entityType !== ITAD_ASSET_ENTITY_ID) return null
   try {
     const em = input.container.resolve<EntityManager>('em').fork()

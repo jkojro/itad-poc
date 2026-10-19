@@ -1,8 +1,10 @@
 {
   "itad.ai.agentLabel": "ITAD 운영 어시스턴트",
-  "itad.ai.ask": "어시스턴트에게 묻기",
+  "itad.ai.ask": "페이지 어시스턴트에게 묻기",
   "itad.ai.dockPlaceholder": "ITAD 운영에 대해 질문하세요…",
   "itad.ai.notConfigured": "AI 어시스턴트가 구성되지 않았습니다. 관리자에게 AI 제공자 설정을 요청하세요.",
+  "itad.ai.page.operations": "운영 대시보드",
+  "itad.ai.pageAssistantLabel": "페이지 어시스턴트 · {page}",
   "itad.ai.panel.title": "AI 어시스턴트",
   "itad.ai.placeholder": "이 작업에 대해 질문하세요…",
   "itad.ai.status.certificates": "삭제 인증서 {required}건 중 {issued}건을 발급했습니다.",

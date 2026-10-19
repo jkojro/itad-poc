@@ -23,6 +23,7 @@ import { useGrantedFeatures } from './use-granted-features'
 import { AssetCertificatesSection } from './AssetCertificatesSection'
 import { AskAssistantButton } from './AskAssistantButton'
 import { ITAD_ASSET_ENTITY_ID } from '../lib/constants'
+import { ITAD_PAGE_CONTEXT_SOURCE } from '../lib/ai-page-context'
 
 type Translate = ReturnType<typeof useT>
 type Actor = { id: string; name: string | null } | null
@@ -184,7 +185,10 @@ export function AssetDetail({ jobId, assetId }: { jobId: string; assetId: string
           <ReconciliationBadge t={t} state={data.reconciliation} />
           {data.deleted ? <StatusBadge variant="neutral">{t('itad.receiving.duplicates.assetRemoved', 'Asset removed')}</StatusBadge> : null}
           <div className="ml-auto">
-            <AskAssistantButton pageContext={{ pageId: 'itad.asset', entityType: ITAD_ASSET_ENTITY_ID, recordId: data.id }} />
+            <AskAssistantButton
+              pageContext={{ source: ITAD_PAGE_CONTEXT_SOURCE, pageId: 'itad.asset', entityType: ITAD_ASSET_ENTITY_ID, recordId: data.id }}
+              pageLabel={data.serial}
+            />
           </div>
         </div>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-3">

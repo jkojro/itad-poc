@@ -1,8 +1,10 @@
 {
   "itad.ai.agentLabel": "Asystent operacji ITAD",
-  "itad.ai.ask": "Zapytaj asystenta",
+  "itad.ai.ask": "Zapytaj asystenta strony",
   "itad.ai.dockPlaceholder": "Zapytaj o operacje ITAD…",
   "itad.ai.notConfigured": "Asystent AI nie jest skonfigurowany. Poproś administratora o skonfigurowanie dostawcy AI.",
+  "itad.ai.page.operations": "Dashboard operacji",
+  "itad.ai.pageAssistantLabel": "Asystent strony · {page}",
   "itad.ai.panel.title": "Asystent AI",
   "itad.ai.placeholder": "Zapytaj o to zlecenie…",
   "itad.ai.status.certificates": "Wystawiono {issued} z {required} certyfikatów usunięcia danych.",

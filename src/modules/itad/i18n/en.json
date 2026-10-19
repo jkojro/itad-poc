@@ -1,8 +1,10 @@
 {
   "itad.ai.agentLabel": "ITAD Operations Assistant",
-  "itad.ai.ask": "Ask the assistant",
+  "itad.ai.ask": "Ask the page assistant",
   "itad.ai.dockPlaceholder": "Ask about ITAD operations…",
   "itad.ai.notConfigured": "The AI assistant is not configured. Ask an administrator to set up an AI provider.",
+  "itad.ai.page.operations": "Operations dashboard",
+  "itad.ai.pageAssistantLabel": "Page assistant · {page}",
   "itad.ai.panel.title": "AI assistant",
   "itad.ai.placeholder": "Ask about this job…",
   "itad.ai.status.certificates": "{issued} of {required} erasure certificates issued.",

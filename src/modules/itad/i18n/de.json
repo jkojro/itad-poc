@@ -1,8 +1,10 @@
 {
   "itad.ai.agentLabel": "ITAD-Betriebsassistent",
-  "itad.ai.ask": "Assistenten fragen",
+  "itad.ai.ask": "Seitenassistenten fragen",
   "itad.ai.dockPlaceholder": "Fragen zum ITAD-Betrieb…",
   "itad.ai.notConfigured": "Der KI-Assistent ist nicht konfiguriert. Bitten Sie einen Administrator, einen KI-Anbieter einzurichten.",
+  "itad.ai.page.operations": "Betriebs-Dashboard",
+  "itad.ai.pageAssistantLabel": "Seitenassistent · {page}",
   "itad.ai.panel.title": "KI-Assistent",
   "itad.ai.placeholder": "Fragen zu diesem Auftrag…",
   "itad.ai.status.certificates": "{issued} von {required} Löschzertifikaten ausgestellt.",

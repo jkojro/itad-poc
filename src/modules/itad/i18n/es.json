@@ -1,8 +1,10 @@
 {
   "itad.ai.agentLabel": "Asistente de operaciones ITAD",
-  "itad.ai.ask": "Preguntar al asistente",
+  "itad.ai.ask": "Preguntar al asistente de la página",
   "itad.ai.dockPlaceholder": "Pregunta sobre las operaciones ITAD…",
   "itad.ai.notConfigured": "El asistente de IA no está configurado. Pide a un administrador que configure un proveedor de IA.",
+  "itad.ai.page.operations": "Panel de operaciones",
+  "itad.ai.pageAssistantLabel": "Asistente de la página · {page}",
   "itad.ai.panel.title": "Asistente de IA",
   "itad.ai.placeholder": "Pregunta sobre este trabajo…",
   "itad.ai.status.certificates": "Emitidos {issued} de {required} certificados de borrado.",
