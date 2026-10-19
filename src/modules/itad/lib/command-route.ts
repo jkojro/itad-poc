@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import type { CommandBus } from '@open-mercato/shared/lib/commands'
+import type { CommandBus, CommandLogMetadata } from '@open-mercato/shared/lib/commands'
 import {
   runCrudMutationGuardAfterSuccess,
   validateCrudMutationGuard,
@@ -20,6 +20,8 @@ export async function runGuardedCommand<TInput extends Record<string, unknown>, 
     resourceKind: string
     resourceId: string
     operation: 'create' | 'update' | 'delete' | 'custom'
+    /** Extra audit metadata (e.g. the AI assistant's `context`), merged into the action log entry. */
+    metadata?: CommandLogMetadata | null
   },
 ): Promise<{ ok: true; result: TResult } | { ok: false; response: Response }> {
   const guardInput = {
@@ -37,7 +39,11 @@ export async function runGuardedCommand<TInput extends Record<string, unknown>, 
     return { ok: false, response: NextResponse.json(guardResult.body, { status: guardResult.status }) }
   }
   const commandBus = route.container.resolve<CommandBus>('commandBus')
-  const { result } = await commandBus.execute<TInput, TResult>(options.commandId, { input: options.input, ctx: route.ctx })
+  const { result } = await commandBus.execute<TInput, TResult>(options.commandId, {
+    input: options.input,
+    ctx: route.ctx,
+    ...(options.metadata ? { metadata: options.metadata } : {}),
+  })
   if (guardResult?.ok && guardResult.shouldRunAfterSuccess) {
     await runCrudMutationGuardAfterSuccess(route.container, { ...guardInput, metadata: guardResult.metadata ?? null })
   }

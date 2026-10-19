@@ -31,6 +31,12 @@ describe('itad.operations_assistant resolvePageContext', () => {
     expect(text).toContain('jobId: job-1')
   })
 
+  it('tells the agent it is on the Operations Dashboard, without opening a job', async () => {
+    const text = await resolve(input('itad:operations_dashboard', 'operations', { record: null, allowed: false }))
+    expect(text).toContain('Operations Dashboard')
+    expect(text).toContain('itad.get_focus_today')
+  })
+
   it('gives no context for a record the user may not read, a missing record or another entity type', async () => {
     expect(await resolve(input(ITAD_JOB_ENTITY_ID, 'job-1', { record: job, allowed: false }))).toBeNull()
     expect(await resolve(input(ITAD_JOB_ENTITY_ID, 'job-1', { record: null, allowed: true }))).toBeNull()

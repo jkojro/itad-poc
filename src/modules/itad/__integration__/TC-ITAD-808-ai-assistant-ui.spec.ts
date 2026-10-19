@@ -6,7 +6,7 @@ import { processingJobWithDataBearingAssets } from './itad-sanitization-fixtures
 
 /**
  * TC-ITAD-808 (AI assistant spec AI-REQ-18, AI-REQ-19, Q8): the job page has a collapsed
- * assistant panel; the asset page and the dashboard offer "Ask the assistant". Without an
+ * assistant panel; the job page, the asset page and the dashboard offer "Ask the page assistant". Without an
  * AI provider (the test environment has none) the panel says so, the button is disabled,
  * and the pages work as before.
  */
@@ -30,6 +30,8 @@ test.describe('TC-ITAD-808: AI assistant UI', () => {
       await toggle.click()
       await expect(toggle).toHaveAttribute('aria-expanded', 'true')
       await expect(panel.getByTestId('itad-assistant-not-configured')).toBeVisible()
+      // The page assistant button sits in the overview header too.
+      await expect(page.getByTestId('itad-job-overview').getByTestId('itad-ask-assistant')).toBeDisabled()
 
       await page.goto(`/backend/itad/jobs/${job.id}/assets/${asset.id}`)
       await expect(page.getByRole('heading', { name: asset.serial })).toBeVisible()

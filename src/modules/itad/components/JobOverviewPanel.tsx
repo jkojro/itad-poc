@@ -9,6 +9,9 @@ import { readApiResultOrThrow } from '@open-mercato/ui/backend/utils/apiCall'
 import { useT } from '@open-mercato/shared/lib/i18n/context'
 import type { AttentionSeverity, AttentionSignalKey, JobOverviewCounters, JobSeverity } from '../domain/job-overview'
 import type { ItadJobListItem } from './types'
+import { AskAssistantButton } from './AskAssistantButton'
+import { ITAD_JOB_ENTITY_ID } from '../lib/constants'
+import { ITAD_PAGE_CONTEXT_SOURCE } from '../lib/ai-page-context'
 
 type Translate = ReturnType<typeof useT>
 
@@ -98,7 +101,13 @@ export function JobOverviewPanel({ job }: { job: ItadJobListItem }) {
 
   return (
     <section className="space-y-4 rounded-lg border bg-card p-4" aria-label={title} data-testid="itad-job-overview">
-      <h2 className="text-sm font-semibold">{title}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <AskAssistantButton
+          pageContext={{ source: ITAD_PAGE_CONTEXT_SOURCE, pageId: 'itad.job', entityType: ITAD_JOB_ENTITY_ID, recordId: job.id }}
+          pageLabel={job.internalReference}
+        />
+      </div>
       {overview.isLoading ? (
         <Spinner className="h-5 w-5" />
       ) : overview.error || !overview.data ? (

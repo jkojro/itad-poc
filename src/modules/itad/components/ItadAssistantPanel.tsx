@@ -7,6 +7,7 @@ import { AiIcon } from '@open-mercato/ui/ai/AiIcon'
 import { useT } from '@open-mercato/shared/lib/i18n/context'
 import { ITAD_JOB_ENTITY_ID } from '../lib/constants'
 import { ITAD_ASSISTANT_AGENT_ID, useItadAssistant } from './use-itad-assistant'
+import { panelConversationId } from './page-assistant-session'
 
 // The chat surface (AI SDK + streaming runtime) loads only when the panel is opened.
 const LazyAiChat = React.lazy(async () => {
@@ -23,6 +24,8 @@ export function ItadAssistantPanel({ jobId }: { jobId: string }) {
   const assistant = useItadAssistant()
   const [open, setOpen] = React.useState(false)
   const panelId = `itad-assistant-panel-${jobId}`
+  // Chosen in the browser, on first open (the panel starts collapsed, so never during SSR).
+  const conversationId = React.useMemo(() => (open ? panelConversationId(jobId) : null), [open, jobId])
   if (assistant.state === 'hidden') return null
 
   const title = t('itad.ai.panel.title', 'AI assistant')
@@ -56,10 +59,11 @@ export function ItadAssistantPanel({ jobId }: { jobId: string }) {
           ) : (
             <div className="h-96 overflow-hidden rounded-md border">
               <React.Suspense fallback={<Spinner className="m-4 h-5 w-5" />}>
-                {/* Remount per job so one job's conversation never carries into another. */}
+                {/* This job's own conversation, remounted per job: never another page's thread. */}
                 <LazyAiChat
                   key={`${ITAD_ASSISTANT_AGENT_ID}:${jobId}`}
                   agent={ITAD_ASSISTANT_AGENT_ID}
+                  conversationId={conversationId ?? undefined}
                   pageContext={{ pageId: 'itad.job', entityType: ITAD_JOB_ENTITY_ID, recordId: jobId }}
                   className="h-full"
                   placeholder={t('itad.ai.placeholder', 'Ask about this job…')}
