@@ -40,7 +40,13 @@ export type ItadAiAuditContext = {
   proposalId?: string
 }
 
-export type ApprovedAction = { id: string; createdByUserId: string; recordVersion: string | null }
+export type ApprovedAction = {
+  id: string
+  createdByUserId: string
+  recordVersion: string | null
+  /** A batch action's records with the version each had in the preview. */
+  records: Array<{ recordId: string; recordVersion: string | null }>
+}
 
 /** Steps 1: the confirmed pending action behind this handler call. */
 export async function requireApprovedAction(ctx: ItadToolContext, tool: AiToolDefinition): Promise<ApprovedAction> {
@@ -59,7 +65,42 @@ export async function requireApprovedAction(ctx: ItadToolContext, tool: AiToolDe
   if (action.createdByUserId !== ctx.userId) {
     throw new ItadToolError('forbidden', 'Only the user who prepared this change can confirm it')
   }
-  return { id: action.id, createdByUserId: action.createdByUserId, recordVersion: action.recordVersion ?? null }
+  const records = Array.isArray(action.records)
+    ? action.records.map((record) => ({ recordId: record.recordId, recordVersion: record.recordVersion ?? null }))
+    : []
+  return { id: action.id, createdByUserId: action.createdByUserId, recordVersion: action.recordVersion ?? null, records }
+}
+
+/** Key-order-independent form of a tool input, for comparing a stored input with a parsed one. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, raw) =>
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? Object.fromEntries(Object.entries(raw as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : raw,
+  )
+}
+
+/**
+ * Whether an unexpired pending action of this user already carries exactly this input.
+ * `loadBeforeRecord(s)` runs at prepare and again at confirm with the same context; only
+ * the confirm re-check (or a repeat of a still-pending proposal) finds one. A tool may then
+ * refuse a state problem at prepare — the model never sees the preview, so it must hear why
+ * — and still answer the re-check with a blocked preview: a throw there becomes a 500.
+ */
+export async function isPendingProposal(ctx: ItadToolContext, tool: AiToolDefinition, input: unknown): Promise<boolean> {
+  if (!ctx.tenantId || !ctx.userId) return false
+  const em = ctx.container.resolve<EntityManager>('em').fork()
+  const rows = await new AiPendingActionRepository(em).listPendingForAgent(ITAD_ASSISTANT_AGENT_ID, {
+    tenantId: ctx.tenantId,
+    organizationId: ctx.organizationId ?? null,
+  }, 200)
+  const now = Date.now()
+  const wanted = canonical(input)
+  return rows.some((row) => {
+    if (row.toolName !== tool.name || row.createdByUserId !== ctx.userId || new Date(row.expiresAt).getTime() <= now) return false
+    const parsed = tool.inputSchema.safeParse(row.normalizedInput ?? {})
+    return parsed.success && canonical(parsed.data) === wanted
+  })
 }
 
 /** Route context of the confirming user, carrying the previewed version as the lock header. */
@@ -105,10 +146,16 @@ export async function runApprovedWrite<TInput extends Record<string, unknown>, T
     resourceId: string
     /** The record as it is now; its version must equal the previewed one. */
     current: { organizationId: string; updatedAt: string }
+    /**
+     * The version the command must find, when it is not the action's `recordVersion` — a
+     * batch record's own version, or the record part of a composite version (A3).
+     */
+    expectedVersion?: string | null
     what: string
   },
 ): Promise<TResult> {
   const { action } = input
+  const expected = input.expectedVersion !== undefined ? input.expectedVersion : action.recordVersion
   try {
     // 2: features, fresh from the database, in the record's organization.
     const rbac = ctx.container.resolve<RbacService>('rbacService')
@@ -119,17 +166,17 @@ export async function runApprovedWrite<TInput extends Record<string, unknown>, T
     if (!allowed) throw new ItadToolError('forbidden', 'You no longer have permission for this change')
 
     // 3: the job is readable in the user's scope (404 otherwise, same as a missing record).
-    const route = await routeForUser(ctx, action.recordVersion)
+    const route = await routeForUser(ctx, expected)
     const job = await loadReadableJob(route, input.jobId)
     if (job.organizationId !== input.current.organizationId) throw new ItadToolError('not_found', `${input.what}: not found`)
 
     // 4: the version previewed is the version written.
-    if (action.recordVersion) {
+    if (expected) {
       enforceCommandOptimisticLock({
         resourceKind: input.resourceKind,
         resourceId: input.resourceId,
         current: new Date(input.current.updatedAt),
-        expected: action.recordVersion,
+        expected,
       })
     }
 

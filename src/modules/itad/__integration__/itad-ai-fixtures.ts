@@ -72,8 +72,10 @@ export type SeedPendingActionInput = {
   normalizedInput: Record<string, unknown>
   recordVersion: string | null
   targetEntityType: string
-  targetRecordId: string
+  targetRecordId: string | null
   expiresInMinutes?: number
+  /** A batch action's records with their previewed versions (A1). */
+  records?: Array<{ recordId: string; recordVersion: string | null }>
 }
 
 export async function seedPendingAction(input: SeedPendingActionInput): Promise<string> {
@@ -82,10 +84,10 @@ export async function seedPendingAction(input: SeedPendingActionInput): Promise<
       `insert into ai_pending_actions
          (id, tenant_id, organization_id, agent_id, tool_name, normalized_input, field_diff, attachment_ids,
           idempotency_key, created_by_user_id, status, queue_mode, record_version, target_entity_type,
-          target_record_id, created_at, expires_at)
+          target_record_id, records, created_at, expires_at)
        values
          (gen_random_uuid(), $1, $2, 'itad.operations_assistant', $3, $4::jsonb, '[]'::jsonb, '[]'::jsonb,
-          $5, $6, 'pending', 'inline', $7, $8, $9, now(), now() + make_interval(mins => $10::int))
+          $5, $6, 'pending', 'inline', $7, $8, $9, $11::jsonb, now(), now() + make_interval(mins => $10::int))
        returning id`,
       [
         input.tenantId,
@@ -98,6 +100,9 @@ export async function seedPendingAction(input: SeedPendingActionInput): Promise<
         input.targetEntityType,
         input.targetRecordId,
         input.expiresInMinutes ?? 30,
+        input.records
+          ? JSON.stringify(input.records.map((record) => ({ ...record, entityType: input.targetEntityType, label: record.recordId, fieldDiff: [] })))
+          : null,
       ],
     )
     return result.rows[0].id

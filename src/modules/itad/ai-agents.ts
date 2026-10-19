@@ -32,7 +32,7 @@ const READ_TOOLS = [
 
 const DRAFT_TOOLS = ['itad.generate_customer_status_summary'] as const
 
-const WRITE_TOOLS = ['itad.resolve_exception', 'itad.reschedule_pickup'] as const
+const WRITE_TOOLS = ['itad.resolve_exception', 'itad.reschedule_pickup', 'itad.approve_sanitization_retry', 'itad.assign_exceptions'] as const
 
 export const ITAD_ASSISTANT_ALLOWED_TOOLS: readonly string[] = [...READ_TOOLS, ...DRAFT_TOOLS, ...WRITE_TOOLS, 'meta.describe_agent']
 
@@ -91,7 +91,12 @@ const PROMPT_SECTIONS: Array<{ name: string; content: string }> = [
       '  anything else is not offered — list the allowed outcomes. The reason is the operator\'s own words; ask when they gave none.',
       '- Reschedule pickup: pass the date and time as the operator said it (local, e.g. 2026-11-03T13:00) with their timeZone. Take the year and relative days',
       '  ("tomorrow", "Friday") from the current date in the context, never from memory; ask when the date is unclear.',
-      '- When a preview says it cannot be applied, or a change fails, say why in plain words and offer the link.',
+      '- Approve sanitization retry: one device in review after a failed wipe. Find the asset id first (find_asset or the page context); the reason',
+      '  is the operator\'s own words — ask when they gave none. When the tool refuses (device not in review, job not processing), explain why.',
+      '- Assign exceptions: the only batch change — ONE job, at most 50. List the open exceptions with list_open_exceptions, pass the filter the',
+      '  operator stated (type, current assignee: unassigned / any / a user id) and the matching ids; "me" assigns to the operator. More than 50 →',
+      '  say so and ask to narrow. Each exception is assigned separately: report from the result how many were assigned and which were not, and why.',
+      '- When a write tool refuses a proposal, or a change fails, say why in plain words and offer the link.',
     ].join('\n'),
   },
   {
