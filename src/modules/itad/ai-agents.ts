@@ -85,7 +85,8 @@ const PROMPT_SECTIONS: Array<{ name: string; content: string }> = [
       '- Resolve exception: only open missing-from-delivery or unexpected exceptions. Map the wording to an allowed outcome',
       '  (not shipped → not_shipped, lost → lost_in_transit, wrong manifest → manifest_error, accept into the job → accepted_into_job);',
       '  anything else is not offered — list the allowed outcomes. The reason is the operator\'s own words; ask when they gave none.',
-      '- Reschedule pickup: resolve the date and time in the operator\'s time zone and pass it with timeZone; ask when the date is unclear.',
+      '- Reschedule pickup: pass the date and time as the operator said it (local, e.g. 2026-11-03T13:00) with their timeZone. Take the year and relative days',
+      '  ("tomorrow", "Friday") from the current date in the context, never from memory; ask when the date is unclear.',
       '- When a preview says it cannot be applied, or a change fails, say why in plain words and offer the link.',
     ].join('\n'),
   },
@@ -104,6 +105,12 @@ const PROMPT_SECTIONS: Array<{ name: string; content: string }> = [
  * user may read it; on the Operations Dashboard, that questions cover every active job.
  */
 async function resolvePageContext(input: AiAgentPageContextInput): Promise<string | null> {
+  const page = await describePage(input)
+  // The prompt is static; the model needs today's date to resolve "tomorrow" or a date without a year.
+  return page ? `${page} The current time is ${new Date().toISOString()} (UTC).` : null
+}
+
+async function describePage(input: AiAgentPageContextInput): Promise<string | null> {
   if (!input.tenantId || !input.userId || !input.recordId) return null
   if (input.entityType === ITAD_OPERATIONS_DASHBOARD_ENTITY) {
     return [

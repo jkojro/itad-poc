@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { AiToolDefinition, AiToolLoadBeforeSingleRecord } from '@open-mercato/ai-assistant/modules/ai_assistant/lib/types'
+import { resolveAiPendingActionTtlSeconds } from '@open-mercato/ai-assistant/modules/ai_assistant/lib/pending-action-types'
 import { resolveTranslations } from '@open-mercato/shared/lib/i18n/server'
 import type { ItadExceptionStatus, ItadExceptionType } from '../domain/exceptions'
 import type { ItadJobListItem } from '../components/types'
@@ -10,6 +11,7 @@ import {
   isValidTimeZone,
   reschedulePickupEligibility,
   resolveExceptionEligibility,
+  resolvePickupInstant,
   REASON_MAX_LENGTH,
   REASON_MIN_LENGTH,
   type WriteEligibility,
@@ -43,10 +45,12 @@ const WRITE_MESSAGES: Record<string, string> = {
   field_locked: 'The pickup can no longer be rescheduled in the current job status',
   time_invalid: 'The pickup time is not a valid date and time',
   time_in_past: 'The pickup time is in the past',
+  time_in_past_now: 'The pickup time is in the past; it is now {now}',
   timezone_invalid: 'Unknown time zone',
+  timezone_required: 'A local time needs its time zone (timeZone), or give the time with a UTC offset',
 }
 
-const message = (t: Translate, code: string) => t(`itad.ai.write.${code}`, WRITE_MESSAGES[code] ?? code)
+const message = (t: Translate, code: string, params?: Record<string, string>) => t(`itad.ai.write.${code}`, WRITE_MESSAGES[code] ?? code, params)
 
 /** Input problems refuse the preview; state problems are shown as blocked (see `ai-write-rules.ts`). */
 function refuseInputProblem(t: Translate, eligibility: WriteEligibility): void {
@@ -176,11 +180,23 @@ const reschedulePickupInput = z.object({
   jobId: z.string().uuid().describe('Job id, from find_jobs or the page context.'),
   scheduledPickupAt: z
     .string()
-    .datetime({ offset: true })
-    .describe('The new pickup instant as ISO 8601 with offset, resolved in the operator\'s time zone. Ask when the date or time is unclear.'),
-  timeZone: z.string().max(64).optional().describe('IANA time zone the operator meant, e.g. Europe/Warsaw; used to show the time in the preview.'),
+    .min(1)
+    .max(40)
+    .describe(
+      'The new pickup time as the operator said it: a local date and time in timeZone (e.g. 2026-11-03T13:00), or ISO 8601 with an offset. Take the year from the current date; ask when the date or time is unclear.',
+    ),
+  timeZone: z.string().max(64).optional().describe('IANA time zone the operator meant, e.g. Europe/Warsaw; required with a local time, and used to show the time in the preview.'),
 })
 type ReschedulePickupInput = z.infer<typeof reschedulePickupInput>
+
+/** A past time older than any pending action cannot have been valid at preview: refused at prepare (see `ai-write-rules.ts`). */
+const refuseBeforeMs = () => (resolveAiPendingActionTtlSeconds() + 300) * 1000
+
+function pickupInstant(t: Translate, input: ReschedulePickupInput): Date {
+  const resolved = resolvePickupInstant(input.scheduledPickupAt, input.timeZone)
+  if (!resolved.ok) throw new ItadToolError(resolved.code, message(t, resolved.code))
+  return resolved.at
+}
 
 const reschedulePickupTool: AiToolDefinition = defineItadTool({
   name: 'itad.reschedule_pickup',
@@ -194,11 +210,16 @@ const reschedulePickupTool: AiToolDefinition = defineItadTool({
     const input = reschedulePickupInput.parse(rawInput)
     const { translate: t, locale } = await resolveTranslations()
     if (input.timeZone && !isValidTimeZone(input.timeZone)) throw new ItadToolError('timezone_invalid', message(t, 'timezone_invalid'))
+    const at = pickupInstant(t, input)
     const job = await loadJob(ctx, reschedulePickupTool, input.jobId)
-    const at = new Date(input.scheduledPickupAt)
-    const eligibility = reschedulePickupEligibility({ job, at, now: new Date() })
-    refuseInputProblem(t, eligibility)
+    const now = new Date()
     const zone = input.timeZone ?? 'UTC'
+    const eligibility = reschedulePickupEligibility({ job, at, now, refuseBeforeMs: refuseBeforeMs() })
+    // Tells the model today's date, so it can correct a wrong year or day and propose again.
+    if (!eligibility.ok && eligibility.level === 'input' && eligibility.code === 'time_in_past') {
+      throw new ItadToolError('time_in_past', message(t, 'time_in_past_now', { now: formatPickupTime(now, zone, locale) }))
+    }
+    refuseInputProblem(t, eligibility)
     return {
       recordId: job.id,
       entityType: 'itad.job',
@@ -222,8 +243,8 @@ const reschedulePickupTool: AiToolDefinition = defineItadTool({
     const input = reschedulePickupInput.parse(rawInput)
     const action = await requireApprovedAction(ctx, reschedulePickupTool)
     const { translate: t, locale } = await resolveTranslations()
+    const at = pickupInstant(t, input)
     const job = await loadJob(ctx, reschedulePickupTool, input.jobId)
-    const at = new Date(input.scheduledPickupAt)
     // Checked again here: time passes without changing the record version.
     const eligibility = reschedulePickupEligibility({ job, at, now: new Date() })
     if (!eligibility.ok) throw new ItadToolError(eligibility.code, message(t, eligibility.code))

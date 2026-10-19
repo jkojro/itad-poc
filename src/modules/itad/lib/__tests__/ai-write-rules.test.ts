@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals'
-import { formatPickupTime, ineligibleVersion, reschedulePickupEligibility, resolveExceptionEligibility } from '../ai-write-rules'
+import { formatPickupTime, ineligibleVersion, reschedulePickupEligibility, resolveExceptionEligibility, resolvePickupInstant } from '../ai-write-rules'
 
 describe('resolveExceptionEligibility (A2)', () => {
   const base = { type: 'missing_from_delivery' as const, status: 'open' as const, outcome: 'not_shipped', reason: 'Customer confirmed it stayed on site' }
@@ -44,6 +44,49 @@ describe('reschedulePickupEligibility (A4)', () => {
       code: 'time_in_past',
     })
     expect(reschedulePickupEligibility({ job: { status: 'scheduled' }, at: new Date('nope'), now })).toEqual({ ok: false, level: 'input', code: 'time_invalid' })
+  })
+
+  it('refuses at prepare a time older than any pending action (e.g. a wrong year); a recently passed one stays a state problem', () => {
+    const refuseBeforeMs = 20 * 60 * 1000
+    expect(reschedulePickupEligibility({ job: { status: 'scheduled' }, at: new Date('2024-12-04T11:00:00Z'), now, refuseBeforeMs })).toEqual({
+      ok: false,
+      level: 'input',
+      code: 'time_in_past',
+    })
+    expect(reschedulePickupEligibility({ job: { status: 'scheduled' }, at, now: new Date('2026-10-18T11:05:00Z'), refuseBeforeMs })).toEqual({
+      ok: false,
+      level: 'state',
+      code: 'time_in_past',
+    })
+  })
+})
+
+describe('resolvePickupInstant', () => {
+  const ok = (value: string, zone?: string) => {
+    const resolved = resolvePickupInstant(value, zone)
+    return resolved.ok ? resolved.at.toISOString() : resolved.code
+  }
+
+  it('reads a local date and time in the given zone, with its DST offset', () => {
+    expect(ok('2026-11-03T13:00', 'Europe/Warsaw')).toBe('2026-11-03T12:00:00.000Z')
+    expect(ok('2026-10-21T13:00:00', 'Europe/Warsaw')).toBe('2026-10-21T11:00:00.000Z')
+    // The night clocks go back (25 Oct 2026, 03:00 CEST → 02:00 CET): offsets on both sides.
+    expect(ok('2026-10-25T01:30', 'Europe/Warsaw')).toBe('2026-10-24T23:30:00.000Z')
+    expect(ok('2026-10-25T04:00', 'Europe/Warsaw')).toBe('2026-10-25T03:00:00.000Z')
+    expect(ok('2026-11-03T13:00', 'America/New_York')).toBe('2026-11-03T18:00:00.000Z')
+  })
+
+  it('keeps an explicit offset as given, whatever the zone', () => {
+    expect(ok('2026-11-03T13:00:00+01:00', 'America/New_York')).toBe('2026-11-03T12:00:00.000Z')
+    expect(ok('2026-11-03T12:00:00Z')).toBe('2026-11-03T12:00:00.000Z')
+  })
+
+  it('refuses a local time without a zone, an unknown zone and impossible dates', () => {
+    expect(ok('2026-11-03T13:00')).toBe('timezone_required')
+    expect(ok('2026-11-03T13:00', 'Mars/Base')).toBe('timezone_invalid')
+    expect(ok('2026-02-30T13:00', 'Europe/Warsaw')).toBe('time_invalid')
+    expect(ok('2026-11-03T25:00', 'Europe/Warsaw')).toBe('time_invalid')
+    expect(ok('tomorrow 13:00', 'Europe/Warsaw')).toBe('time_invalid')
   })
 })
 
