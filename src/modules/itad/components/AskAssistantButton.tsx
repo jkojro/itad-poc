@@ -77,9 +77,15 @@ export function AskAssistantButton({ pageContext, pageLabel }: { pageContext: It
 
   const docked = dock.state.assistant
   const rebind = assistant.state === 'ready' && shouldRebindDock(docked, ITAD_ASSISTANT_AGENT_ID, pageContext)
+  // Re-bind once per page: effects can run twice before the dock and session state settle
+  // (React strict mode, re-renders), and a second run would open a second tab.
+  const autoBoundKey = React.useRef<string | null>(null)
+  const key = pageKey(pageContext)
   React.useEffect(() => {
-    if (rebind) bindHere()
-  }, [rebind, bindHere])
+    if (!rebind || autoBoundKey.current === key) return
+    autoBoundKey.current = key
+    bindHere()
+  }, [rebind, key, bindHere])
 
   if (assistant.state === 'hidden') return null
   const notConfigured = assistant.state === 'not_configured'
