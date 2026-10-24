@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { CERTIFICATE_LOCALES } from '../domain/certificates'
+import { INBOX_INTENTS, INBOX_MESSAGE_STATUSES, INBOX_TEXT_MAX } from '../domain/inbox'
 import { ITAD_ASSET_STATUSES, ITAD_JOB_STATUSES } from '../domain/job-types'
 import { ITAD_EXCEPTION_STATUSES, ITAD_EXCEPTION_TYPES } from '../domain/exceptions'
 import {
@@ -379,3 +380,29 @@ export const itadCertificateVoidSchema = z.object({
   reason: z.string().max(2000),
 })
 export type ItadCertificateVoidInput = z.infer<typeof itadCertificateVoidSchema>
+
+// ─── ITAD Inbox Ops (spec 2026-10-24-itad-inbox-ops) ─────────────────────────
+
+/** Durable input of `itad.inbox.import` (manual import). `extraction` is honoured only in the integration environment. */
+export const itadInboxImportSchema = z.object({
+  fromAddress: z.string().trim().email().max(320),
+  fromName: z.string().trim().max(200).nullable().optional(),
+  subject: z.string().trim().min(1).max(1000),
+  bodyText: z.string().trim().min(1).max(INBOX_TEXT_MAX),
+  receivedAt: z.string().datetime({ offset: true }).optional(),
+  extraction: z.record(z.string(), z.unknown()).optional(),
+})
+export type ItadInboxImportInput = z.infer<typeof itadInboxImportSchema>
+
+/** Durable input of `itad.inbox.reprocess` / `itad.inbox.refresh_draft`. */
+export const itadInboxMessageRefSchema = z.object({ messageId: z.string().uuid() })
+export type ItadInboxMessageRefInput = z.infer<typeof itadInboxMessageRefSchema>
+
+export const itadInboxListSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  status: z.enum(INBOX_MESSAGE_STATUSES).optional(),
+  intent: z.enum(INBOX_INTENTS).optional(),
+  jobId: z.string().uuid().optional(),
+})
+

@@ -24,6 +24,18 @@ import type {
 } from '../domain/job-types'
 import type { ManifestFieldMapping, RowWarningCode, SourceDataEntry } from '../domain/manifest-mapping'
 import type { PickupTaskLinkState } from '../domain/pickup-task'
+import type {
+  ActionTarget,
+  FieldSource,
+  InboxActionStatus,
+  InboxActionType,
+  InboxExtraction,
+  InboxIntent,
+  InboxMatch,
+  InboxMessageSource,
+  InboxMessageStatus,
+  MatchStatus,
+} from '../domain/inbox'
 
 /**
  * One unit of ITAD work for one customer company.
@@ -1052,4 +1064,196 @@ export class ItadCertificateEvent {
 
   @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
   createdAt: Date = new Date()
+}
+
+/**
+ * A customer email as ITAD Inbox Ops sees it (spec 2026-10-24-itad-inbox-ops): a snapshot
+ * of the `inbox_ops` email (or a manual import) plus the proposal built from it. Email
+ * texts and identities are encrypted at rest (`itad/encryption.ts`).
+ */
+@Entity({ tableName: 'itad_inbox_messages' })
+@Unique({ name: 'itad_inbox_messages_inbox_email_unique', properties: ['tenantId', 'inboxEmailId'] })
+@Index({ name: 'itad_inbox_messages_list_idx', properties: ['tenantId', 'organizationId', 'status', 'receivedAt'] })
+@Index({ name: 'itad_inbox_messages_job_idx', properties: ['tenantId', 'organizationId', 'jobId'] })
+export class ItadInboxMessage {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @Property({ type: 'text' })
+  source!: InboxMessageSource
+
+  /** Scalar id of the `inbox_ops` email; no relation to another module. */
+  @Property({ name: 'inbox_email_id', type: 'uuid', nullable: true })
+  inboxEmailId?: string | null
+
+  /** External `Message-ID` header, only when the email had one. */
+  @Property({ name: 'message_id', type: 'text', nullable: true })
+  messageId?: string | null
+
+  @Property({ name: 'in_reply_to', type: 'text', nullable: true })
+  inReplyTo?: string | null
+
+  /** Envelope sender. */
+  @Property({ name: 'from_address', type: 'text' })
+  fromAddress!: string
+
+  @Property({ name: 'from_name', type: 'text', nullable: true })
+  fromName?: string | null
+
+  /** The customer sender: the envelope sender, or the forwarded sender when an organization user forwarded it. */
+  @Property({ name: 'customer_address', type: 'text' })
+  customerAddress!: string
+
+  @Property({ name: 'customer_name', type: 'text', nullable: true })
+  customerName?: string | null
+
+  /** Set when an organization user forwarded the customer's email. */
+  @Property({ name: 'forwarded_by_user_id', type: 'uuid', nullable: true })
+  forwardedByUserId?: string | null
+
+  @Property({ type: 'text' })
+  subject!: string
+
+  /** The request: the current part of the email (quotes and signature stripped) or the forwarded body. */
+  @Property({ name: 'current_text', type: 'text' })
+  currentText!: string
+
+  /** Earlier messages of the thread: lower-ranked evidence, possibly outdated. */
+  @Property({ name: 'thread_messages', type: 'jsonb' })
+  threadMessages: Array<{ from: string | null; date: string | null; body: string; isForwarded?: boolean }> = []
+
+  @Property({ name: 'received_at', type: Date })
+  receivedAt!: Date
+
+  /** The importing user, for a manual import. */
+  @Property({ name: 'created_by_user_id', type: 'uuid', nullable: true })
+  createdByUserId?: string | null
+
+  @Property({ type: 'text', default: 'processing' })
+  status: InboxMessageStatus = 'processing'
+
+  /** Incremented by Reprocess; a worker writes only for the current generation. */
+  @Property({ type: 'integer', default: 1 })
+  generation: number = 1
+
+  @Property({ name: 'processing_started_at', type: Date, nullable: true })
+  processingStartedAt?: Date | null
+
+  @Property({ type: 'jsonb' })
+  intents: InboxIntent[] = []
+
+  @Property({ type: 'jsonb', nullable: true })
+  match?: InboxMatch | null
+
+  /** Denormalized chosen job, for the job page's Inbox section. */
+  @Property({ name: 'job_id', type: 'uuid', nullable: true })
+  jobId?: string | null
+
+  /** The model's interpretation, kept to rebuild actions without calling it again. */
+  @Property({ type: 'jsonb', nullable: true })
+  extraction?: InboxExtraction | null
+
+  @Property({ type: 'text', nullable: true })
+  summary?: string | null
+
+  @Property({ name: 'draft_reply', type: 'text', nullable: true })
+  draftReply?: string | null
+
+  @Property({ name: 'draft_generated_at', type: Date, nullable: true })
+  draftGeneratedAt?: Date | null
+
+  @Property({ name: 'processing_error', type: 'jsonb', nullable: true })
+  processingError?: { code: string; message: string } | null
+
+  /** Provider / model used for the interpretation. */
+  @Property({ type: 'text', nullable: true })
+  model?: string | null
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
+
+  @Property({ name: 'updated_at', type: Date, onUpdate: () => new Date() })
+  updatedAt: Date = new Date()
+
+  @Property({ name: 'deleted_at', type: Date, nullable: true })
+  deletedAt?: Date | null
+}
+
+/**
+ * One proposed action of an inbox message: a target from the match and editable fields.
+ * `original_payload` is what the AI proposed, `payload` what the operator approves.
+ */
+@Entity({ tableName: 'itad_inbox_actions' })
+@Unique({ name: 'itad_inbox_actions_generation_unique', properties: ['message', 'generation', 'ordinal'] })
+@Index({ name: 'itad_inbox_actions_message_idx', properties: ['tenantId', 'organizationId', 'message', 'status'] })
+export class ItadInboxAction {
+  @PrimaryKey({ type: 'uuid', defaultRaw: 'gen_random_uuid()' })
+  id!: string
+
+  @Property({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string
+
+  @Property({ name: 'organization_id', type: 'uuid' })
+  organizationId!: string
+
+  @ManyToOne(() => ItadInboxMessage, { fieldName: 'message_id' })
+  message!: ItadInboxMessage
+
+  @Property({ type: 'integer' })
+  generation!: number
+
+  @Property({ type: 'integer' })
+  ordinal!: number
+
+  @Property({ type: 'text' })
+  type!: InboxActionType
+
+  @Property({ type: 'jsonb' })
+  target: ActionTarget = {}
+
+  @Property({ type: 'jsonb' })
+  payload: Record<string, unknown> = {}
+
+  @Property({ name: 'original_payload', type: 'jsonb' })
+  originalPayload: Record<string, unknown> = {}
+
+  @Property({ name: 'field_sources', type: 'jsonb' })
+  fieldSources: Record<string, FieldSource> = {}
+
+  @Property({ name: 'match_status', type: 'text' })
+  matchStatus!: MatchStatus
+
+  @Property({ name: 'missing_fields', type: 'jsonb' })
+  missingFields: string[] = []
+
+  /** `updatedAt` of the target job / exception when the action was built; Accept fails when it changed. */
+  @Property({ name: 'target_version', type: 'text', nullable: true })
+  targetVersion?: string | null
+
+  @Property({ type: 'text', default: 'pending' })
+  status: InboxActionStatus = 'pending'
+
+  @Property({ name: 'decided_by_user_id', type: 'uuid', nullable: true })
+  decidedByUserId?: string | null
+
+  @Property({ name: 'decided_at', type: Date, nullable: true })
+  decidedAt?: Date | null
+
+  @Property({ name: 'reject_reason', type: 'text', nullable: true })
+  rejectReason?: string | null
+
+  @Property({ type: 'jsonb', nullable: true })
+  result?: { recordId?: string; commandId?: string; error?: { code: string; message: string } } | null
+
+  @Property({ name: 'created_at', type: Date, onCreate: () => new Date() })
+  createdAt: Date = new Date()
+
+  @Property({ name: 'updated_at', type: Date, onUpdate: () => new Date() })
+  updatedAt: Date = new Date()
 }
