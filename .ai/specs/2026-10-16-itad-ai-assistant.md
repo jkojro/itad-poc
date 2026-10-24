@@ -264,6 +264,8 @@ No new ITAD tables and no ITAD migration. The `ai_assistant` module brings its o
 - **Direct tool calls skip approval (framework).** `POST /api/ai_assistant/tools/execute` runs a tool handler directly, also for mutation tools, without a pending action. ITAD write tools refuse without a confirmed pending action of their own (`approval_required`, covered by TC-ITAD-810), but the gap is in the framework and applies to other modules' write tools. **Production TODO:** report upstream; route mutation tools through `prepareMutation` there.
 - **Invalid input on a tampered pending action** answers Confirm with a 500 (`confirm_internal_error`) and writes nothing: the framework re-reads the preview at Confirm, and the ITAD preview refuses that input again. Through the model such a row cannot be created, because the preview refuses it at prepare.
 - **Corrections metric** is read manually (see "Audit and observability").
+- **An old card of a re-proposed change logs an error (framework).** When the model proposes exactly the same change again in the same conversation after a cancel (same tool and input), the framework deletes the cancelled pending action so the new one can be created. The earlier card stays in the transcript and keeps polling the deleted id, logging `No pending action … accessible to the caller` in the browser console. Nothing is written and the new card works; cosmetic. **Production TODO:** report upstream (keep the cancelled row, or stop polling on 404).
+- **No message when the loop budget runs out (framework).** The chat shows the loop's stop reason only in its debug panel; the budget is sized so that a normal turn never reaches it (see "Loop budget").
 
 ## Phasing
 
