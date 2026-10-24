@@ -56,6 +56,51 @@ export async function isCompanyInScope(
   return names.has(customerId)
 }
 
+/** Customers scanned when matching an email sender (`primary_email` is encrypted, so there is no index to search). */
+const SENDER_SCAN_PAGE = 500
+const SENDER_SCAN_PAGES = 4
+
+type CustomerEmailRow = { id: string; kind?: string | null; primary_email?: string | null }
+type PersonProfileRow = { entity_id?: string | null; company_entity_id?: string | null }
+
+/**
+ * The companies an email address belongs to (ITAD Inbox Ops matching): a company whose
+ * primary email is the address, or the company of a person whose primary email is. The
+ * email is encrypted at rest without a lookup hash, so this scans the organization's
+ * customers (bounded) and compares after decryption — the same approach `inbox_ops` takes.
+ */
+export async function findCompaniesByEmail(queryEngine: QueryEngine, scope: CustomerScope, address: string): Promise<string[]> {
+  const wanted = address.trim().toLowerCase()
+  if (!wanted) return []
+  const companies = new Set<string>()
+  const people: string[] = []
+  for (let page = 1; page <= SENDER_SCAN_PAGES; page += 1) {
+    const result = await queryEngine.query<CustomerEmailRow>(CUSTOMER_ENTITY_ID, {
+      tenantId: scope.tenantId,
+      organizationId: scope.organizationId,
+      fields: ['id', 'kind', 'primary_email'],
+      page: { page, pageSize: SENDER_SCAN_PAGE },
+    })
+    for (const row of result.items) {
+      if (typeof row.primary_email !== 'string' || row.primary_email.trim().toLowerCase() !== wanted) continue
+      if (row.kind === 'company') companies.add(row.id)
+      else people.push(row.id)
+    }
+    if (result.items.length < SENDER_SCAN_PAGE) break
+  }
+  if (people.length > 0) {
+    const profiles = await queryEngine.query<PersonProfileRow>('customers:customer_person_profile', {
+      tenantId: scope.tenantId,
+      organizationId: scope.organizationId,
+      fields: ['entity_id', 'company_entity_id'],
+      filters: { entity_id: { $in: people } },
+      page: { page: 1, pageSize: people.length },
+    })
+    for (const profile of profiles.items) if (profile.company_entity_id) companies.add(profile.company_entity_id)
+  }
+  return Array.from(companies)
+}
+
 /*
  * Pickup tasks (pickup calendar spec). The task is a `customers` interaction: `itad` reads
  * it through the query engine and writes it only through the public `customers.*`

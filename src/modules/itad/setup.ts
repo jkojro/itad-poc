@@ -15,6 +15,7 @@ export const setup: ModuleSetupConfig = {
       'itad.sanitization.view',
       'itad.exceptions.view',
       'itad.certificates.view',
+      'itad.inbox.view',
     ],
   },
   async seedDefaults(ctx) {

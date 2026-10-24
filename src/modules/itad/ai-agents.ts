@@ -8,6 +8,7 @@ import type { RbacService } from '@open-mercato/core/modules/auth/services/rbacS
 import { ItadAsset, ItadJob } from './data/entities'
 import { ITAD_ASSET_ENTITY_ID, ITAD_JOB_ENTITY_ID } from './lib/constants'
 import { ITAD_OPERATIONS_DASHBOARD_ENTITY } from './lib/ai-page-context'
+import { inboxInterpreterAgent } from './lib/inbox-interpreter-agent'
 
 /**
  * `itad.operations_assistant` (AI assistant spec, Epic 8). One persona for the ITAD
@@ -213,6 +214,6 @@ const agent: AiAgentDefinition = {
   resolvePageContext,
 }
 
-export const aiAgents: AiAgentDefinition[] = [agent]
+export const aiAgents: AiAgentDefinition[] = [agent, inboxInterpreterAgent]
 
 export default aiAgents
