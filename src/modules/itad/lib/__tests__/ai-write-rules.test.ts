@@ -1,5 +1,14 @@
 import { describe, expect, it } from '@jest/globals'
-import { formatPickupTime, ineligibleVersion, reschedulePickupEligibility, resolveExceptionEligibility, resolvePickupInstant } from '../ai-write-rules'
+import {
+  approveRetryEligibility,
+  formatPickupTime,
+  ineligibleVersion,
+  reschedulePickupEligibility,
+  resolveExceptionEligibility,
+  resolvePickupInstant,
+  retryVersion,
+  selectAssignable,
+} from '../ai-write-rules'
 
 describe('resolveExceptionEligibility (A2)', () => {
   const base = { type: 'missing_from_delivery' as const, status: 'open' as const, outcome: 'not_shipped', reason: 'Customer confirmed it stayed on site' }
@@ -46,17 +55,56 @@ describe('reschedulePickupEligibility (A4)', () => {
     expect(reschedulePickupEligibility({ job: { status: 'scheduled' }, at: new Date('nope'), now })).toEqual({ ok: false, level: 'input', code: 'time_invalid' })
   })
 
-  it('refuses at prepare a time older than any pending action (e.g. a wrong year); a recently passed one stays a state problem', () => {
-    const refuseBeforeMs = 20 * 60 * 1000
-    expect(reschedulePickupEligibility({ job: { status: 'scheduled' }, at: new Date('2024-12-04T11:00:00Z'), now, refuseBeforeMs })).toEqual({
-      ok: false,
-      level: 'input',
-      code: 'time_in_past',
+})
+
+describe('approveRetryEligibility (A3)', () => {
+  const base = { jobStatus: 'processing' as const, assetStatus: 'review_required' as const, hasOpenFailure: true, reason: 'Drive reseated, retry' }
+
+  it('allows a retry for a device in review with an open failure while the job is processing', () => {
+    expect(approveRetryEligibility(base)).toEqual({ ok: true })
+  })
+
+  it('refuses a missing reason as input; job status, device status and a closed failure as state', () => {
+    expect(approveRetryEligibility({ ...base, reason: ' ' })).toEqual({ ok: false, level: 'input', code: 'reason_required' })
+    expect(approveRetryEligibility({ ...base, jobStatus: 'completed' })).toEqual({ ok: false, level: 'state', code: 'job_not_processing' })
+    expect(approveRetryEligibility({ ...base, assetStatus: 'sanitized' })).toEqual({ ok: false, level: 'state', code: 'asset_not_in_review' })
+    expect(approveRetryEligibility({ ...base, hasOpenFailure: false })).toEqual({ ok: false, level: 'state', code: 'no_open_failure' })
+  })
+
+  it('versions the device together with its open failure', () => {
+    const version = retryVersion('2026-10-19T08:00:00.000Z', { id: 'e1', updatedAt: '2026-10-19T08:00:01.000Z' })
+    expect(version).toBe('2026-10-19T08:00:00.000Z|e1@2026-10-19T08:00:01.000Z')
+    expect(retryVersion('2026-10-19T08:00:00.000Z', { id: 'e1', updatedAt: '2026-10-19T09:00:00.000Z' })).not.toBe(version)
+  })
+})
+
+describe('selectAssignable (A1)', () => {
+  const jobExceptions = [
+    { id: 'a', type: 'sanitization_failed' as const, status: 'open' as const, assignedToUserId: null },
+    { id: 'b', type: 'sanitization_failed' as const, status: 'open' as const, assignedToUserId: 'u2' },
+    { id: 'c', type: 'sanitization_failed' as const, status: 'resolved' as const, assignedToUserId: null },
+    { id: 'd', type: 'missing_from_delivery' as const, status: 'open' as const, assignedToUserId: null },
+  ]
+
+  it('selects the open exceptions matching type and assignee; reports closed ones as excluded', () => {
+    expect(selectAssignable({ requestedIds: ['a', 'b', 'c'], filter: { type: 'sanitization_failed', assignee: 'any' }, jobExceptions })).toEqual({
+      selected: ['a', 'b'],
+      excluded: ['c'],
+      outside: [],
     })
-    expect(reschedulePickupEligibility({ job: { status: 'scheduled' }, at, now: new Date('2026-10-18T11:05:00Z'), refuseBeforeMs })).toEqual({
-      ok: false,
-      level: 'state',
-      code: 'time_in_past',
+    expect(selectAssignable({ requestedIds: ['a', 'b'], filter: { type: 'sanitization_failed', assignee: 'unassigned' }, jobExceptions })).toEqual({
+      selected: ['a'],
+      excluded: ['b'],
+      outside: [],
+    })
+    expect(selectAssignable({ requestedIds: ['b'], filter: { assignee: 'u2' }, jobExceptions }).selected).toEqual(['b'])
+  })
+
+  it('puts ids of another type or not in the job outside the filter', () => {
+    expect(selectAssignable({ requestedIds: ['a', 'd', 'zzz', 'a'], filter: { type: 'sanitization_failed', assignee: 'any' }, jobExceptions })).toEqual({
+      selected: ['a'],
+      excluded: [],
+      outside: ['d', 'zzz'],
     })
   })
 })

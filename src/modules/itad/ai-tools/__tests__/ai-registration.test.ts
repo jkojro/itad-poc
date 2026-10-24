@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals'
 
 // The write path pulls in the request container; registration only needs the definitions.
-jest.mock('../_writes', () => ({ requireApprovedAction: jest.fn(), runApprovedWrite: jest.fn() }))
+jest.mock('../_writes', () => ({ isPendingProposal: jest.fn(), requireApprovedAction: jest.fn(), runApprovedWrite: jest.fn() }))
 
 import aiTools from '../../ai-tools'
 import aiAgents, { ITAD_ASSISTANT_ALLOWED_TOOLS } from '../../ai-agents'
@@ -12,7 +12,7 @@ describe('itad.operations_assistant registration', () => {
 
   it('allows exactly the ITAD tools of this phase plus meta.describe_agent', () => {
     const itadTools = aiTools.map((tool) => tool.name).sort()
-    expect(itadTools).toHaveLength(13)
+    expect(itadTools).toHaveLength(15)
     expect([...ITAD_ASSISTANT_ALLOWED_TOOLS].sort()).toEqual([...itadTools, 'meta.describe_agent'].sort())
     expect(agent.allowedTools).toEqual([...ITAD_ASSISTANT_ALLOWED_TOOLS])
   })
@@ -20,12 +20,23 @@ describe('itad.operations_assistant registration', () => {
   it('confirms every write and marks exactly the write tools as mutations with a preview', () => {
     expect(agent).toMatchObject({ id: 'itad.operations_assistant', readOnly: false, mutationPolicy: 'confirm-required' })
     const writes = aiTools.filter((tool) => tool.isMutation)
-    expect(writes.map((tool) => tool.name).sort()).toEqual(['itad.reschedule_pickup', 'itad.resolve_exception'])
-    for (const tool of writes) expect(typeof tool.loadBeforeRecord).toBe('function')
+    expect(writes.map((tool) => tool.name).sort()).toEqual([
+      'itad.approve_sanitization_retry',
+      'itad.assign_exceptions',
+      'itad.reschedule_pickup',
+      'itad.resolve_exception',
+    ])
+    for (const tool of writes) {
+      // A1 is the only batch (AI-REQ-14): a per-record preview; every other write previews one record.
+      if (tool.name === 'itad.assign_exceptions') expect(tool).toMatchObject({ isBulk: true, loadBeforeRecords: expect.any(Function) })
+      else expect(typeof tool.loadBeforeRecord).toBe('function')
+    }
+    // A3 keeps the command's double requirement.
+    expect(writes.find((tool) => tool.name === 'itad.approve_sanitization_retry')!.requiredFeatures).toEqual(['itad.sanitization.manage', 'itad.exceptions.manage'])
   })
 
   it('declares a loop budget', () => {
-    expect(agent.loop).toEqual({ maxSteps: 8, budget: { maxToolCalls: 12, maxWallClockMs: 60_000, maxTokens: 16_000 } })
+    expect(agent.loop).toEqual({ maxSteps: 8, budget: { maxToolCalls: 12, maxWallClockMs: 60_000, maxTokens: 64_000 } })
   })
 
   it('gives every tool a feature gate and an itad. name', () => {

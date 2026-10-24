@@ -1,11 +1,18 @@
 import { z } from 'zod'
 import type { AiToolDefinition, AiToolLoadBeforeSingleRecord } from '@open-mercato/ai-assistant/modules/ai_assistant/lib/types'
-import { resolveAiPendingActionTtlSeconds } from '@open-mercato/ai-assistant/modules/ai_assistant/lib/pending-action-types'
 import { resolveTranslations } from '@open-mercato/shared/lib/i18n/server'
 import type { ItadExceptionStatus, ItadExceptionType } from '../domain/exceptions'
 import type { ItadJobListItem } from '../components/types'
 import { assetHref, jobHref } from '../lib/ai-tool-compose'
+import { listOrganizationUsers } from '../module-integrations/users'
+import type { QueryEngine } from '@open-mercato/shared/lib/query/types'
+import { ITAD_EXCEPTION_TYPES, type ItadExceptionType as ExceptionType } from '../domain/exceptions'
 import {
+  approveRetryEligibility,
+  ASSIGN_MAX_EXCEPTIONS,
+  retryVersion,
+  selectAssignable,
+  type AssignCandidate,
   formatPickupTime,
   ineligibleVersion,
   isValidTimeZone,
@@ -17,7 +24,7 @@ import {
   type WriteEligibility,
 } from '../lib/ai-write-rules'
 import { defineItadTool, ItadToolError, routeData, runItadRoute, type ItadToolContext } from './_shared'
-import { requireApprovedAction, runApprovedWrite } from './_writes'
+import { isPendingProposal, requireApprovedAction, runApprovedWrite } from './_writes'
 
 /**
  * Write tools of `itad.operations_assistant`, phase 2 (AI assistant spec, A2 and A4).
@@ -48,13 +55,33 @@ const WRITE_MESSAGES: Record<string, string> = {
   time_in_past_now: 'The pickup time is in the past; it is now {now}',
   timezone_invalid: 'Unknown time zone',
   timezone_required: 'A local time needs its time zone (timeZone), or give the time with a UTC offset',
+  job_not_processing: 'A retry can be approved only while the job is processing',
+  asset_not_in_review: 'This device is not waiting for a retry decision (it must be in review after a failed wipe)',
+  no_open_failure: 'This device has no open sanitization failure to approve a retry for',
+  changed_since_preview: 'Changed since the preview; ask again for a fresh preview',
+  exception_outside_filter: 'Some exceptions are not in this job or do not match the filter',
+  nothing_to_assign: 'None of these exceptions is open and matching the filter now',
+  assignee_invalid: 'The assignee is not an active user of this organization',
 }
 
 const message = (t: Translate, code: string, params?: Record<string, string>) => t(`itad.ai.write.${code}`, WRITE_MESSAGES[code] ?? code, params)
 
-/** Input problems refuse the preview; state problems are shown as blocked (see `ai-write-rules.ts`). */
-function refuseInputProblem(t: Translate, eligibility: WriteEligibility): void {
-  if (!eligibility.ok && eligibility.level === 'input') throw new ItadToolError(eligibility.code, message(t, eligibility.code))
+/**
+ * Refuses a proposal the operator could not apply, so the model hears why (it never sees
+ * the preview). At the confirm re-check — an action with this input is pending — a state
+ * problem is returned as a blocked preview instead: a throw there becomes a 500 (see
+ * `ai-write-rules.ts`). Returns whether the preview is blocked.
+ */
+async function refuseProposal(
+  ctx: ItadToolContext,
+  tool: AiToolDefinition,
+  input: unknown,
+  eligibility: WriteEligibility,
+  refusal: (code: string) => ItadToolError,
+): Promise<boolean> {
+  if (eligibility.ok) return false
+  if (eligibility.level === 'state' && (await isPendingProposal(ctx, tool, input))) return true
+  throw refusal(eligibility.code)
 }
 
 async function loadJob(ctx: ItadToolContext, tool: AiToolDefinition, jobId: string): Promise<ItadJobListItem> {
@@ -109,7 +136,7 @@ const resolveExceptionTool: AiToolDefinition = defineItadTool({
     const { translate: t } = await resolveTranslations()
     const { job, exception } = await loadException(ctx, resolveExceptionTool, input)
     const eligibility = resolveExceptionEligibility({ type: exception.type, status: exception.status, outcome: input.outcome, reason: input.reason })
-    refuseInputProblem(t, eligibility)
+    await refuseProposal(ctx, resolveExceptionTool, input, eligibility, (code) => new ItadToolError(code, message(t, code)))
     const typeLabel = t(`itad.exceptions.type.${exception.type}`, exception.type)
     const outcomeLabel = t(`itad.exceptions.outcome.${input.outcome}`, input.outcome)
     return {
@@ -189,9 +216,6 @@ const reschedulePickupInput = z.object({
 })
 type ReschedulePickupInput = z.infer<typeof reschedulePickupInput>
 
-/** A past time older than any pending action cannot have been valid at preview: refused at prepare (see `ai-write-rules.ts`). */
-const refuseBeforeMs = () => (resolveAiPendingActionTtlSeconds() + 300) * 1000
-
 function pickupInstant(t: Translate, input: ReschedulePickupInput): Date {
   const resolved = resolvePickupInstant(input.scheduledPickupAt, input.timeZone)
   if (!resolved.ok) throw new ItadToolError(resolved.code, message(t, resolved.code))
@@ -214,12 +238,13 @@ const reschedulePickupTool: AiToolDefinition = defineItadTool({
     const job = await loadJob(ctx, reschedulePickupTool, input.jobId)
     const now = new Date()
     const zone = input.timeZone ?? 'UTC'
-    const eligibility = reschedulePickupEligibility({ job, at, now, refuseBeforeMs: refuseBeforeMs() })
-    // Tells the model today's date, so it can correct a wrong year or day and propose again.
-    if (!eligibility.ok && eligibility.level === 'input' && eligibility.code === 'time_in_past') {
-      throw new ItadToolError('time_in_past', message(t, 'time_in_past_now', { now: formatPickupTime(now, zone, locale) }))
-    }
-    refuseInputProblem(t, eligibility)
+    const eligibility = reschedulePickupEligibility({ job, at, now })
+    await refuseProposal(ctx, reschedulePickupTool, input, eligibility, (code) =>
+      // A past time comes back with today's date, so the model can correct a wrong year or day.
+      code === 'time_in_past'
+        ? new ItadToolError(code, message(t, 'time_in_past_now', { now: formatPickupTime(now, zone, locale) }))
+        : new ItadToolError(code, message(t, code)),
+    )
     return {
       recordId: job.id,
       entityType: 'itad.job',
@@ -271,6 +296,293 @@ const reschedulePickupTool: AiToolDefinition = defineItadTool({
   },
 })
 
-export const writesAiTools: AiToolDefinition[] = [resolveExceptionTool, reschedulePickupTool]
+// ─── A3 approve_sanitization_retry ───────────────────────────────────────────
+
+type SanitizationHistory = {
+  asset: { id: string; serial: string; status: ItadAssetStatusValue; updatedAt: string }
+  runs: Array<{ id: string; method: string; result: 'PASS' | 'FAIL' | 'ABORTED' | null; startedAt: string; finishedAt: string | null }>
+}
+type ItadAssetStatusValue = Parameters<typeof approveRetryEligibility>[0]['assetStatus']
+type ExceptionListResponse = { items: Array<ExceptionDetail & { assignedTo: { id: string; name: string | null } | null }>; total: number }
+
+const approveRetryInput = z.object({
+  jobId: z.string().uuid().describe('Job id, from a read tool or the page context.'),
+  assetId: z.string().uuid().describe('Asset id of the device whose wipe failed, from find_asset or the page context; never a serial.'),
+  reason: z
+    .string()
+    .trim()
+    .min(REASON_MIN_LENGTH)
+    .max(REASON_MAX_LENGTH)
+    .describe("The operator's own reason for the retry, from their words; ask for it when they gave none."),
+})
+type ApproveRetryInput = z.infer<typeof approveRetryInput>
+
+async function loadRetryState(ctx: ItadToolContext, tool: AiToolDefinition, input: ApproveRetryInput) {
+  const job = await loadJob(ctx, tool, input.jobId)
+  const history = routeData(
+    await runItadRoute<SanitizationHistory>(ctx, tool, { method: 'GET', path: `/jobs/${input.jobId}/assets/${input.assetId}/sanitization` }, [
+      'itad.sanitization.view',
+    ]),
+    'Sanitization history',
+  )
+  if (!history) throw new ItadToolError('not_found', 'Device not found in this job')
+  const failures = routeData(
+    await runItadRoute<ExceptionListResponse>(
+      ctx,
+      tool,
+      { method: 'GET', path: `/jobs/${input.jobId}/exceptions`, query: { status: 'open', type: 'sanitization_failed', assetId: input.assetId, pageSize: 5 } },
+      ['itad.exceptions.view'],
+    ),
+    'Exception lookup',
+  )
+  const failure = failures?.items?.[0] ?? null
+  const finished = history.runs.filter((run) => run.result !== null)
+  return { job, asset: history.asset, lastRun: history.runs[0] ?? null, attempts: finished.length, failure }
+}
+
+const approveRetryTool: AiToolDefinition = defineItadTool({
+  name: 'itad.approve_sanitization_retry',
+  displayName: 'Approve sanitization retry',
+  description:
+    'Propose approving another wipe attempt for one device whose sanitization failed (asset in review, open sanitization failure), with the operator\'s reason. The device goes back to sanitization required and the failure is resolved as retry approved; the failed run stays in the history. Creates a preview the operator must confirm; nothing changes before Confirm.',
+  inputSchema: approveRetryInput,
+  // The command also resolves the failure, so it keeps both requirements (spec "Users, permissions and scope").
+  requiredFeatures: ['itad.sanitization.manage', 'itad.exceptions.manage'],
+  isMutation: true,
+  loadBeforeRecord: async (rawInput: ApproveRetryInput, ctx): Promise<AiToolLoadBeforeSingleRecord | null> => {
+    const input = approveRetryInput.parse(rawInput)
+    const { translate: t, locale } = await resolveTranslations()
+    const { job, asset, lastRun, attempts, failure } = await loadRetryState(ctx, approveRetryTool, input)
+    const eligibility = approveRetryEligibility({ jobStatus: job.status, assetStatus: asset.status, hasOpenFailure: Boolean(failure), reason: input.reason })
+    await refuseProposal(ctx, approveRetryTool, input, eligibility, (code) => new ItadToolError(code, message(t, code)))
+    const statusLabel = (status: string) => t(`itad.assets.status.${status}`, status)
+    const run = lastRun
+      ? t('itad.ai.write.label.lastRun', 'last run {method} {result}, {finishedAt}; attempts {attempts}', {
+          method: t(`itad.sanitization.method.${lastRun.method}`, lastRun.method),
+          result: lastRun.result ?? '—',
+          finishedAt: lastRun.finishedAt ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lastRun.finishedAt)) : '—',
+          attempts: String(attempts),
+        })
+      : t('itad.ai.write.label.noRuns', 'no runs yet')
+    return {
+      recordId: asset.id,
+      entityType: 'itad.asset',
+      recordVersion: eligibility.ok && failure ? retryVersion(asset.updatedAt, failure) : ineligibleVersion(eligibility.ok ? 'no_open_failure' : eligibility.code),
+      before: { status: asset.status, failure: failure ? 'open' : null, reason: null, blocked: null },
+      after: {
+        status: 'sanitization_required',
+        failure: failure ? 'retry_approved' : null,
+        reason: input.reason,
+        blocked: eligibility.ok ? null : eligibility.code,
+      },
+      display: {
+        fieldLabels: {
+          status: t('itad.ai.write.label.retryDevice', 'Device {serial} · {reference} · {run}', { serial: asset.serial, reference: job.internalReference, run }),
+          failure: t('itad.ai.write.label.failure', 'Sanitization failure'),
+          reason: t('itad.ai.write.label.reason', 'Reason'),
+          blocked: t('itad.ai.write.label.blocked', 'Cannot be applied'),
+        },
+        before: { status: statusLabel(asset.status), failure: failure ? t('itad.exceptions.status.open', 'open') : '—' },
+        after: {
+          status: statusLabel('sanitization_required'),
+          failure: failure ? t('itad.exceptions.outcome.retry_approved', 'retry approved') : '—',
+          ...(eligibility.ok ? {} : { blocked: message(t, eligibility.code) }),
+        },
+      },
+    }
+  },
+  handler: async (rawInput: ApproveRetryInput, ctx) => {
+    const input = approveRetryInput.parse(rawInput)
+    const action = await requireApprovedAction(ctx, approveRetryTool)
+    const { translate: t } = await resolveTranslations()
+    const { job, asset, failure } = await loadRetryState(ctx, approveRetryTool, input)
+    const eligibility = approveRetryEligibility({ jobStatus: job.status, assetStatus: asset.status, hasOpenFailure: Boolean(failure), reason: input.reason })
+    if (!eligibility.ok) throw new ItadToolError(eligibility.code, message(t, eligibility.code))
+    // The failure is part of the previewed version: closed or changed since → nothing is written.
+    if (!failure || retryVersion(asset.updatedAt, failure) !== action.recordVersion) {
+      throw new ItadToolError('conflict', message(t, 'changed_since_preview'))
+    }
+    const result = await runApprovedWrite<Record<string, unknown>, { assetStatus: string }>(ctx, approveRetryTool, {
+      action,
+      jobId: job.id,
+      commandId: 'itad.sanitization.approve_retry',
+      commandInput: { jobId: job.id, assetId: asset.id, reason: input.reason },
+      resourceKind: 'itad.asset',
+      resourceId: asset.id,
+      current: { organizationId: job.organizationId, updatedAt: asset.updatedAt },
+      expectedVersion: asset.updatedAt,
+      what: 'Approve sanitization retry',
+    })
+    return {
+      recordId: asset.id,
+      commandName: 'itad.sanitization.approve_retry',
+      done: true,
+      assetId: asset.id,
+      serial: asset.serial,
+      assetStatus: result.assetStatus,
+      resolvedExceptionId: failure.id,
+      link: assetHref(job.id, asset.id),
+    }
+  },
+})
+
+// ─── A1 assign_exceptions ────────────────────────────────────────────────────
+
+const assignExceptionsInput = z.object({
+  jobId: z.string().uuid().describe('The one job whose exceptions are assigned.'),
+  filter: z
+    .object({
+      type: z.enum(ITAD_EXCEPTION_TYPES).optional().describe('Exception type the operator named, e.g. sanitization_failed; omit for every type.'),
+      assignee: z
+        .union([z.enum(['unassigned', 'any']), z.string().uuid()])
+        .describe('Which current assignee the operator meant: unassigned, any, or a user id.'),
+    })
+    .describe('The selection the operator asked for; the server re-checks every id against it.'),
+  exceptionIds: z
+    .array(z.string().uuid())
+    .min(1)
+    .max(ASSIGN_MAX_EXCEPTIONS)
+    .describe(`Open exception ids matching the filter, from list_open_exceptions; at most ${ASSIGN_MAX_EXCEPTIONS} — ask to narrow when there are more.`),
+  assignedToUserId: z.union([z.literal('me'), z.string().uuid()]).describe('New assignee: me (the operator) or a user id.'),
+})
+type AssignExceptionsInput = z.infer<typeof assignExceptionsInput>
+type JobException = ExceptionListResponse['items'][number]
+
+const EXCEPTION_PAGE_SIZE = 100
+const EXCEPTION_PAGES = 10
+
+async function loadJobExceptions(ctx: ItadToolContext, tool: AiToolDefinition, jobId: string, type: ExceptionType | undefined): Promise<JobException[]> {
+  const items: JobException[] = []
+  for (let page = 1; page <= EXCEPTION_PAGES; page += 1) {
+    const response = routeData(
+      await runItadRoute<ExceptionListResponse>(
+        ctx,
+        tool,
+        { method: 'GET', path: `/jobs/${jobId}/exceptions`, query: { ...(type ? { type } : {}), page, pageSize: EXCEPTION_PAGE_SIZE } },
+        ['itad.exceptions.view'],
+      ),
+      'Exception lookup',
+    )
+    const batch = response?.items ?? []
+    items.push(...batch)
+    if (batch.length < EXCEPTION_PAGE_SIZE) break
+  }
+  return items
+}
+
+async function assignmentState(ctx: ItadToolContext, tool: AiToolDefinition, input: AssignExceptionsInput) {
+  const job = await loadJob(ctx, tool, input.jobId)
+  const exceptions = await loadJobExceptions(ctx, tool, job.id, input.filter.type)
+  const candidates: AssignCandidate[] = exceptions.map((exception) => ({
+    id: exception.id,
+    type: exception.type,
+    status: exception.status,
+    assignedToUserId: exception.assignedTo?.id ?? null,
+  }))
+  const selection = selectAssignable({ requestedIds: input.exceptionIds, filter: input.filter, jobExceptions: candidates })
+  const byId = new Map(exceptions.map((exception) => [exception.id, exception]))
+  return { job, selection, byId }
+}
+
+const assignExceptionsTool: AiToolDefinition = defineItadTool({
+  name: 'itad.assign_exceptions',
+  displayName: 'Assign exceptions',
+  description: `Propose assigning open exceptions of ONE job to one person, e.g. "all open sanitization failures on this job to me" — the only batch change, at most ${ASSIGN_MAX_EXCEPTIONS}. Pass the filter the operator stated and the matching ids from list_open_exceptions. Each exception is assigned separately; ones changed since the preview are skipped and reported. Creates a preview the operator must confirm; nothing changes before Confirm.`,
+  inputSchema: assignExceptionsInput,
+  requiredFeatures: ['itad.exceptions.manage'],
+  isMutation: true,
+  isBulk: true,
+  loadBeforeRecords: async (rawInput: AssignExceptionsInput, ctx) => {
+    const input = assignExceptionsInput.parse(rawInput)
+    const { translate: t } = await resolveTranslations()
+    const { job, selection, byId } = await assignmentState(ctx, assignExceptionsTool, input)
+    // An id that never belonged to this selection is a wrong proposal, at prepare and at confirm alike.
+    if (selection.outside.length > 0) throw new ItadToolError('exception_outside_filter', message(t, 'exception_outside_filter'))
+    const assigneeId = input.assignedToUserId === 'me' ? ctx.userId! : input.assignedToUserId
+    const queryEngine = ctx.container.resolve<QueryEngine>('queryEngine')
+    const [assignee] = await listOrganizationUsers(queryEngine, { tenantId: ctx.tenantId!, organizationId: job.organizationId }, { ids: [assigneeId], limit: 1 })
+    const blocked = !assignee ? 'assignee_invalid' : selection.selected.length === 0 ? 'nothing_to_assign' : null
+    if (blocked) {
+      // At the confirm re-check every record then reads as changed (stale), never a 500.
+      await refuseProposal(ctx, assignExceptionsTool, input, { ok: false, level: 'state', code: blocked }, (code) => new ItadToolError(code, message(t, code)))
+      return []
+    }
+    const assigneeName = assignee!.name ?? assignee!.email ?? assignee!.id
+    return selection.selected.map((id) => {
+      const exception = byId.get(id)!
+      const typeLabel = t(`itad.exceptions.type.${exception.type}`, exception.type)
+      return {
+        recordId: exception.id,
+        entityType: 'itad.exception',
+        label: `${typeLabel} · ${exception.serial} · ${job.internalReference}`,
+        recordVersion: exception.updatedAt,
+        before: { assignedToUserId: exception.assignedTo?.id ?? null },
+        after: { assignedToUserId: assigneeId },
+        display: {
+          fieldLabels: { assignedToUserId: t('itad.ai.write.label.assignee', 'Assignee') },
+          before: { assignedToUserId: exception.assignedTo?.name ?? t('itad.ai.write.unassigned', 'unassigned') },
+          after: { assignedToUserId: assigneeName },
+        },
+      }
+    })
+  },
+  handler: async (rawInput: AssignExceptionsInput, ctx) => {
+    const input = assignExceptionsInput.parse(rawInput)
+    const action = await requireApprovedAction(ctx, assignExceptionsTool)
+    const { translate: t } = await resolveTranslations()
+    const { job, selection, byId } = await assignmentState(ctx, assignExceptionsTool, input)
+    const assigneeId = input.assignedToUserId === 'me' ? ctx.userId! : input.assignedToUserId
+    const selected = new Set(selection.selected)
+    type RecordResult = { recordId: string; serial: string | null; status: 'updated' | 'conflict' | 'refused'; error?: { code: string; message: string } }
+    const records: RecordResult[] = []
+    // Non-atomic by design (spec "A1 scope"): each exception is attempted on its own.
+    for (const previewed of action.records) {
+      const exception = byId.get(previewed.recordId)
+      if (!exception || !selected.has(exception.id) || exception.updatedAt !== previewed.recordVersion) {
+        records.push({
+          recordId: previewed.recordId,
+          serial: exception?.serial ?? null,
+          status: 'conflict',
+          error: { code: 'stale_version', message: message(t, 'changed_since_preview') },
+        })
+        continue
+      }
+      try {
+        await runApprovedWrite<Record<string, unknown>, unknown>(ctx, assignExceptionsTool, {
+          action,
+          jobId: job.id,
+          commandId: 'itad.exceptions.assign',
+          commandInput: { jobId: job.id, exceptionId: exception.id, assignedToUserId: assigneeId },
+          resourceKind: 'itad.exception',
+          resourceId: exception.id,
+          current: { organizationId: job.organizationId, updatedAt: exception.updatedAt },
+          expectedVersion: previewed.recordVersion,
+          what: 'Assign exception',
+        })
+        records.push({ recordId: exception.id, serial: exception.serial, status: 'updated' })
+      } catch (err) {
+        const error = err instanceof ItadToolError ? err : new ItadToolError('route_failed', 'Assign exception failed')
+        records.push({
+          recordId: exception.id,
+          serial: exception.serial,
+          status: error.code === 'conflict' || error.code === 'stale_version' || error.code === 'exception_resolved' ? 'conflict' : 'refused',
+          error: { code: error.code, message: error.message },
+        })
+      }
+    }
+    const assigned = records.filter((record) => record.status === 'updated').length
+    return {
+      commandName: 'itad.exceptions.assign',
+      done: assigned > 0,
+      assigned,
+      notAssigned: records.length - assigned,
+      records,
+      failedRecordIds: records.filter((record) => record.status !== 'updated').map((record) => record.recordId),
+      link: jobHref(job.id, `tab=exceptions${input.filter.type ? `&type=${input.filter.type}` : ''}`),
+    }
+  },
+})
+
+export const writesAiTools: AiToolDefinition[] = [resolveExceptionTool, reschedulePickupTool, approveRetryTool, assignExceptionsTool]
 
 export default writesAiTools

@@ -1,16 +1,19 @@
 import { decideManualResolution, manualOutcomes, type ItadExceptionStatus, type ItadExceptionType } from '../domain/exceptions'
 import { getEditableFields, type EditabilityJob } from '../domain/job-editability'
+import type { ItadAssetStatus, ItadJobStatus } from '../domain/job-types'
+import { decideRunAction } from '../domain/sanitization-state-machine'
 
 /**
  * Eligibility of the AI assistant's writes (AI assistant spec, "Writes"), pure.
  *
  * - `input` problems never change after the proposal (wrong outcome for the type, missing
  *   reason, invalid time): the tool refuses them at prepare, so no preview exists.
- * - `state` problems can change (exception no longer open, job status, time passed): the
- *   preview shows them as blocked and the record version becomes `ineligible:<code>`, so a
- *   state change after the preview reads as a stale version at confirm, and the handler
- *   re-checks before the command. (The framework re-runs `loadBeforeRecord` at confirm and
- *   turns a thrown error into a 500, so state problems must not throw there.)
+ * - `state` problems can change (exception no longer open, job status, time passed). A new
+ *   proposal with one is refused too — the model never sees the preview, so it must hear
+ *   why. But the framework re-runs `loadBeforeRecord` when the operator confirms, and turns
+ *   a thrown error into a 500; there (an action with this input is pending) the preview is
+ *   blocked instead, with the record version `ineligible:<code>`, so the change reads as a
+ *   stale version at confirm, and the handler re-checks before the command.
  */
 
 export type WriteEligibility = { ok: true } | { ok: false; level: 'input' | 'state'; code: string }
@@ -35,23 +38,72 @@ export function resolveExceptionEligibility(input: {
   return decision.ok ? { ok: true } : { ok: false, level: 'state', code: decision.code }
 }
 
-/**
- * `refuseBeforeMs`: a time further in the past than this is refused as an input problem —
- * it cannot have been in the future when the preview was made (pending actions expire
- * sooner), so a wrong date (e.g. a wrong year) is refused at prepare and the model can
- * correct it, instead of a preview that only the operator sees as blocked. A time that
- * passed more recently stays a state problem (it was valid when the preview was made).
- */
-export function reschedulePickupEligibility(input: { job: EditabilityJob; at: Date; now: Date; refuseBeforeMs?: number }): WriteEligibility {
+export function reschedulePickupEligibility(input: { job: EditabilityJob; at: Date; now: Date }): WriteEligibility {
   if (Number.isNaN(input.at.getTime())) return { ok: false, level: 'input', code: 'time_invalid' }
-  if (input.refuseBeforeMs !== undefined && input.at.getTime() < input.now.getTime() - input.refuseBeforeMs) {
-    return { ok: false, level: 'input', code: 'time_in_past' }
-  }
   if (!getEditableFields(input.job).includes('scheduledPickupAt')) return { ok: false, level: 'state', code: 'field_locked' }
   // Checked at prepare and again right before the command: a preview made at 10:58 for
   // 11:00 must not be applied at 11:01 (the record version does not change with time).
   if (input.at.getTime() <= input.now.getTime()) return { ok: false, level: 'state', code: 'time_in_past' }
   return { ok: true }
+}
+
+/** A3: the asset waits for a retry decision, the job is processing, its failure is still open. */
+export function approveRetryEligibility(input: {
+  jobStatus: ItadJobStatus
+  assetStatus: ItadAssetStatus
+  hasOpenFailure: boolean
+  reason: string
+}): WriteEligibility {
+  const reason = input.reason.trim()
+  if (reason.length < REASON_MIN_LENGTH || reason.length > REASON_MAX_LENGTH) return { ok: false, level: 'input', code: 'reason_required' }
+  const decision = decideRunAction({ jobStatus: input.jobStatus, assetStatus: input.assetStatus, action: 'approve_retry' })
+  if (!decision.ok) return { ok: false, level: 'state', code: decision.code === 'processing_required' ? 'job_not_processing' : 'asset_not_in_review' }
+  if (!input.hasOpenFailure) return { ok: false, level: 'state', code: 'no_open_failure' }
+  return { ok: true }
+}
+
+/**
+ * A3 record version: the asset and the open failure captured at prepare. The command
+ * resolves the failure under the job lock but does not require one, so a failure closed
+ * (or changed) before Confirm must make the action stale, like a changed asset.
+ */
+export const retryVersion = (assetUpdatedAt: string, failure: { id: string; updatedAt: string }) =>
+  `${assetUpdatedAt}|${failure.id}@${failure.updatedAt}`
+
+export const ASSIGN_MAX_EXCEPTIONS = 50
+
+export type AssignFilter = { type?: ItadExceptionType; assignee: 'unassigned' | 'any' | string }
+export type AssignCandidate = { id: string; type: ItadExceptionType; status: ItadExceptionStatus; assignedToUserId: string | null }
+
+/**
+ * A1 selection (AI assistant spec, "A1 scope"): the requested exceptions that are OPEN and
+ * match the filter now. An id that is not an exception of this job, or of another type, is
+ * `outside` the filter — the proposal is refused. One that is no longer open, or whose
+ * assignee no longer matches, is `excluded`: it was valid when proposed (or changed since),
+ * and is reported, never assigned.
+ */
+export function selectAssignable(input: { requestedIds: string[]; filter: AssignFilter; jobExceptions: AssignCandidate[] }): {
+  selected: string[]
+  excluded: string[]
+  outside: string[]
+} {
+  const byId = new Map(input.jobExceptions.map((exception) => [exception.id, exception]))
+  const selected: string[] = []
+  const excluded: string[] = []
+  const outside: string[] = []
+  for (const id of Array.from(new Set(input.requestedIds))) {
+    const exception = byId.get(id)
+    if (!exception || (input.filter.type && exception.type !== input.filter.type)) {
+      outside.push(id)
+      continue
+    }
+    const assigneeMatches =
+      input.filter.assignee === 'any' ||
+      (input.filter.assignee === 'unassigned' ? exception.assignedToUserId === null : exception.assignedToUserId === input.filter.assignee)
+    if (exception.status === 'open' && assigneeMatches) selected.push(id)
+    else excluded.push(id)
+  }
+  return { selected, excluded, outside }
 }
 
 const OFFSET_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/i
