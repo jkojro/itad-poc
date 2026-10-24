@@ -36,7 +36,7 @@ describe('itad.operations_assistant registration', () => {
   })
 
   it('declares a loop budget', () => {
-    expect(agent.loop).toEqual({ maxSteps: 8, budget: { maxToolCalls: 12, maxWallClockMs: 60_000, maxTokens: 16_000 } })
+    expect(agent.loop).toEqual({ maxSteps: 8, budget: { maxToolCalls: 12, maxWallClockMs: 60_000, maxTokens: 64_000 } })
   })
 
   it('gives every tool a feature gate and an itad. name', () => {

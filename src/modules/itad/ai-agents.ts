@@ -199,7 +199,10 @@ const agent: AiAgentDefinition = {
   mutationPolicy: 'confirm-required',
   loop: {
     maxSteps: 8,
-    budget: { maxToolCalls: 12, maxWallClockMs: 60_000, maxTokens: 16_000 },
+    // Input + output across the turn's steps; every step resends the prompt and the tool
+    // list (~5–8k tokens), so the cap must cover all 8 steps. At 16k a turn was cut after
+    // three steps, silently (the chat shows the abort only in its debug panel).
+    budget: { maxToolCalls: 12, maxWallClockMs: 60_000, maxTokens: 64_000 },
   },
   keywords: ['itad', 'jobs', 'assets', 'sanitization', 'exceptions', 'certificates', 'pickup'],
   domain: 'itad',
