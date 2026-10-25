@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import type { EntityManager, FilterQuery } from '@mikro-orm/postgresql'
 import { createRequestContainer } from '@open-mercato/shared/lib/di/container'
-import { getAuthFromRequest } from '@open-mercato/shared/lib/auth/server'
+import { attachTrustedAuthContext, getAuthFromRequest } from '@open-mercato/shared/lib/auth/server'
 import { resolveOrganizationScopeForRequest } from '@open-mercato/core/modules/directory/utils/organizationScope'
 import type { CommandRuntimeContext } from '@open-mercato/shared/lib/commands'
 import { CrudHttpError, isCrudHttpError, notFound } from '@open-mercato/shared/lib/crud/errors'
@@ -49,6 +49,37 @@ export async function resolveItadRouteContext(request: Request): Promise<ItadRou
       ? [selectedOrganizationId]
       : []
   return { container, ctx, tenantId: auth.tenantId, userId: auth.sub, readableOrganizationIds }
+}
+
+/**
+ * Route context of a known user acting on a record of one organization, for running an
+ * `itad` command outside the user's own request: the record's organization is the scope,
+ * and `lockVersion` (the record version the user saw) becomes the optimistic-lock header
+ * the command checks. Used by writes that execute a previewed change — the AI assistant's
+ * confirmed actions and Inbox actions the operator accepts.
+ */
+export async function resolveTrustedRecordRoute(input: {
+  userId: string
+  tenantId: string
+  organizationId: string
+  isSuperAdmin: boolean
+  lockVersion: string | null
+}): Promise<ItadRouteContext> {
+  const headers = new Headers()
+  if (input.lockVersion) headers.set('x-om-ext-optimistic-lock-expected-updated-at', input.lockVersion)
+  const request = new Request('http://internal.local/api/itad/trusted', { method: 'POST', headers })
+  attachTrustedAuthContext(request, {
+    status: 'authenticated',
+    auth: {
+      sub: input.userId,
+      userId: input.userId,
+      tenantId: input.tenantId,
+      orgId: input.organizationId,
+      roles: [],
+      isSuperAdmin: input.isSuperAdmin,
+    },
+  })
+  return resolveItadRouteContext(request)
 }
 
 /** Loads a job readable in the request scope, or throws the standardized 404 (no existence leak). */

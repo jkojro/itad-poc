@@ -7,6 +7,7 @@ import type { RbacService } from '@open-mercato/core/modules/auth/services/rbacS
 import { ItadException, ItadInboxAction, ItadInboxMessage, ItadJob } from '../data/entities'
 import { isStalled, worstMatchStatus, type InboxIntent, type MatchStatus } from '../domain/inbox'
 import { messageMatchStatus } from '../domain/inbox-proposals'
+import { manualOutcomes } from '../domain/exceptions'
 import type { ItadRouteContext } from '../lib/route-context'
 import { loadCompanyNames } from '../module-integrations/customers'
 
@@ -221,7 +222,13 @@ export async function readInboxMessage(route: ItadRouteContext, id: string) {
         fieldSources: action.fieldSources,
         missingFields: action.missingFields,
         before: action.type === 'update_pickup' && job && !('hidden' in job) ? { scheduledPickupAt: job.scheduledPickupAt } : null,
+        // Outcomes the exception's type allows, for the edit form (only when the exception is visible).
+        allowedOutcomes: (() => {
+          const view = exceptionView(action.target.exceptionId)
+          return view && !('hidden' in view) ? [...manualOutcomes(view.type)] : null
+        })(),
         result: action.result ?? null,
+        rejectReason: action.rejectReason ?? null,
         decidedAt: action.decidedAt ? action.decidedAt.toISOString() : null,
         updatedAt: action.updatedAt.toISOString(),
       }
