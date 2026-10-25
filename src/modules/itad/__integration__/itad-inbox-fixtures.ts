@@ -20,7 +20,7 @@ export async function importInboxMessage(request: APIRequestContext, token: stri
   return json!.id!
 }
 
-export type InboxDetail = Record<string, any> & { id: string; status: string; updatedAt: string; actions: Array<Record<string, any>> }
+export type InboxDetail = Record<string, any> & { id: string; status: string; updatedAt: string; actions: Array<Record<string, any> & { id: string; updatedAt: string }> }
 
 export async function inboxDetail(request: APIRequestContext, token: string, id: string): Promise<InboxDetail> {
   const response = await apiRequest(request, 'GET', `/api/itad/inbox/messages/${id}`, { token })
@@ -90,3 +90,49 @@ export async function deliverSignedEmail(
   })
   return { status: response.status(), body: await readJsonSafe<Record<string, unknown>>(response) }
 }
+
+// ─── Phase 2: decisions ────────────────────────────────────────────────────────
+
+const LOCK = 'x-om-ext-optimistic-lock-expected-updated-at'
+
+export async function acceptAction(request: APIRequestContext, token: string, action: { id: string; updatedAt: string }, body: Record<string, unknown> = {}) {
+  const response = await apiRequest(request, 'POST', `/api/itad/inbox/actions/${action.id}/accept`, { token, data: body, headers: { [LOCK]: action.updatedAt } })
+  return { status: response.status(), body: await readJsonSafe<Record<string, any>>(response) }
+}
+
+export async function rejectAction(request: APIRequestContext, token: string, action: { id: string; updatedAt: string }, reason: string | null = null) {
+  const response = await apiRequest(request, 'POST', `/api/itad/inbox/actions/${action.id}/reject`, { token, data: { reason }, headers: { [LOCK]: action.updatedAt } })
+  return { status: response.status(), body: await readJsonSafe<Record<string, any>>(response) }
+}
+
+export async function editAction(request: APIRequestContext, token: string, action: { id: string; updatedAt: string }, payload: Record<string, unknown>) {
+  const response = await apiRequest(request, 'PUT', `/api/itad/inbox/actions/${action.id}`, { token, data: { payload }, headers: { [LOCK]: action.updatedAt } })
+  return { status: response.status(), body: await readJsonSafe<Record<string, any>>(response) }
+}
+
+export async function selectMatch(request: APIRequestContext, token: string, message: { id: string; updatedAt: string }, body: Record<string, unknown>) {
+  const response = await apiRequest(request, 'POST', `/api/itad/inbox/messages/${message.id}/match`, { token, data: body, headers: { [LOCK]: message.updatedAt } })
+  return { status: response.status(), body: await readJsonSafe<Record<string, any>>(response) }
+}
+
+/** An interpretation resolving the exception of `serial` as not shipped. */
+export const notShipped = (serial: string) => ({
+  intents: [
+    {
+      intent: 'exception_clarification',
+      confidence: 'high',
+      serials: [{ value: serial, quote: serial }],
+      outcome: { value: 'not_shipped', quote: 'was never shipped' },
+      reason: { value: 'it stayed on site', quote: 'it stayed on site' },
+    },
+  ],
+  summary: 'Missing device not shipped',
+  language: 'en',
+})
+
+/** An interpretation moving the pickup to a local time quoted from the email. */
+export const movePickup = (localDateTime: string, quote: string, timeZone: string | null = 'Europe/Warsaw') => ({
+  intents: [{ intent: 'pickup_date_change', confidence: 'high', scheduledPickup: { value: { localDateTime, timeZone }, quote } }],
+  summary: 'Move the pickup',
+  language: 'en',
+})

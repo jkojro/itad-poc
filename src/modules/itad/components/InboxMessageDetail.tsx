@@ -4,6 +4,9 @@ import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@open-mercato/ui/primitives/button'
 import { Textarea } from '@open-mercato/ui/primitives/textarea'
+import { Input } from '@open-mercato/ui/primitives/input'
+import { FormField } from '@open-mercato/ui/primitives/form-field'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@open-mercato/ui/primitives/select'
 import { Alert, AlertDescription } from '@open-mercato/ui/primitives/alert'
 import { Spinner } from '@open-mercato/ui/primitives/spinner'
 import { StatusBadge } from '@open-mercato/ui/primitives/status-badge'
@@ -26,9 +29,10 @@ import { MatchStatusBadge, MessageStatusBadge } from './InboxTable'
 import { useGrantedFeatures } from './use-granted-features'
 
 /**
- * One customer email and its ITAD proposal (spec "UI/UX"). Phase 1 shows the actions;
- * deciding them (Accept / Edit / Reject) comes in phase 2. Details from ITAD records
- * the reader may not see arrive as `{ hidden: true }` and are shown as "No access".
+ * One customer email and its ITAD proposal (spec "UI/UX"): the operator edits the fields
+ * of each action, accepts or rejects it, and chooses the match when it is ambiguous —
+ * the only way to change an action's target. Details from ITAD records the reader may
+ * not see arrive as `{ hidden: true }` and are shown as "No access".
  */
 
 type JobView = { id: string; reference: string; name: string; status: string; scheduledPickupAt: string | null; customerReference: string | null }
@@ -74,6 +78,10 @@ type MessageDetail = {
     fieldSources: Record<string, FieldSource>
     missingFields: string[]
     before: { scheduledPickupAt: string | null } | null
+    allowedOutcomes: string[] | null
+    result: { recordId?: string; commandId?: string; error?: { code: string; message: string } } | null
+    rejectReason: string | null
+    updatedAt: string
   }>
   updatedAt: string
 }
@@ -123,13 +131,167 @@ function EvidenceList({ evidence }: { evidence: Evidence[] }) {
   )
 }
 
-function ActionCard({ action }: { action: MessageDetail['actions'][number] }) {
+const OUTCOME_LABELS: Record<string, string> = {
+  not_shipped: 'Not shipped',
+  lost_in_transit: 'Lost in transit',
+  manifest_error: 'Manifest error',
+  accepted_into_job: 'Accepted into the job',
+}
+
+const browserTimeZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone
+  } catch {
+    return undefined
+  }
+}
+
+type ActionView = MessageDetail['actions'][number]
+
+/** POST/PUT on an action with its version as the lock; returns the error message or null. */
+async function actionRequest(t: ReturnType<typeof useT>, action: ActionView, path: string, method: 'POST' | 'PUT', body: unknown): Promise<string | null> {
+  try {
+    const call = await withScopedApiRequestHeaders(buildOptimisticLockHeader(action.updatedAt), () =>
+      apiCall<{ error?: string; status?: string; error_?: unknown } & Record<string, unknown>>(path, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    )
+    if (call.ok) return null
+    const result = call.result as { error?: unknown } | null
+    const error = result?.error
+    if (typeof error === 'string') return error
+    if (error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string') return (error as { message: string }).message
+    return t('itad.inbox.errors.generic', 'Could not complete the action')
+  } catch (err) {
+    if (surfaceRecordConflict(err, t)) return t('itad.inbox.errors.changed', 'This changed in the meantime; the latest version is shown')
+    return t('itad.inbox.errors.generic', 'Could not complete the action')
+  }
+}
+
+function ActionFieldsForm({ action, onDone, onCancel }: { action: ActionView; onDone: () => void; onCancel: () => void }) {
+  const t = useT()
+  const [values, setValues] = React.useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(action.payload).map(([key, value]) => [key, value === null || value === undefined ? '' : String(value)])),
+  )
+  const [saving, setSaving] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const set = (key: string, value: string) => setValues((current) => ({ ...current, [key]: value }))
+  const fields: Array<{ key: string; kind: 'text' | 'number' | 'datetime' | 'textarea' | 'outcome' }> =
+    action.type === 'update_pickup'
+      ? [{ key: 'scheduledPickupAt', kind: 'datetime' }, { key: 'timeZone', kind: 'text' }]
+      : action.type === 'resolve_exception'
+        ? [{ key: 'outcome', kind: 'outcome' }, { key: 'reason', kind: 'textarea' }]
+        : [
+            { key: 'name', kind: 'text' },
+            { key: 'customerReference', kind: 'text' },
+            { key: 'expectedAssetEstimate', kind: 'number' },
+            { key: 'scheduledPickupAt', kind: 'datetime' },
+            { key: 'timeZone', kind: 'text' },
+            { key: 'pickupLocation', kind: 'text' },
+          ]
+
+  const save = async () => {
+    setSaving(true)
+    setError(null)
+    const payload: Record<string, unknown> = {}
+    for (const field of fields) {
+      const raw = (values[field.key] ?? '').trim()
+      payload[field.key] = raw === '' ? null : field.kind === 'number' ? Number(raw) : raw
+    }
+    const failure = await actionRequest(t, action, `/api/itad/inbox/actions/${action.id}`, 'PUT', { payload })
+    setSaving(false)
+    if (failure) setError(failure)
+    else onDone()
+  }
+
+  return (
+    <div className="mt-3 space-y-3 rounded-md border bg-muted/20 p-3" data-testid="itad-inbox-action-form">
+      {fields.map((field) => {
+        const label = t(`itad.inbox.field.${field.key}`, FIELD_LABELS[field.key] ?? field.key)
+        if (field.kind === 'outcome') {
+          const options = action.allowedOutcomes ?? Object.keys(OUTCOME_LABELS)
+          return (
+            <FormField key={field.key} label={label}>
+              <Select value={values.outcome || undefined} onValueChange={(value) => set('outcome', value)}>
+                <SelectTrigger aria-label={label}>
+                  <SelectValue placeholder={t('itad.inbox.field.choose', 'Choose')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((outcome) => (
+                    <SelectItem key={outcome} value={outcome}>
+                      {t(`itad.exceptions.outcome.${outcome}`, OUTCOME_LABELS[outcome] ?? outcome)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+          )
+        }
+        if (field.kind === 'textarea') {
+          return (
+            <FormField key={field.key} label={label}>
+              <Textarea rows={3} value={values[field.key] ?? ''} onChange={(event) => set(field.key, event.target.value)} />
+            </FormField>
+          )
+        }
+        return (
+          <FormField key={field.key} label={label}>
+            <Input
+              type={field.kind === 'number' ? 'number' : field.kind === 'datetime' ? 'datetime-local' : 'text'}
+              value={values[field.key] ?? ''}
+              placeholder={field.key === 'timeZone' ? browserTimeZone() : undefined}
+              onChange={(event) => set(field.key, event.target.value)}
+            />
+          </FormField>
+        )
+      })}
+      {error ? (
+        <Alert status="error"><AlertDescription>{error}</AlertDescription></Alert>
+      ) : null}
+      <div className="flex gap-2">
+        <Button type="button" size="sm" onClick={() => void save()} disabled={saving}>
+          {saving ? <Spinner className="mr-2 h-4 w-4" /> : null}
+          {t('itad.inbox.action.save', 'Save')}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel} disabled={saving}>
+          {t('itad.sanitization.actions.cancel', 'Cancel')}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function ActionCard({ action, canManage, onChanged }: { action: ActionView; canManage: boolean; onChanged: () => void }) {
   const t = useT()
   const fields = Object.entries(action.payload)
+  const [mode, setMode] = React.useState<'view' | 'edit' | 'reject'>('view')
+  const [reason, setReason] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const pending = action.status === 'pending'
+  const targetIncomplete =
+    (action.type === 'create_job' && !action.target.customer) ||
+    (action.type !== 'create_job' && !action.target.job) ||
+    (action.type === 'resolve_exception' && !action.target.exception)
+  const acceptBlocked = action.type === 'create_job' || action.missingFields.length > 0 || targetIncomplete
+
+  const run = async (path: string, body: unknown) => {
+    setBusy(true)
+    setError(null)
+    const failure = await actionRequest(t, action, path, 'POST', body)
+    setBusy(false)
+    if (failure) setError(failure)
+    setMode('view')
+    onChanged()
+  }
+
+  const title = t(`itad.inbox.action.${action.type}`, ACTION_TYPE_LABELS[action.type])
   return (
-    <section className="rounded-lg border p-4" aria-label={t(`itad.inbox.action.${action.type}`, ACTION_TYPE_LABELS[action.type])} data-testid="itad-inbox-action">
+    <section className="rounded-lg border p-4" aria-label={title} data-testid="itad-inbox-action">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-semibold">{t(`itad.inbox.action.${action.type}`, ACTION_TYPE_LABELS[action.type])}</h3>
+        <h3 className="text-sm font-semibold">{title}</h3>
         <MatchStatusBadge status={action.matchStatus} />
         <StatusBadge variant={action.status === 'executed' ? 'success' : action.status === 'failed' ? 'error' : 'neutral'}>
           {t(`itad.inbox.actionStatus.${action.status}`, ACTION_STATUS_LABELS[action.status])}
@@ -173,21 +335,195 @@ function ActionCard({ action }: { action: MessageDetail['actions'][number] }) {
           <React.Fragment key={key}>
             <dt className="text-muted-foreground">{t(`itad.inbox.field.${key}`, FIELD_LABELS[key] ?? key)}</dt>
             <dd className="sm:col-span-2">
-              {String(value)}
+              {key === 'outcome' ? t(`itad.exceptions.outcome.${String(value)}`, OUTCOME_LABELS[String(value)] ?? String(value)) : String(value)}
               {action.fieldSources[key] === 'operator' ? <span className="ml-2 text-xs text-muted-foreground">{t('itad.inbox.field.byOperator', '(edited)')}</span> : null}
             </dd>
           </React.Fragment>
         ))}
       </dl>
-      {action.missingFields.length ? (
+      {pending && action.missingFields.length ? (
         <p className="mt-2 text-sm text-status-warning-text">
           {t('itad.inbox.missing', 'Missing: {fields}', {
             fields: action.missingFields.map((key) => t(`itad.inbox.field.${key}`, FIELD_LABELS[key] ?? key)).join(', '),
           })}
         </p>
       ) : null}
-      <p className="mt-2 text-xs text-muted-foreground">{t('itad.inbox.decideLater', 'Accepting or rejecting actions comes in the next release; handle the change in the job for now.')}</p>
+      {action.status === 'executed' && action.target.job && !isHidden(action.target.job) ? (
+        <p className="mt-2 text-sm">
+          {t('itad.inbox.executed', 'Done in')} <JobLink job={action.target.job} />
+        </p>
+      ) : null}
+      {action.status === 'failed' && action.result?.error ? (
+        <Alert status="error" className="mt-2"><AlertDescription>{action.result.error.message}</AlertDescription></Alert>
+      ) : null}
+      {action.status === 'rejected' && action.rejectReason ? (
+        <p className="mt-2 text-sm text-muted-foreground">{t('itad.inbox.rejectedBecause', 'Rejected: {reason}', { reason: action.rejectReason })}</p>
+      ) : null}
+      {error ? (
+        <Alert status="error" className="mt-2"><AlertDescription>{error}</AlertDescription></Alert>
+      ) : null}
+
+      {pending && canManage && mode === 'edit' ? (
+        <ActionFieldsForm action={action} onCancel={() => setMode('view')} onDone={() => { setMode('view'); onChanged() }} />
+      ) : null}
+      {pending && canManage && mode === 'reject' ? (
+        <div className="mt-3 space-y-2 rounded-md border bg-muted/20 p-3">
+          <FormField label={t('itad.inbox.rejectReason', 'Reason (optional)')}>
+            <Textarea rows={2} value={reason} onChange={(event) => setReason(event.target.value)} />
+          </FormField>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" variant="destructive" onClick={() => void run(`/api/itad/inbox/actions/${action.id}/reject`, { reason: reason.trim() || null })} disabled={busy}>
+              {t('itad.inbox.rejectConfirm', 'Reject action')}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setMode('view')} disabled={busy}>
+              {t('itad.sanitization.actions.cancel', 'Cancel')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {pending && canManage && mode === 'view' ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void run(`/api/itad/inbox/actions/${action.id}/accept`, { timeZone: browserTimeZone() })}
+            disabled={busy || acceptBlocked}
+            data-testid="itad-inbox-accept"
+          >
+            {busy ? <Spinner className="mr-2 h-4 w-4" /> : null}
+            {t('itad.inbox.accept', 'Accept')}
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setMode('edit')} disabled={busy} data-testid="itad-inbox-edit">
+            {t('itad.inbox.edit', 'Edit')}
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setMode('reject')} disabled={busy} data-testid="itad-inbox-reject">
+            {t('itad.inbox.reject', 'Reject')}
+          </Button>
+          {action.type === 'create_job' ? (
+            <span className="text-xs text-muted-foreground">{t('itad.inbox.createJobLater', 'Creating a job from an email comes in a later release.')}</span>
+          ) : targetIncomplete ? (
+            <span className="text-xs text-muted-foreground">{t('itad.inbox.chooseTarget', 'Choose the job or exception in Match first.')}</span>
+          ) : null}
+        </div>
+      ) : null}
     </section>
+  )
+}
+
+type ExceptionOption = { id: string; serial: string; type: string; status: string }
+
+/**
+ * Match panel (spec "Target vs fields"): the job — among the candidates or by reference —
+ * and, per pending I3 action, the exception. Saving rebuilds the pending actions.
+ */
+function MatchEditor({ data, onDone, onCancel }: { data: MessageDetail; onDone: () => void; onCancel: () => void }) {
+  const t = useT()
+  const currentJob = data.match?.job && !isHidden(data.match.job) ? data.match.job : null
+  const [jobId, setJobId] = React.useState<string>(currentJob?.id ?? '')
+  const [search, setSearch] = React.useState('')
+  const [exceptions, setExceptions] = React.useState<Record<string, string>>({})
+  const [saving, setSaving] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const candidates = (data.match?.jobCandidates ?? []).flatMap((candidate) => (candidate.job && !isHidden(candidate.job) ? [candidate.job] : []))
+  const found = useQuery<JobView[]>({
+    queryKey: ['itad-inbox-job-search', search],
+    enabled: search.trim().length >= 3,
+    queryFn: async () => {
+      const result = await readApiResultOrThrow<{ items: Array<{ id: string; internalReference: string; name: string; status: string }> }>(
+        `/api/itad/jobs?search=${encodeURIComponent(search.trim())}&pageSize=10`,
+      )
+      return result.items.map((job) => ({ id: job.id, reference: job.internalReference, name: job.name, status: job.status, scheduledPickupAt: null, customerReference: null }))
+    },
+  })
+  const options = [...candidates, ...(found.data ?? []).filter((job) => !candidates.some((candidate) => candidate.id === job.id))]
+  const i3Actions = data.actions.filter((action) => action.type === 'resolve_exception' && action.status === 'pending')
+  const openExceptions = useQuery<ExceptionOption[]>({
+    queryKey: ['itad-inbox-job-exceptions', jobId],
+    enabled: Boolean(jobId) && i3Actions.length > 0,
+    queryFn: async () => {
+      const result = await readApiResultOrThrow<{ items: ExceptionOption[] }>(`/api/itad/jobs/${jobId}/exceptions?status=open&pageSize=100`)
+      return result.items.filter((item) => item.type === 'missing_from_delivery' || item.type === 'unexpected_asset')
+    },
+  })
+
+  const save = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const call = await withScopedApiRequestHeaders(buildOptimisticLockHeader(data.updatedAt), () =>
+        apiCall<{ error?: string }>(`/api/itad/inbox/messages/${data.id}/match`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            jobId: jobId || null,
+            actionTargets: Object.entries(exceptions)
+              .filter(([, exceptionId]) => Boolean(exceptionId))
+              .map(([actionId, exceptionId]) => ({ actionId, exceptionId })),
+          }),
+        }),
+      )
+      setSaving(false)
+      if (call.ok) onDone()
+      else setError(typeof call.result?.error === 'string' ? call.result.error : t('itad.inbox.errors.generic', 'Could not complete the action'))
+    } catch (err) {
+      setSaving(false)
+      if (!surfaceRecordConflict(err, t)) setError(t('itad.inbox.errors.generic', 'Could not complete the action'))
+      else onDone()
+    }
+  }
+
+  return (
+    <div className="mt-3 space-y-3 rounded-md border bg-muted/20 p-3" data-testid="itad-inbox-match-editor">
+      <FormField label={t('itad.inbox.match.findJob', 'Find a job by reference or name')}>
+        <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ITAD-2026-…" />
+      </FormField>
+      <FormField label={t('itad.inbox.target.job', 'Job')}>
+        <Select value={jobId || undefined} onValueChange={(value) => { setJobId(value); setExceptions({}) }}>
+          <SelectTrigger aria-label={t('itad.inbox.target.job', 'Job')}>
+            <SelectValue placeholder={t('itad.inbox.field.choose', 'Choose')} />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((job) => (
+              <SelectItem key={job.id} value={job.id}>
+                {job.reference} · {job.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </FormField>
+      {jobId
+        ? i3Actions.map((action, index) => (
+            <FormField key={action.id} label={t('itad.inbox.match.exceptionFor', 'Exception for action {index}', { index: index + 1 })}>
+              <Select value={exceptions[action.id] || undefined} onValueChange={(value) => setExceptions((current) => ({ ...current, [action.id]: value }))}>
+                <SelectTrigger aria-label={t('itad.inbox.target.exception', 'Exception')}>
+                  <SelectValue placeholder={t('itad.inbox.field.choose', 'Choose')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(openExceptions.data ?? []).map((exception) => (
+                    <SelectItem key={exception.id} value={exception.id}>
+                      {exception.serial} · {t(`itad.exceptions.type.${exception.type}`, exception.type)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+          ))
+        : null}
+      <p className="text-xs text-muted-foreground">{t('itad.inbox.match.rebuildHint', 'Saving rebuilds the pending actions for the chosen job; your edits to their fields are kept.')}</p>
+      {error ? (
+        <Alert status="error"><AlertDescription>{error}</AlertDescription></Alert>
+      ) : null}
+      <div className="flex gap-2">
+        <Button type="button" size="sm" onClick={() => void save()} disabled={saving || !jobId} data-testid="itad-inbox-match-save">
+          {saving ? <Spinner className="mr-2 h-4 w-4" /> : null}
+          {t('itad.inbox.action.save', 'Save')}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel} disabled={saving}>
+          {t('itad.sanitization.actions.cancel', 'Cancel')}
+        </Button>
+      </div>
+    </div>
   )
 }
 
@@ -197,7 +533,12 @@ export function InboxMessageDetail({ messageId }: { messageId: string }) {
   const { granted } = useGrantedFeatures(['itad.inbox.manage'])
   const canManage = granted.has('itad.inbox.manage')
   const [draft, setDraft] = React.useState('')
-  const [busy, setBusy] = React.useState<'reprocess' | 'draft' | null>(null)
+  const [busy, setBusy] = React.useState<'reprocess' | 'draft' | 'close' | null>(null)
+  const [editingMatch, setEditingMatch] = React.useState(false)
+  const refresh = React.useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['itad-inbox-message', messageId] })
+    void queryClient.invalidateQueries({ queryKey: ['itad-inbox'] })
+  }, [messageId, queryClient])
 
   const { data, isLoading, error } = useQuery<MessageDetail>({
     queryKey: ['itad-inbox-message', messageId],
@@ -209,7 +550,7 @@ export function InboxMessageDetail({ messageId }: { messageId: string }) {
     setDraft(data?.draftReply ?? '')
   }, [data?.draftReply])
 
-  const run = async (kind: 'reprocess' | 'draft') => {
+  const run = async (kind: 'reprocess' | 'draft' | 'close') => {
     if (!data) return
     setBusy(kind)
     try {
@@ -219,7 +560,14 @@ export function InboxMessageDetail({ messageId }: { messageId: string }) {
       if (!call.ok) {
         flash(typeof call.result?.error === 'string' ? call.result.error : t('itad.inbox.errors.generic', 'Could not complete the action'), 'error')
       } else {
-        flash(kind === 'draft' ? t('itad.inbox.draft.refreshed', 'Draft rebuilt from current data') : t('itad.inbox.reprocessing', 'Reprocessing started'), 'success')
+        flash(
+          kind === 'draft'
+            ? t('itad.inbox.draft.refreshed', 'Draft rebuilt from current data')
+            : kind === 'close'
+              ? t('itad.inbox.closed', 'Message closed')
+              : t('itad.inbox.reprocessing', 'Reprocessing started'),
+          'success',
+        )
       }
     } catch (err) {
       if (!surfaceRecordConflict(err, t)) flash(t('itad.inbox.errors.generic', 'Could not complete the action'), 'error')
@@ -238,7 +586,10 @@ export function InboxMessageDetail({ messageId }: { messageId: string }) {
     )
   }
 
-  const canReprocess = canManage && (data.status === 'failed' || data.stalled || data.status === 'proposed')
+  const executed = data.actions.some((action) => action.status === 'executed')
+  const pendingCount = data.actions.filter((action) => action.status === 'pending').length
+  const canReprocess = canManage && !executed && (data.status === 'failed' || data.stalled || data.status === 'proposed')
+  const canClose = canManage && data.status === 'proposed' && pendingCount === 0
   return (
     <div className="space-y-6" data-testid="itad-inbox-detail">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -255,6 +606,11 @@ export function InboxMessageDetail({ messageId }: { messageId: string }) {
         <div className="flex items-center gap-2">
           <MatchStatusBadge status={data.matchStatus} />
           <MessageStatusBadge status={data.status} stalled={data.stalled} />
+          {canClose ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => void run('close')} disabled={busy !== null} data-testid="itad-inbox-close">
+              {t('itad.inbox.close', 'Close')}
+            </Button>
+          ) : null}
           {canReprocess ? (
             <Button type="button" variant="outline" size="sm" onClick={() => void run('reprocess')} disabled={busy !== null} data-testid="itad-inbox-reprocess">
               {busy === 'reprocess' ? <Spinner className="mr-2 h-4 w-4" /> : null}
@@ -306,7 +662,24 @@ export function InboxMessageDetail({ messageId }: { messageId: string }) {
 
       {data.match ? (
         <section>
-          <SectionHeader title={t('itad.inbox.matchTitle', 'Match')} />
+          <div className="flex items-center justify-between gap-2">
+            <SectionHeader title={t('itad.inbox.matchTitle', 'Match')} />
+            {canManage && data.status === 'proposed' && pendingCount > 0 && !editingMatch ? (
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditingMatch(true)} data-testid="itad-inbox-change-match">
+                {data.matchStatus === 'ambiguous' ? t('itad.inbox.match.choose', 'Choose the job') : t('itad.inbox.match.change', 'Change')}
+              </Button>
+            ) : null}
+          </div>
+          {editingMatch ? (
+            <MatchEditor
+              data={data}
+              onCancel={() => setEditingMatch(false)}
+              onDone={() => {
+                setEditingMatch(false)
+                refresh()
+              }}
+            />
+          ) : null}
           <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
             <dt className="text-muted-foreground">{t('itad.inbox.target.customer', 'Customer')}</dt>
             <dd className="sm:col-span-2">{data.match.customer ? (isHidden(data.match.customer) ? <NoAccess /> : data.match.customer.name ?? data.match.customer.id) : <span className="text-muted-foreground">{t('itad.inbox.match.none', 'Not matched')}</span>}</dd>
@@ -334,7 +707,8 @@ export function InboxMessageDetail({ messageId }: { messageId: string }) {
       {data.actions.length ? (
         <section className="space-y-3">
           <SectionHeader title={t('itad.inbox.actions', 'Proposed actions')} />
-          {data.actions.map((action) => <ActionCard key={action.id} action={action} />)}
+          <p className="text-xs text-muted-foreground">{t('itad.inbox.actionsHint', 'Each action runs only when you accept it, with the same checks as in the job screens.')}</p>
+          {data.actions.map((action) => <ActionCard key={`${action.id}:${action.updatedAt}`} action={action} canManage={canManage} onChanged={refresh} />)}
         </section>
       ) : null}
 

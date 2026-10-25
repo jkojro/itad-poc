@@ -1,13 +1,12 @@
 import type { EntityManager } from '@mikro-orm/postgresql'
 import { AiPendingActionRepository } from '@open-mercato/ai-assistant/modules/ai_assistant/data/repositories/AiPendingActionRepository'
 import type { AiToolDefinition } from '@open-mercato/ai-assistant/modules/ai_assistant/lib/types'
-import { attachTrustedAuthContext } from '@open-mercato/shared/lib/auth/server'
 import { isCrudHttpError } from '@open-mercato/shared/lib/crud/errors'
 import { enforceCommandOptimisticLock } from '@open-mercato/shared/lib/crud/optimistic-lock-command'
 import { createLogger } from '@open-mercato/shared/lib/logger'
 import type { RbacService } from '@open-mercato/core/modules/auth/services/rbacService'
 import { runGuardedCommand } from '../lib/command-route'
-import { loadReadableJob, resolveItadRouteContext, type ItadRouteContext } from '../lib/route-context'
+import { loadReadableJob, resolveTrustedRecordRoute, type ItadRouteContext } from '../lib/route-context'
 import { ItadToolError, routeErrorCode, type ItadToolContext } from './_shared'
 
 /**
@@ -104,22 +103,14 @@ export async function isPendingProposal(ctx: ItadToolContext, tool: AiToolDefini
 }
 
 /** Route context of the confirming user, carrying the previewed version as the lock header. */
-async function routeForUser(ctx: ItadToolContext, lockVersion: string | null): Promise<ItadRouteContext> {
-  const headers = new Headers()
-  if (lockVersion) headers.set('x-om-ext-optimistic-lock-expected-updated-at', lockVersion)
-  const request = new Request('http://internal.local/api/itad/ai-tools', { method: 'POST', headers })
-  attachTrustedAuthContext(request, {
-    status: 'authenticated',
-    auth: {
-      sub: ctx.userId!,
-      userId: ctx.userId!,
-      tenantId: ctx.tenantId,
-      orgId: ctx.organizationId,
-      roles: [],
-      isSuperAdmin: ctx.isSuperAdmin,
-    },
+function routeForUser(ctx: ItadToolContext, lockVersion: string | null): Promise<ItadRouteContext> {
+  return resolveTrustedRecordRoute({
+    userId: ctx.userId!,
+    tenantId: ctx.tenantId!,
+    organizationId: ctx.organizationId!,
+    isSuperAdmin: ctx.isSuperAdmin,
+    lockVersion,
   })
-  return resolveItadRouteContext(request)
 }
 
 /** Maps a command failure to a stable tool error; domain messages (localized, coded) pass, server errors do not. */

@@ -211,3 +211,73 @@ export function customerSafeBlockers(counters: JobOverviewCounters): CustomerSaf
   if (counters.certificatesMissing > 0) blockers.push({ key: 'awaiting_certificates', count: counters.certificatesMissing })
   return blockers
 }
+
+/** Required values still missing for an action, from its target and fields. */
+export function missingFieldsOf(type: InboxActionType, target: ActionTarget, payload: Record<string, unknown>): string[] {
+  const present = { ...target, ...payload } as Record<string, unknown>
+  return REQUIRED[type].filter((key) => present[key] === undefined || present[key] === null || present[key] === '')
+}
+
+/** Target keys never change through an edit (spec "Target vs fields"); only the Match panel moves them. */
+export const TARGET_KEYS = ['customerId', 'jobId', 'exceptionId'] as const
+
+export type PreviousAction = { type: InboxActionType; payload: Record<string, unknown>; fieldSources: Record<string, FieldSource> }
+
+/**
+ * Actions rebuilt after the operator chose the match (spec "Match status", Match panel):
+ * the stored extraction with the new levels — no model call — keeping the fields the
+ * operator edited on the action of the same type and position. A target the operator
+ * picked explicitly (an exception for an I3 action) is taken as confirmed: high.
+ */
+export function rebuildActions(
+  parts: EmailParts,
+  extraction: InboxExtraction,
+  levels: MatchLevels,
+  previous: PreviousAction[],
+  chosenExceptions: Array<string | null> = [],
+): ProposedAction[] {
+  const rebuilt = buildActions(parts, extraction, levels)
+  const seenByType = new Map<InboxActionType, number>()
+  return rebuilt.map((action) => {
+    const index = seenByType.get(action.type) ?? 0
+    seenByType.set(action.type, index + 1)
+    const before = previous.filter((entry) => entry.type === action.type)[index]
+    const payload = { ...action.payload }
+    const fieldSources = { ...action.fieldSources }
+    if (before) {
+      for (const [key, source] of Object.entries(before.fieldSources)) {
+        if (source !== 'operator') continue
+        payload[key] = before.payload[key]
+        fieldSources[key] = 'operator'
+      }
+    }
+    let target = action.target
+    let matchStatus = action.matchStatus
+    let targetVersion = action.targetVersion
+    if (action.type === 'resolve_exception') {
+      const chosen = chosenExceptions[index]
+      const exception = chosen ? levels.jobContext?.exceptions.find((entry) => entry.id === chosen && entry.status === 'open') : null
+      if (exception) {
+        target = { ...target, exceptionId: exception.id }
+        targetVersion = exception.updatedAt
+        matchStatus = levels.job.status
+      }
+    }
+    const missingFields = missingFieldsOf(action.type, target, payload)
+    return {
+      ...action,
+      target,
+      payload,
+      fieldSources,
+      missingFields,
+      targetVersion,
+      matchStatus: missingFields.length > 0 && matchStatus === 'high' ? 'needs_review' : matchStatus,
+    }
+  })
+}
+
+/** A message is closed once it has actions and every live one is decided. */
+export function isFullyDecided(statuses: Array<'pending' | 'executed' | 'rejected' | 'failed' | 'superseded'>): boolean {
+  const live = statuses.filter((status) => status !== 'superseded')
+  return live.length > 0 && live.every((status) => status !== 'pending')
+}

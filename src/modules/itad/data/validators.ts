@@ -406,3 +406,58 @@ export const itadInboxListSchema = z.object({
   jobId: z.string().uuid().optional(),
 })
 
+
+/** Local date and time as the operator or the email states it, read in `timeZone` at Accept. */
+const localDateTimeSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/, 'Expected YYYY-MM-DDTHH:mm')
+const timeZoneFieldSchema = z.string().trim().max(64).nullable().optional()
+
+/** Editable fields per Inbox action type (spec "Intents and actions"); targets are never fields. */
+export const itadInboxActionFieldSchemas = {
+  create_job: z
+    .object({
+      name: z.string().trim().min(1).max(200).optional(),
+      customerReference: z.string().trim().max(120).nullable().optional(),
+      expectedAssetEstimate: z.number().int().min(1).max(100000).nullable().optional(),
+      scheduledPickupAt: localDateTimeSchema.nullable().optional(),
+      timeZone: timeZoneFieldSchema,
+      pickupLocation: z.string().trim().max(500).nullable().optional(),
+    })
+    .strict(),
+  update_pickup: z.object({ scheduledPickupAt: localDateTimeSchema.nullable().optional(), timeZone: timeZoneFieldSchema }).strict(),
+  resolve_exception: z
+    .object({
+      outcome: z.enum(['not_shipped', 'lost_in_transit', 'manifest_error', 'accepted_into_job']).nullable().optional(),
+      reason: z.string().trim().max(1000).nullable().optional(),
+    })
+    .strict(),
+} as const
+
+/** Durable input of `itad.inbox.edit_action`: the fields only. */
+export const itadInboxEditActionSchema = z.object({ actionId: z.string().uuid(), payload: z.record(z.string(), z.unknown()) })
+export type ItadInboxEditActionInput = z.infer<typeof itadInboxEditActionSchema>
+
+/** Durable input of `itad.inbox.reject_action`. */
+export const itadInboxRejectActionSchema = z.object({ actionId: z.string().uuid(), reason: z.string().trim().max(1000).nullable().optional() })
+export type ItadInboxRejectActionInput = z.infer<typeof itadInboxRejectActionSchema>
+
+/** Body of the accept route: the zone of a local pickup time the action does not state (the operator's). */
+export const itadInboxAcceptBodySchema = z.object({ timeZone: z.string().trim().max(64).optional() })
+
+/** Durable input of `itad.inbox.select_match` (Match panel): the only way to change a target. */
+export const itadInboxSelectMatchSchema = z.object({
+  messageId: z.string().uuid(),
+  customerId: z.string().uuid().nullable().optional(),
+  jobId: z.string().uuid().nullable().optional(),
+  actionTargets: z.array(z.object({ actionId: z.string().uuid(), exceptionId: z.string().uuid() })).max(20).optional(),
+})
+export type ItadInboxSelectMatchInput = z.infer<typeof itadInboxSelectMatchSchema>
+
+/** Durable input of `itad.inbox.record_decision` (after the domain command of an accepted action). */
+export const itadInboxRecordDecisionSchema = z.object({
+  actionId: z.string().uuid(),
+  outcome: z.enum(['executed', 'failed']),
+  recordId: z.string().uuid().nullable().optional(),
+  commandId: z.string().max(120).nullable().optional(),
+  error: z.object({ code: z.string().max(120), message: z.string().max(1000) }).nullable().optional(),
+})
+export type ItadInboxRecordDecisionInput = z.infer<typeof itadInboxRecordDecisionSchema>

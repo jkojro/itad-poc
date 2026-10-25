@@ -24,6 +24,7 @@ import { JobSanitizationPanel } from './JobSanitizationPanel'
 import { JobDocumentsPanel } from './JobDocumentsPanel'
 import { JobOverviewPanel } from './JobOverviewPanel'
 import { ItadAssistantPanel } from './ItadAssistantPanel'
+import { JobInboxSection } from './JobInboxSection'
 import { JobExceptionsPanel } from './JobExceptionsPanel'
 import { useGrantedFeatures } from './use-granted-features'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@open-mercato/ui/primitives/tabs'
@@ -485,6 +486,7 @@ export function JobDetailForm({ id }: { id: string }) {
           job ? (
             <div className="space-y-4">
               <JobOverviewPanel job={job} />
+              <JobInboxSection jobId={job.id} />
               <ItadAssistantPanel jobId={job.id} />
             </div>
           ) : undefined

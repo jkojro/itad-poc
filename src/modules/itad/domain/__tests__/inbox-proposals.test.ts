@@ -1,5 +1,15 @@
 import { describe, expect, it } from '@jest/globals'
-import { buildActions, customerSafeBlockers, messageMatchStatus, orderedIntents, quoteSource, type MatchLevels } from '../inbox-proposals'
+import {
+  buildActions,
+  customerSafeBlockers,
+  isFullyDecided,
+  messageMatchStatus,
+  missingFieldsOf,
+  orderedIntents,
+  quoteSource,
+  rebuildActions,
+  type MatchLevels,
+} from '../inbox-proposals'
 import type { InboxExtraction } from '../inbox'
 
 /** ITAD Inbox Ops spec "Validate and propose", "Intents and actions", "Draft reply". */
@@ -137,5 +147,30 @@ describe('inbox proposals', () => {
       { key: 'erasure_failed', count: 1 },
       { key: 'awaiting_certificates', count: 2 },
     ])
+  })
+
+  it('rebuilds actions for the job the operator chose, keeping operator edits and a picked exception (phase 2)', () => {
+    const extraction3 = extraction([
+      { intent: 'pickup_date_change', confidence: 'high', scheduledPickup: { value: { localDateTime: '2026-11-03T13:00', timeZone: null }, quote: '3 November at 13:00' } },
+      { intent: 'exception_clarification', confidence: 'high', serials: [{ value: 'NOT-IN-JOB', quote: 'laptop' }], outcome: { value: 'not_shipped', quote: 'was never shipped' }, reason: { value: 'it stayed on site', quote: 'it stayed on site' } },
+    ])
+    const chosen: MatchLevels = { ...levels, job: { id: 'job-1', status: 'high' } }
+    const rebuilt = rebuildActions(
+      parts,
+      extraction3,
+      chosen,
+      [{ type: 'update_pickup', payload: { scheduledPickupAt: '2026-11-04T09:00' }, fieldSources: { scheduledPickupAt: 'operator' } }],
+      ['ex-2'],
+    )
+    expect(rebuilt[0]).toMatchObject({ payload: { scheduledPickupAt: '2026-11-04T09:00' }, fieldSources: { scheduledPickupAt: 'operator' }, targetVersion: '2026-10-24T08:00:00.000Z' })
+    expect(rebuilt[1]).toMatchObject({ target: { jobId: 'job-1', exceptionId: 'ex-2' }, targetVersion: '2026-10-24T08:00:02.000Z', matchStatus: 'high', missingFields: [] })
+  })
+
+  it('knows the missing values and when every action is decided', () => {
+    expect(missingFieldsOf('update_pickup', { jobId: 'j' }, {})).toEqual(['scheduledPickupAt'])
+    expect(missingFieldsOf('resolve_exception', { jobId: 'j', exceptionId: 'e' }, { outcome: 'not_shipped', reason: 'x' })).toEqual([])
+    expect(isFullyDecided(['executed', 'rejected', 'superseded'])).toBe(true)
+    expect(isFullyDecided(['executed', 'pending'])).toBe(false)
+    expect(isFullyDecided(['superseded'])).toBe(false)
   })
 })
