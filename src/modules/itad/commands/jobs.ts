@@ -41,6 +41,7 @@ export type SerializedJob = {
   status: string
   expectedAssetEstimate: number | null
   scheduledPickupAt: string | null
+  pickupLocation: string | null
   defaultDataBearing: boolean | null
   pickupCoordinatorUserId: string | null
 }
@@ -147,6 +148,7 @@ function currentValues(job: ItadJob): JobFieldValues {
     name: job.name,
     customerReference: job.customerReference ?? null,
     scheduledPickupAt: job.scheduledPickupAt ?? null,
+    pickupLocation: job.pickupLocation ?? null,
     expectedAssetEstimate: job.expectedAssetEstimate ?? null,
     defaultDataBearing: job.defaultDataBearing ?? null,
     pickupCoordinatorUserId: job.pickupCoordinatorUserId ?? null,
@@ -165,6 +167,7 @@ export function serializeJob(job: ItadJob): SerializedJob {
     status: job.status,
     expectedAssetEstimate: job.expectedAssetEstimate ?? null,
     scheduledPickupAt: job.scheduledPickupAt ? job.scheduledPickupAt.toISOString() : null,
+    pickupLocation: job.pickupLocation ?? null,
     defaultDataBearing: job.defaultDataBearing ?? null,
     pickupCoordinatorUserId: job.pickupCoordinatorUserId ?? null,
   }
@@ -234,6 +237,7 @@ const createJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
               status: 'draft',
               expectedAssetEstimate: parsed.expectedAssetEstimate ?? null,
               scheduledPickupAt: toDateOrNull(parsed.scheduledPickupAt),
+              pickupLocation: parsed.pickupLocation ?? null,
               defaultDataBearing: parsed.defaultDataBearing ?? null,
               pickupCoordinatorUserId: parsed.pickupCoordinatorUserId ?? null,
               createdAt,
@@ -297,6 +301,7 @@ const updateJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
     if (parsed.customerReference !== undefined) changes.customerReference = parsed.customerReference
     if (parsed.expectedAssetEstimate !== undefined) changes.expectedAssetEstimate = parsed.expectedAssetEstimate
     if (parsed.scheduledPickupAt !== undefined) changes.scheduledPickupAt = toDateOrNull(parsed.scheduledPickupAt)
+    if (parsed.pickupLocation !== undefined) changes.pickupLocation = parsed.pickupLocation
     if (parsed.defaultDataBearing !== undefined) changes.defaultDataBearing = parsed.defaultDataBearing
     if (parsed.pickupCoordinatorUserId !== undefined) changes.pickupCoordinatorUserId = parsed.pickupCoordinatorUserId
 
@@ -324,6 +329,7 @@ const updateJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
             if (changes.customerReference !== undefined) job.customerReference = changes.customerReference
             if (changes.expectedAssetEstimate !== undefined) job.expectedAssetEstimate = changes.expectedAssetEstimate
             if (changes.scheduledPickupAt !== undefined) job.scheduledPickupAt = changes.scheduledPickupAt
+            if (changes.pickupLocation !== undefined) job.pickupLocation = changes.pickupLocation
             if (changes.defaultDataBearing !== undefined) job.defaultDataBearing = changes.defaultDataBearing
             if (changes.pickupCoordinatorUserId !== undefined) job.pickupCoordinatorUserId = changes.pickupCoordinatorUserId
           },
@@ -353,6 +359,7 @@ const updateJobCommand: CommandHandler<Record<string, unknown>, ItadJob> = {
         'customerReference',
         'expectedAssetEstimate',
         'scheduledPickupAt',
+        'pickupLocation',
         'defaultDataBearing',
       ]),
       snapshotBefore: before,

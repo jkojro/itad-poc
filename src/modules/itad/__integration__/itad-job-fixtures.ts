@@ -16,6 +16,7 @@ export type JobListItem = {
   internalReference: string
   customerReference: string | null
   name: string
+  customerId?: string
   customerName: string | null
   status: string
   statusBeforeHold?: string | null
@@ -25,6 +26,7 @@ export type JobListItem = {
   completedAt?: string | null
   scheduledPickupAt?: string | null
   expectedAssetEstimate?: number | null
+  pickupLocation?: string | null
   updatedAt: string | null
   editableFields?: string[]
   pickupCoordinatorUserId?: string | null

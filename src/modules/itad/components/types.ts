@@ -29,6 +29,7 @@ export type ItadJobListItem = {
   /** Derived: OPEN exceptions of the job (exceptions spec). */
   openExceptionCount: number
   scheduledPickupAt: string | null
+  pickupLocation: string | null
   /** Applied to later scans when the manifest gives no value; `null` = no default. */
   defaultDataBearing: boolean | null
   startedAt: string | null

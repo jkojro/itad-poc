@@ -59,6 +59,7 @@ export type JobFormValues = {
   customerReference: string
   expectedAssetEstimate: number | string | null
   scheduledPickupAt: string | null
+  pickupLocation: string
   defaultDataBearing: DataBearingChoice
   /** `''` = no coordinator. */
   pickupCoordinatorUserId: string
@@ -73,6 +74,7 @@ type JobPayload = {
   customerReference: string | null
   expectedAssetEstimate: number | null
   scheduledPickupAt: string | null
+  pickupLocation: string | null
   defaultDataBearing: boolean | null
   pickupCoordinatorUserId: string | null
 }
@@ -96,12 +98,14 @@ export function fromDataBearingChoice(value: unknown): boolean | null {
 export function toJobPayload(values: Partial<JobFormValues>): JobPayload {
   const estimate = values.expectedAssetEstimate
   const reference = typeof values.customerReference === 'string' ? values.customerReference.trim() : ''
+  const location = typeof values.pickupLocation === 'string' ? values.pickupLocation.trim() : ''
   return {
     customerId: String(values.customerId ?? ''),
     name: String(values.name ?? '').trim(),
     customerReference: reference.length ? reference : null,
     expectedAssetEstimate: estimate === '' || estimate == null ? null : Number(estimate),
     scheduledPickupAt: typeof values.scheduledPickupAt === 'string' && values.scheduledPickupAt ? values.scheduledPickupAt : null,
+    pickupLocation: location.length ? location : null,
     defaultDataBearing: fromDataBearingChoice(values.defaultDataBearing),
     pickupCoordinatorUserId:
       typeof values.pickupCoordinatorUserId === 'string' && values.pickupCoordinatorUserId ? values.pickupCoordinatorUserId : null,
@@ -116,6 +120,7 @@ export function toJobFormValues(item: ItadJobListItem): JobFormValues {
     customerReference: item.customerReference ?? '',
     expectedAssetEstimate: item.expectedAssetEstimate,
     scheduledPickupAt: item.scheduledPickupAt,
+    pickupLocation: item.pickupLocation ?? '',
     defaultDataBearing: toDataBearingChoice(item.defaultDataBearing),
     pickupCoordinatorUserId: item.pickupCoordinatorUserId ?? '',
     updatedAt: item.updatedAt,
@@ -214,6 +219,14 @@ function useJobFields(
         type: 'datetime',
         readOnly: locked('scheduledPickupAt'),
         description: t('itad.jobs.form.fields.scheduledPickupAt.hint', 'Planned pickup / handover of the equipment. Required to schedule the job.'),
+      },
+      {
+        id: 'pickupLocation',
+        label: t('itad.jobs.form.fields.pickupLocation', 'Pickup location'),
+        type: 'text',
+        maxLength: 500,
+        readOnly: locked('pickupLocation'),
+        description: t('itad.jobs.form.fields.pickupLocation.hint', 'Address or site where the equipment is collected.'),
       },
       {
         id: 'pickupCoordinatorUserId',
@@ -318,7 +331,7 @@ function useJobGroups(t: Translate, summary: CrudFormGroup | null): CrudFormGrou
         id: 'planning',
         title: t('itad.jobs.form.groups.planning', 'Planning'),
         column: 1,
-        fields: ['scheduledPickupAt', 'pickupCoordinatorUserId', 'expectedAssetEstimate', 'defaultDataBearing'],
+        fields: ['scheduledPickupAt', 'pickupLocation', 'pickupCoordinatorUserId', 'expectedAssetEstimate', 'defaultDataBearing'],
       },
     ]
     if (summary) groups.push(summary)
@@ -340,6 +353,7 @@ export function JobCreateForm() {
       customerReference: '',
       expectedAssetEstimate: null,
       scheduledPickupAt: null,
+      pickupLocation: '',
       defaultDataBearing: 'unknown',
       pickupCoordinatorUserId: '',
     }),
@@ -473,7 +487,7 @@ export function JobDetailForm({ id }: { id: string }) {
   const terminal = job?.status === 'completed' || job?.status === 'cancelled'
   const initialValues: JobFormValues = job
     ? toJobFormValues(job)
-    : { id, customerId: '', name: '', customerReference: '', expectedAssetEstimate: null, scheduledPickupAt: null, defaultDataBearing: 'unknown', pickupCoordinatorUserId: '', updatedAt: null }
+    : { id, customerId: '', name: '', customerReference: '', expectedAssetEstimate: null, scheduledPickupAt: null, pickupLocation: '', defaultDataBearing: 'unknown', pickupCoordinatorUserId: '', updatedAt: null }
 
   const overview = (
     <div className="space-y-6">

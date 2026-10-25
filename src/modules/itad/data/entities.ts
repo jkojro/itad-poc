@@ -111,6 +111,10 @@ export class ItadJob {
   @Property({ name: 'scheduled_pickup_at', type: Date, nullable: true })
   scheduledPickupAt?: Date | null
 
+  /** Where the equipment is picked up (Inbox Ops spec Q3); free text, editable with the pickup. */
+  @Property({ name: 'pickup_location', type: 'text', nullable: true })
+  pickupLocation?: string | null
+
   /** Organization user responsible for the pickup (`auth:user` id); owner of the calendar task. */
   @Property({ name: 'pickup_coordinator_user_id', type: 'uuid', nullable: true })
   pickupCoordinatorUserId?: string | null

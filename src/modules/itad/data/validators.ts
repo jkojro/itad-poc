@@ -49,6 +49,9 @@ const expectedAssetEstimateSchema = z.preprocess(
 /** Tri-state; an empty form value means "no default". */
 const defaultDataBearingSchema = z.preprocess((value) => (value === '' ? null : value), z.boolean().nullable())
 
+/** Free-text pickup location (Inbox Ops spec Q3). */
+const pickupLocationSchema = z.preprocess(emptyToNull, z.string().trim().min(1).max(500).nullable())
+
 const scheduledPickupAtSchema = z.preprocess(
   emptyToNull,
   z
@@ -66,6 +69,7 @@ export const itadJobCreateSchema = z.object({
   customerReference: customerReferenceSchema.optional(),
   expectedAssetEstimate: expectedAssetEstimateSchema.optional(),
   scheduledPickupAt: scheduledPickupAtSchema.optional(),
+  pickupLocation: pickupLocationSchema.optional(),
   defaultDataBearing: defaultDataBearingSchema.optional(),
   pickupCoordinatorUserId: pickupCoordinatorUserIdSchema.optional(),
 })
@@ -77,6 +81,7 @@ export const itadJobUpdateSchema = z.object({
   customerReference: customerReferenceSchema.optional(),
   expectedAssetEstimate: expectedAssetEstimateSchema.optional(),
   scheduledPickupAt: scheduledPickupAtSchema.optional(),
+  pickupLocation: pickupLocationSchema.optional(),
   defaultDataBearing: defaultDataBearingSchema.optional(),
   pickupCoordinatorUserId: pickupCoordinatorUserIdSchema.optional(),
 })
@@ -459,5 +464,7 @@ export const itadInboxRecordDecisionSchema = z.object({
   recordId: z.string().uuid().nullable().optional(),
   commandId: z.string().max(120).nullable().optional(),
   error: z.object({ code: z.string().max(120), message: z.string().max(1000) }).nullable().optional(),
+  /** A job created from the email (I1): the message is linked to it. */
+  linkJobId: z.string().uuid().nullable().optional(),
 })
 export type ItadInboxRecordDecisionInput = z.infer<typeof itadInboxRecordDecisionSchema>

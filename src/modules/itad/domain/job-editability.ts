@@ -5,6 +5,7 @@ export const ITAD_JOB_EDITABLE_FIELDS = [
   'name',
   'customerReference',
   'scheduledPickupAt',
+  'pickupLocation',
   'expectedAssetEstimate',
   'defaultDataBearing',
   'pickupCoordinatorUserId',
@@ -29,12 +30,13 @@ const EDITABLE_BY_STATUS: Record<OperationalStatus, readonly ItadJobEditableFiel
     'name',
     'customerReference',
     'scheduledPickupAt',
+    'pickupLocation',
     'expectedAssetEstimate',
     'defaultDataBearing',
     'pickupCoordinatorUserId',
   ],
   // The coordinator owns the pickup task, which exists only while the job is scheduled (pickup calendar spec).
-  scheduled: ['name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing', 'pickupCoordinatorUserId'],
+  scheduled: ['name', 'customerReference', 'scheduledPickupAt', 'pickupLocation', 'expectedAssetEstimate', 'defaultDataBearing', 'pickupCoordinatorUserId'],
   in_transit: ['name', 'customerReference', 'expectedAssetEstimate', 'defaultDataBearing'],
   // The default applies to later scans only, so it is useful until receiving ends (sanitization spec Q11).
   receiving: ['name', 'customerReference', 'defaultDataBearing'],
@@ -44,8 +46,8 @@ const EDITABLE_BY_STATUS: Record<OperationalStatus, readonly ItadJobEditableFiel
 
 /** `scheduledPickupAt` may be cleared only while the job is still a draft. */
 const CLEARABLE_BY_STATUS: Partial<Record<OperationalStatus, readonly ItadJobEditableField[]>> = {
-  draft: ['customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing', 'pickupCoordinatorUserId'],
-  scheduled: ['customerReference', 'expectedAssetEstimate', 'defaultDataBearing', 'pickupCoordinatorUserId'],
+  draft: ['customerReference', 'scheduledPickupAt', 'pickupLocation', 'expectedAssetEstimate', 'defaultDataBearing', 'pickupCoordinatorUserId'],
+  scheduled: ['customerReference', 'pickupLocation', 'expectedAssetEstimate', 'defaultDataBearing', 'pickupCoordinatorUserId'],
   in_transit: ['customerReference', 'expectedAssetEstimate', 'defaultDataBearing'],
   receiving: ['customerReference', 'defaultDataBearing'],
   processing: ['customerReference'],
@@ -78,6 +80,7 @@ export type JobFieldValues = {
   name: string
   customerReference: string | null
   scheduledPickupAt: Date | null
+  pickupLocation: string | null
   expectedAssetEstimate: number | null
   defaultDataBearing: boolean | null
   pickupCoordinatorUserId: string | null

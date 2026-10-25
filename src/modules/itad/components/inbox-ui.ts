@@ -59,6 +59,9 @@ export const FIELD_LABELS: Record<string, string> = {
   pickupLocation: 'Pickup location',
   outcome: 'Outcome',
   reason: 'Reason',
+  customerId: 'Customer',
+  jobId: 'Job',
+  exceptionId: 'Exception',
 }
 
 export type Hidden = { hidden: true }
