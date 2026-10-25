@@ -12,6 +12,8 @@ import { ItadException, ItadInboxAction, ItadInboxMessage, ItadJob } from '../da
 import type { ItadInboxRecordDecisionInput } from '../data/validators'
 import type { ItadExceptionType } from '../domain/exceptions'
 import { reschedulePickupEligibility, resolveExceptionEligibility, resolvePickupInstant, type WriteEligibility } from '../lib/ai-write-rules'
+import type { QueryEngine } from '@open-mercato/shared/lib/query/types'
+import { isCompanyInScope } from '../module-integrations/customers'
 import { runGuardedCommand } from '../lib/command-route'
 import { resolveTrustedRecordRoute, type ItadRouteContext } from '../lib/route-context'
 
@@ -31,6 +33,7 @@ import { resolveTrustedRecordRoute, type ItadRouteContext } from '../lib/route-c
 const logger = createLogger('itad').child({ component: 'inbox-decisions' })
 
 const COMMAND_FEATURES = {
+  create_job: { manage: 'itad.jobs.manage', view: 'itad.jobs.view', commandId: 'itad.jobs.create' },
   update_pickup: { manage: 'itad.jobs.manage', view: 'itad.jobs.view', commandId: 'itad.jobs.update' },
   resolve_exception: { manage: 'itad.exceptions.manage', view: 'itad.exceptions.view', commandId: 'itad.exceptions.resolve' },
 } as const
@@ -78,7 +81,6 @@ export async function acceptInboxAction(
   // 1. The action as the operator saw it.
   enforceCommandOptimisticLock({ resourceKind: ITAD_INBOX_ACTION_RESOURCE_KIND, resourceId: action.id, current: action.updatedAt, request })
   if (action.status !== 'pending') return fail(409, 'already_decided', 'This action was already decided')
-  if (action.type === 'create_job') return fail(409, 'action_not_available', 'Creating a job from an email comes in a later release; create it from the jobs page')
   if (action.missingFields.length > 0) return fail(400, 'missing_fields', 'Fill in the missing values before accepting')
   const spec = COMMAND_FEATURES[action.type]
   // The decision is recorded in the action's organization, whatever organization the request selected.
@@ -93,6 +95,8 @@ export async function acceptInboxAction(
   // 2. Features in the record's organization: the command's and the target's view.
   const rbac = route.container.resolve<RbacService>('rbacService')
   if (!(await rbac.userHasAllFeatures(route.userId, [spec.manage, spec.view], scope))) return fail(403, 'forbidden', 'You are not allowed to make this change')
+
+  if (action.type === 'create_job') return acceptCreateJob(route, decisionRoute, action, message, input, scope)
 
   // 3. The target, its version and eligibility now.
   const job = await em.findOne(ItadJob, { id: action.target.jobId, ...scope, deletedAt: null } as never)
@@ -173,6 +177,72 @@ export async function acceptInboxAction(
   }
   await recordDecision(decisionRoute, { actionId: action.id, outcome: 'executed', recordId: resourceId, commandId: spec.commandId })
   return { actionId: action.id, status: 'executed', recordId: resourceId, error: null }
+}
+
+/**
+ * I1: a new job from the email (Inbox Ops spec, phase 3). The customer must be a company
+ * of the record's organization; a pickup time, when given, must be in the future. There is
+ * no target version — the job does not exist yet. Problems the operator can fix in Edit
+ * (a customer reference already used, a past time) leave the action pending.
+ */
+async function acceptCreateJob(
+  route: ItadRouteContext,
+  decisionRoute: ItadRouteContext,
+  action: ItadInboxAction,
+  message: ItadInboxMessage,
+  input: { timeZone?: string },
+  scope: { tenantId: string; organizationId: string },
+): Promise<AcceptResult | { response: Response }> {
+  const customerId = action.target.customerId!
+  if (!(await isCompanyInScope(route.container.resolve<QueryEngine>('queryEngine'), scope, customerId))) {
+    return fail(404, 'customer_not_found', 'Customer not found')
+  }
+  const payload = action.payload
+  let scheduledPickupAt: string | null = null
+  if (typeof payload.scheduledPickupAt === 'string' && payload.scheduledPickupAt) {
+    const zone = (typeof payload.timeZone === 'string' && payload.timeZone) || input.timeZone
+    const instant = resolvePickupInstant(payload.scheduledPickupAt, zone ?? undefined)
+    if (!instant.ok) return fail(400, instant.code, await writeMessage(instant.code))
+    if (instant.at.getTime() <= Date.now()) return fail(400, 'time_in_past', await writeMessage('time_in_past'))
+    scheduledPickupAt = instant.at.toISOString()
+  }
+  const commandInput: Record<string, unknown> = {
+    customerId,
+    name: String(payload.name),
+    ...(payload.customerReference ? { customerReference: String(payload.customerReference) } : {}),
+    ...(typeof payload.expectedAssetEstimate === 'number' ? { expectedAssetEstimate: payload.expectedAssetEstimate } : {}),
+    ...(scheduledPickupAt ? { scheduledPickupAt } : {}),
+    ...(payload.pickupLocation ? { pickupLocation: String(payload.pickupLocation) } : {}),
+  }
+  const context: ItadAiAuditContext = {
+    source: 'ai',
+    channel: 'email',
+    actionId: action.id,
+    toolName: 'inbox.create_job',
+    origin: { type: 'email', ...(message.messageId ? { messageId: message.messageId } : {}) },
+    proposalId: message.id,
+  }
+  // A create has no target version to stop a second click: claim the action atomically first
+  // (still pending and unchanged since the operator saw it), so two concurrent Accepts create
+  // one job. A failed command leaves it pending; the operator reloads it to retry.
+  const claimed = await route.container
+    .resolve<EntityManager>('em')
+    .fork()
+    .nativeUpdate(ItadInboxAction, { id: action.id, ...scope, status: 'pending', updatedAt: action.updatedAt } as never, { updatedAt: new Date() } as never)
+  if (claimed !== 1) return fail(409, 'already_decided', 'This action was already decided')
+  // A job create runs in the record's organization as the operator.
+  const outcome = await runGuardedCommand<Record<string, unknown>, { id: string }>(decisionRoute, decisionRoute.ctx.request as Request, {
+    commandId: 'itad.jobs.create',
+    input: commandInput,
+    resourceKind: 'itad.job',
+    resourceId: 'new',
+    operation: 'create',
+    metadata: { context },
+  })
+  if (!outcome.ok) return { response: outcome.response }
+  const jobId = String(outcome.result.id)
+  await recordDecision(decisionRoute, { actionId: action.id, outcome: 'executed', recordId: jobId, commandId: 'itad.jobs.create', linkJobId: jobId })
+  return { actionId: action.id, status: 'executed', recordId: jobId, error: null }
 }
 
 async function recordDecision(route: ItadRouteContext, input: ItadInboxRecordDecisionInput): Promise<void> {

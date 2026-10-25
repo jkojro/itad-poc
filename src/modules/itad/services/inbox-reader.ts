@@ -138,7 +138,8 @@ export async function readInboxMessage(route: ItadRouteContext, id: string) {
   )
 
   const match = message.match
-  const jobIds = Array.from(new Set([...(match?.jobs ?? []).map((candidate) => candidate.id), ...actions.map((action) => action.target.jobId).filter(Boolean)])) as string[]
+  // The matched job may be one no candidate named (created by an accepted I1 action).
+  const jobIds = Array.from(new Set([...(match?.jobId ? [match.jobId] : []), ...(match?.jobs ?? []).map((candidate) => candidate.id), ...actions.map((action) => action.target.jobId).filter(Boolean)])) as string[]
   const jobs = jobIds.length ? await em.find(ItadJob, { id: { $in: jobIds }, ...scope } as never) : []
   const exceptionIds = actions.map((action) => action.target.exceptionId).filter((value): value is string => Boolean(value))
   const exceptions = exceptionIds.length ? await em.find(ItadException, { id: { $in: exceptionIds }, ...scope } as never) : []
@@ -182,6 +183,9 @@ export async function readInboxMessage(route: ItadRouteContext, id: string) {
     stalled: isStalled(message.status, message.processingStartedAt ?? null, now),
     generation: message.generation,
     receivedAt: message.receivedAt.toISOString(),
+    inboxEmailId: message.inboxEmailId ?? null,
+    messageId: message.messageId ?? null,
+    inReplyTo: message.inReplyTo ?? null,
     from: { address: message.fromAddress, name: message.fromName ?? null },
     customerSender: { address: message.customerAddress, name: message.customerName ?? null },
     forwardedByOrganizationUser: Boolean(message.forwardedByUserId),
@@ -234,5 +238,45 @@ export async function readInboxMessage(route: ItadRouteContext, id: string) {
       }
     }),
     updatedAt: message.updatedAt.toISOString(),
+  }
+}
+
+export type InboxStats = {
+  days: number
+  messages: number
+  failedProcessing: number
+  actions: { proposed: number; executed: number; rejected: number; failed: number; pending: number; editedBeforeDecision: number }
+}
+
+const STATS_DAYS = 30
+
+/**
+ * Observability of Inbox Ops (PDF §5, spec phase 3): proposals, decisions, processing
+ * failures and operator corrections — an action whose approved fields differ from what the
+ * AI proposed — over the last 30 days in the readable organizations. Computed on read.
+ */
+export async function inboxStats(route: ItadRouteContext): Promise<InboxStats> {
+  const em = route.container.resolve<EntityManager>('em').fork()
+  const since = new Date(Date.now() - STATS_DAYS * 86_400_000)
+  const where = { ...scopeWhere(route), receivedAt: { $gte: since } }
+  const messages = await em.find(ItadInboxMessage, where as never, { fields: ['id', 'status'] as never })
+  const ids = messages.map((message) => message.id)
+  const actions = ids.length
+    ? await findWithDecryption(em, ItadInboxAction, { message: { $in: ids }, status: { $ne: 'superseded' } } as never, {}, { tenantId: route.tenantId })
+    : []
+  const count = (status: string) => actions.filter((action) => action.status === status).length
+  const edited = actions.filter((action) => JSON.stringify(action.payload) !== JSON.stringify(action.originalPayload)).length
+  return {
+    days: STATS_DAYS,
+    messages: messages.length,
+    failedProcessing: messages.filter((message) => message.status === 'failed').length,
+    actions: {
+      proposed: actions.length,
+      executed: count('executed'),
+      rejected: count('rejected'),
+      failed: count('failed'),
+      pending: count('pending'),
+      editedBeforeDecision: edited,
+    },
   }
 }

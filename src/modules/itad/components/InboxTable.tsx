@@ -104,6 +104,39 @@ function InboundAddress() {
   )
 }
 
+type InboxStats = { days: number; messages: number; failedProcessing: number; actions: { proposed: number; executed: number; rejected: number; failed: number; pending: number; editedBeforeDecision: number } }
+
+/** PDF §5 observability: what the Inbox did in the last 30 days, including operator corrections. */
+function InboxStatsLine() {
+  const t = useT()
+  const { data } = useQuery<InboxStats | null>({
+    queryKey: ['itad-inbox-stats'],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const call = await apiCall<InboxStats>('/api/itad/inbox/stats')
+      return call.ok ? call.result ?? null : null
+    },
+  })
+  if (!data || data.messages === 0) return null
+  return (
+    <p className="text-xs text-muted-foreground" data-testid="itad-inbox-stats">
+      {t(
+        'itad.inbox.stats',
+        'Last {days} days: {messages} emails · {proposed} actions proposed · {executed} accepted · {rejected} rejected · {edited} corrected before the decision · {failed} failed processing',
+        {
+          days: data.days,
+          messages: data.messages,
+          proposed: data.actions.proposed,
+          executed: data.actions.executed,
+          rejected: data.actions.rejected,
+          edited: data.actions.editedBeforeDecision,
+          failed: data.failedProcessing,
+        },
+      )}
+    </p>
+  )
+}
+
 function ImportDialog({ open, onClose, onImported }: { open: boolean; onClose: () => void; onImported: (id: string) => void }) {
   const t = useT()
   const [fromAddress, setFromAddress] = React.useState('')
@@ -281,6 +314,7 @@ export default function InboxTable() {
   return (
     <div className="space-y-3">
       <InboundAddress />
+      <InboxStatsLine />
       <DataTable<InboxRow>
         title={t('itad.inbox.title', 'Inbox')}
         titleHeadingLevel={1}

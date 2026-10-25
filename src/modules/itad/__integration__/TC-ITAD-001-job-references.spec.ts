@@ -49,6 +49,7 @@ test.describe('TC-ITAD-001: ITAD job create issues consecutive references', () =
         'name',
         'customerReference',
         'scheduledPickupAt',
+        'pickupLocation',
         'expectedAssetEstimate',
         'defaultDataBearing',
         'pickupCoordinatorUserId',

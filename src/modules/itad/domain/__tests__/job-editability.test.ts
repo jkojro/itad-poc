@@ -14,6 +14,7 @@ const current: JobFieldValues = {
   name: 'Bank refresh',
   customerReference: 'NB-RET-1042',
   scheduledPickupAt: pickup,
+  pickupLocation: null,
   expectedAssetEstimate: 500,
   defaultDataBearing: null,
   pickupCoordinatorUserId: null,
@@ -23,8 +24,8 @@ const job = (status: ItadJobStatus, statusBeforeHold: ItadJobStatus | null = nul
 
 describe('getEditableFields (spec: Field editability by status)', () => {
   it.each([
-    ['draft', ['customerId', 'name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing', 'pickupCoordinatorUserId']],
-    ['scheduled', ['name', 'customerReference', 'scheduledPickupAt', 'expectedAssetEstimate', 'defaultDataBearing', 'pickupCoordinatorUserId']],
+    ['draft', ['customerId', 'name', 'customerReference', 'scheduledPickupAt', 'pickupLocation', 'expectedAssetEstimate', 'defaultDataBearing', 'pickupCoordinatorUserId']],
+    ['scheduled', ['name', 'customerReference', 'scheduledPickupAt', 'pickupLocation', 'expectedAssetEstimate', 'defaultDataBearing', 'pickupCoordinatorUserId']],
     ['in_transit', ['name', 'customerReference', 'expectedAssetEstimate', 'defaultDataBearing']],
     ['receiving', ['name', 'customerReference', 'defaultDataBearing']],
     ['processing', ['name', 'customerReference']],
@@ -60,6 +61,12 @@ describe('findEditabilityViolation', () => {
       field: 'defaultDataBearing',
       reason: 'locked',
     })
+  })
+
+  it('edits and clears the pickup location with the pickup, locked once in transit (Inbox Ops Q3)', () => {
+    expect(findEditabilityViolation(job('scheduled'), current, { pickupLocation: 'Main St 5, Warsaw' })).toBeNull()
+    expect(findEditabilityViolation(job('scheduled'), { ...current, pickupLocation: 'Main St 5' }, { pickupLocation: null })).toBeNull()
+    expect(findEditabilityViolation(job('in_transit'), current, { pickupLocation: 'Elsewhere' })).toMatchObject({ field: 'pickupLocation' })
   })
 
   it('locks customerId after draft', () => {

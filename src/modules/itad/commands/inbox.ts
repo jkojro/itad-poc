@@ -303,6 +303,10 @@ const recordDecisionCommand: CommandHandler<ItadInboxRecordDecisionInput, Action
       ...(input.commandId ? { commandId: input.commandId } : {}),
       ...(input.error ? { error: input.error } : {}),
     }
+    if (input.linkJobId && message.match) {
+      message.jobId = input.linkJobId
+      message.match = { ...message.match, jobId: input.linkJobId, jobStatus: 'high' }
+    }
     await em.flush()
     await closeIfDecided(em, message)
     await em.flush()

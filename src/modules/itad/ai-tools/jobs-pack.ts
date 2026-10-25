@@ -197,7 +197,8 @@ const getJobSummaryTool: AiToolDefinition = defineItadTool({
       status: job.status,
       statusBeforeHold: job.statusBeforeHold,
       scheduledPickupAt: job.scheduledPickupAt,
-      ...untrusted({ holdReason: job.holdReason }),
+      // The pickup location may come from a customer email (Inbox Ops I1): untrusted text.
+      ...untrusted({ holdReason: job.holdReason, pickupLocation: job.pickupLocation }),
       counters: overview.counters,
       severity: overview.severity,
       signals: overview.signals.map((signal) => ({ signal: signal.key, severity: signal.severity, count: signal.count, link: signal.href })),

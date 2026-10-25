@@ -46,6 +46,7 @@ const held_by_user_id = 'held_by_user_id'
 const hold_reason = 'hold_reason'
 const expected_asset_estimate = 'expected_asset_estimate'
 const scheduled_pickup_at = 'scheduled_pickup_at'
+const pickup_location = 'pickup_location'
 const default_data_bearing = 'default_data_bearing'
 const pickup_coordinator_user_id = 'pickup_coordinator_user_id'
 const started_at = 'started_at'
@@ -70,6 +71,7 @@ type JobRow = {
   hold_reason: string | null
   expected_asset_estimate: number | string | null
   scheduled_pickup_at: Date | string | null
+  pickup_location?: string | null
   default_data_bearing: boolean | null
   pickup_coordinator_user_id: string | null
   started_at: Date | string | null
@@ -192,6 +194,7 @@ export const { metadata, GET, POST, PUT, DELETE } = makeCrudRoute({
       hold_reason,
       expected_asset_estimate,
       scheduled_pickup_at,
+      pickup_location,
       default_data_bearing,
       pickup_coordinator_user_id,
       started_at,
@@ -248,6 +251,7 @@ export const { metadata, GET, POST, PUT, DELETE } = makeCrudRoute({
       sanitizationPendingCount: 0,
       openExceptionCount: 0,
       scheduledPickupAt: toIso(item.scheduled_pickup_at),
+      pickupLocation: item.pickup_location ?? null,
       defaultDataBearing: typeof item.default_data_bearing === 'boolean' ? item.default_data_bearing : null,
       pickupCoordinatorUserId: item.pickup_coordinator_user_id ?? null,
       startedAt: toIso(item.started_at),
@@ -307,6 +311,7 @@ const itadJobListItemSchema = z.object({
   sanitizationPendingCount: z.number().int(),
   openExceptionCount: z.number().int(),
   scheduledPickupAt: z.string().nullable(),
+  pickupLocation: z.string().nullable(),
   defaultDataBearing: z.boolean().nullable(),
   startedAt: z.string().nullable(),
   completedAt: z.string().nullable(),

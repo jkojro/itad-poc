@@ -4551,6 +4551,23 @@
           "enumItems": [],
           "mappedType": "uuid"
         },
+        "pickup_location": {
+          "name": "pickup_location",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
         "scheduled_pickup_at": {
           "name": "scheduled_pickup_at",
           "type": "timestamptz(6)",

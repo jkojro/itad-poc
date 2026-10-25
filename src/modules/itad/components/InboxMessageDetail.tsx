@@ -275,7 +275,7 @@ function ActionCard({ action, canManage, onChanged }: { action: ActionView; canM
     (action.type === 'create_job' && !action.target.customer) ||
     (action.type !== 'create_job' && !action.target.job) ||
     (action.type === 'resolve_exception' && !action.target.exception)
-  const acceptBlocked = action.type === 'create_job' || action.missingFields.length > 0 || targetIncomplete
+  const acceptBlocked = action.missingFields.length > 0 || targetIncomplete
 
   const run = async (path: string, body: unknown) => {
     setBusy(true)
@@ -348,6 +348,14 @@ function ActionCard({ action, canManage, onChanged }: { action: ActionView; canM
           })}
         </p>
       ) : null}
+      {action.status === 'executed' && action.type === 'create_job' && action.result?.recordId ? (
+        <p className="mt-2 text-sm">
+          {t('itad.inbox.jobCreated', 'Job created:')}{' '}
+          <Link className="underline" href={`/backend/itad/jobs/${action.result.recordId}`}>
+            {t('itad.inbox.openJob', 'open the job')}
+          </Link>
+        </p>
+      ) : null}
       {action.status === 'executed' && action.target.job && !isHidden(action.target.job) ? (
         <p className="mt-2 text-sm">
           {t('itad.inbox.executed', 'Done in')} <JobLink job={action.target.job} />
@@ -399,10 +407,12 @@ function ActionCard({ action, canManage, onChanged }: { action: ActionView; canM
           <Button type="button" size="sm" variant="outline" onClick={() => setMode('reject')} disabled={busy} data-testid="itad-inbox-reject">
             {t('itad.inbox.reject', 'Reject')}
           </Button>
-          {action.type === 'create_job' ? (
-            <span className="text-xs text-muted-foreground">{t('itad.inbox.createJobLater', 'Creating a job from an email comes in a later release.')}</span>
-          ) : targetIncomplete ? (
-            <span className="text-xs text-muted-foreground">{t('itad.inbox.chooseTarget', 'Choose the job or exception in Match first.')}</span>
+          {targetIncomplete ? (
+            <span className="text-xs text-muted-foreground">
+              {action.type === 'create_job'
+                ? t('itad.inbox.chooseCustomer', 'Choose the customer in Match first.')
+                : t('itad.inbox.chooseTarget', 'Choose the job or exception in Match first.')}
+            </span>
           ) : null}
         </div>
       ) : null}
@@ -420,6 +430,27 @@ function MatchEditor({ data, onDone, onCancel }: { data: MessageDetail; onDone: 
   const t = useT()
   const currentJob = data.match?.job && !isHidden(data.match.job) ? data.match.job : null
   const [jobId, setJobId] = React.useState<string>(currentJob?.id ?? '')
+  const needsCustomer = data.actions.some((action) => action.type === 'create_job' && action.status === 'pending')
+  const needsJob = data.actions.some((action) => action.type !== 'create_job' && action.status === 'pending')
+  const currentCustomer = data.match?.customer && !isHidden(data.match.customer) ? data.match.customer : null
+  const [customerId, setCustomerId] = React.useState<string>(currentCustomer?.id ?? '')
+  const [customerSearch, setCustomerSearch] = React.useState('')
+  const customers = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['itad-inbox-customer-search', customerSearch],
+    enabled: needsCustomer && customerSearch.trim().length >= 2,
+    queryFn: async () => {
+      const result = await readApiResultOrThrow<{ items?: Array<{ id?: unknown; display_name?: unknown }> }>(
+        `/api/customers/companies?search=${encodeURIComponent(customerSearch.trim())}&pageSize=20`,
+      )
+      return (result.items ?? []).flatMap((item) =>
+        typeof item.id === 'string' && typeof item.display_name === 'string' ? [{ id: item.id, name: item.display_name }] : [],
+      )
+    },
+  })
+  const customerOptions = [
+    ...(currentCustomer ? [{ id: currentCustomer.id, name: currentCustomer.name ?? currentCustomer.id }] : []),
+    ...(customers.data ?? []).filter((customer) => customer.id !== currentCustomer?.id),
+  ]
   const [search, setSearch] = React.useState('')
   const [exceptions, setExceptions] = React.useState<Record<string, string>>({})
   const [saving, setSaving] = React.useState(false)
@@ -456,7 +487,8 @@ function MatchEditor({ data, onDone, onCancel }: { data: MessageDetail; onDone: 
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            jobId: jobId || null,
+            // Without actions that need a job (I1 only), the chosen customer decides: no job.
+            ...(needsJob ? { jobId: jobId || null } : { jobId: null, customerId: customerId || null }),
             actionTargets: Object.entries(exceptions)
               .filter(([, exceptionId]) => Boolean(exceptionId))
               .map(([actionId, exceptionId]) => ({ actionId, exceptionId })),
@@ -475,6 +507,26 @@ function MatchEditor({ data, onDone, onCancel }: { data: MessageDetail; onDone: 
 
   return (
     <div className="mt-3 space-y-3 rounded-md border bg-muted/20 p-3" data-testid="itad-inbox-match-editor">
+      {needsCustomer ? (
+        <>
+          <FormField label={t('itad.inbox.match.findCustomer', 'Find the customer')}>
+            <Input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} />
+          </FormField>
+          <FormField label={t('itad.inbox.target.customer', 'Customer')}>
+            <Select value={customerId || undefined} onValueChange={setCustomerId}>
+              <SelectTrigger aria-label={t('itad.inbox.target.customer', 'Customer')}>
+                <SelectValue placeholder={t('itad.inbox.field.choose', 'Choose')} />
+              </SelectTrigger>
+              <SelectContent>
+                {customerOptions.map((customer) => (
+                  <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+        </>
+      ) : null}
+      {needsJob ? (<>
       <FormField label={t('itad.inbox.match.findJob', 'Find a job by reference or name')}>
         <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ITAD-2026-…" />
       </FormField>
@@ -510,12 +562,13 @@ function MatchEditor({ data, onDone, onCancel }: { data: MessageDetail; onDone: 
             </FormField>
           ))
         : null}
+      </>) : null}
       <p className="text-xs text-muted-foreground">{t('itad.inbox.match.rebuildHint', 'Saving rebuilds the pending actions for the chosen job; your edits to their fields are kept.')}</p>
       {error ? (
         <Alert status="error"><AlertDescription>{error}</AlertDescription></Alert>
       ) : null}
       <div className="flex gap-2">
-        <Button type="button" size="sm" onClick={() => void save()} disabled={saving || !jobId} data-testid="itad-inbox-match-save">
+        <Button type="button" size="sm" onClick={() => void save()} disabled={saving || (needsJob ? !jobId : !customerId)} data-testid="itad-inbox-match-save">
           {saving ? <Spinner className="mr-2 h-4 w-4" /> : null}
           {t('itad.inbox.action.save', 'Save')}
         </Button>

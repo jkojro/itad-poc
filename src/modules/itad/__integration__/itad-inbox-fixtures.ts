@@ -136,3 +136,30 @@ export const movePickup = (localDateTime: string, quote: string, timeZone: strin
   summary: 'Move the pickup',
   language: 'en',
 })
+
+// ─── Phase 3: new pickup (I1) ─────────────────────────────────────────────────
+
+/** An I1 interpretation; every value is quoted from the email body the test sends. */
+export const newPickup = (input: {
+  name: string
+  reference?: string
+  estimate?: { value: number; quote: string }
+  location?: string
+  pickup?: { localDateTime: string; quote: string; timeZone?: string | null }
+}) => ({
+  intents: [
+    {
+      intent: 'new_pickup',
+      confidence: 'high',
+      suggestedName: input.name,
+      ...(input.reference ? { customerReference: { value: input.reference, quote: input.reference } } : {}),
+      ...(input.estimate ? { expectedAssetEstimate: { value: input.estimate.value, quote: input.estimate.quote } } : {}),
+      ...(input.location ? { pickupLocation: { value: input.location, quote: input.location } } : {}),
+      ...(input.pickup
+        ? { scheduledPickup: { value: { localDateTime: input.pickup.localDateTime, timeZone: input.pickup.timeZone === undefined ? 'Europe/Warsaw' : input.pickup.timeZone }, quote: input.pickup.quote } }
+        : {}),
+    },
+  ],
+  summary: 'New pickup request',
+  language: 'en',
+})
