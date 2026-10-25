@@ -96,6 +96,17 @@ export const features = [
     module: 'itad',
     dependsOn: ['itad.certificates.view'],
   },
+  {
+    id: 'itad.inbox.view',
+    title: 'View customer emails and their ITAD proposals (Inbox)',
+    module: 'itad',
+  },
+  {
+    id: 'itad.inbox.manage',
+    title: 'Import customer emails and decide their ITAD proposals (Inbox)',
+    module: 'itad',
+    dependsOn: ['itad.inbox.view'],
+  },
 ]
 
 export default features

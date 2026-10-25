@@ -1,4 +1,5 @@
 import type { ModuleCli } from '@open-mercato/shared/modules/registry'
+import { getModules } from '@open-mercato/shared/lib/modules/registry'
 import { createRequestContainer } from '@open-mercato/shared/lib/di/container'
 import type { EntityManager } from '@mikro-orm/postgresql'
 import { listAssetIdsForSearch, refreshAssetSearchIndex } from './services/asset-search-index'
@@ -32,6 +33,35 @@ const searchReindexAssets: ModuleCli = {
   },
 }
 
-const itadCli: ModuleCli[] = [searchReindexAssets]
+/**
+ * Gives existing organizations an inbound email address for ITAD Inbox Ops (spec
+ * 2026-10-24-itad-inbox-ops, phase 1 step 1). The installed `inbox_ops` creates its inbox
+ * settings only when a tenant is created; this runs that module's own (idempotent)
+ * `onTenantCreated` hook for an organization that already exists. ITAD never writes
+ * `inbox_ops` tables itself. Organization ids: `yarn mercato auth list-orgs`.
+ */
+const inboxEnsureAddress: ModuleCli = {
+  command: 'inbox-ensure-address',
+  async run(argv) {
+    const tenantId = readArg(argv, 'tenant')
+    const organizationId = readArg(argv, 'org')
+    if (!tenantId || !organizationId) {
+      console.error('Usage: mercato itad inbox-ensure-address --tenant <tenantId> --org <organizationId>')
+      return
+    }
+    const inboxOps = getModules().find((module) => module.id === 'inbox_ops')
+    const hook = inboxOps?.setup?.onTenantCreated
+    if (!hook) {
+      console.error('The inbox_ops module is not enabled; enable it in src/modules.ts first.')
+      return
+    }
+    const container = await createRequestContainer()
+    const em = (container.resolve('em') as EntityManager).fork()
+    await hook({ em, tenantId, organizationId })
+    console.log(`Inbound address ensured for organization ${organizationId} (tenant ${tenantId}); see Settings → Inbox Ops.`)
+  },
+}
+
+const itadCli: ModuleCli[] = [searchReindexAssets, inboxEnsureAddress]
 
 export default itadCli
