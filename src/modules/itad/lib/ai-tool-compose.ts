@@ -129,6 +129,8 @@ export const FORWARD_ACTIONS = ['schedule', 'dispatch', 'start_receiving', 'star
 export type TransitionsResponse = {
   status: ItadJobStatus
   statusBeforeHold: ItadJobStatus | null
+  /** The caller may change the job's status (`itad.jobs.transition`), whatever the gates say. */
+  canTransition: boolean
   actions: Array<{
     id: string
     to: ItadJobStatus
@@ -208,7 +210,9 @@ export function toJobBlockers(input: {
       action: action.id,
       to: action.to,
       ready: action.conditions.every((condition) => condition.state === 'met'),
-      allowedForCaller: action.allowed,
+      // Permission only. The route's `allowed` also folds in unmet gates (it drives the
+      // button), which the model read as "you lack permission" on a merely blocked job.
+      allowedForCaller: input.transitions.canTransition,
       gates: action.conditions.map((condition) => {
         const kind = condition.state === 'met' ? null : blockingKind(condition.key, condition.detailKey)
         const records = kind ? input.records[kind] : undefined

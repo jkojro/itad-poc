@@ -276,7 +276,7 @@ const getJobBlockersTool: AiToolDefinition = defineItadTool({
   name: 'itad.get_job_blockers',
   displayName: 'Why a job cannot move on',
   description:
-    'Every gate of the job\'s next forward actions (including complete), met or not, with the records that block each unmet gate. A job is ready for an action only when that action has ready: true; never say it is ready otherwise.',
+    'Every gate of the job\'s next forward actions (including complete), met or not, with the records that block each unmet gate. A job is ready for an action only when that action has ready: true; never say it is ready otherwise. allowedForCaller only says whether the user may change the job\'s status at all; an unmet gate is never a permission problem.',
   inputSchema: jobIdInput,
   requiredFeatures: ['itad.jobs.view'],
   isMutation: false,

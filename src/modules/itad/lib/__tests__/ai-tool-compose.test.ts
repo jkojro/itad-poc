@@ -87,6 +87,7 @@ describe('toJobBlockers (US-AI-02)', () => {
   const transitions: TransitionsResponse = {
     status: 'closeout_review',
     statusBeforeHold: null,
+    canTransition: true,
     actions: [
       {
         id: 'complete',
@@ -149,6 +150,7 @@ describe('toJobBlockers (US-AI-02)', () => {
       transitions: {
         status: 'processing',
         statusBeforeHold: null,
+        canTransition: true,
         actions: [
           {
             id: 'start_closeout',
@@ -162,6 +164,32 @@ describe('toJobBlockers (US-AI-02)', () => {
       records: {},
     })
     expect(result.actions[0]).toMatchObject({ ready: false, allowedForCaller: true })
+  })
+
+  it('reports permission apart from blocked gates', () => {
+    // The route's `allowed` is false whenever a gate cannot be met; that is not a permission problem.
+    const blocked = (canTransition: boolean) =>
+      toJobBlockers({
+        jobId: 'j1',
+        reference: 'R',
+        transitions: {
+          status: 'processing',
+          statusBeforeHold: null,
+          canTransition,
+          actions: [
+            {
+              id: 'start_closeout',
+              to: 'closeout_review',
+              allowed: false,
+              conditions: [{ key: 'allAssetsProcessed', state: 'unmet', canConfirm: false, detailKey: null, detailParams: null }],
+            },
+          ],
+        },
+        counters: counters(),
+        records: {},
+      }).actions[0]
+    expect(blocked(true)).toMatchObject({ ready: false, allowedForCaller: true })
+    expect(blocked(false)).toMatchObject({ ready: false, allowedForCaller: false })
   })
 })
 
