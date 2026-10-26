@@ -42,6 +42,12 @@ export const enabledModules: ModuleEntry[] = [
       },
     },
   },
+  // ITAD Inbox Ops phase 4 (Q6 a): outbound email through the framework `sendEmail`.
+  // communication_channels registers the system email transport, channel_resend is
+  // its Resend adapter; credentials come from integrations or the instance env.
+  { id: 'integrations', from: '@open-mercato/core' },
+  { id: 'communication_channels', from: '@open-mercato/core' },
+  { id: 'channel_resend', from: '@open-mercato/channel-resend' },
 ]
 
 enabledModules.push({ id: 'itad', from: '@app' })

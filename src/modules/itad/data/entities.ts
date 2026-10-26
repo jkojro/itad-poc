@@ -1172,6 +1172,30 @@ export class ItadInboxMessage {
   @Property({ name: 'draft_generated_at', type: Date, nullable: true })
   draftGeneratedAt?: Date | null
 
+  /** Phase 4: the one reply sent from the app for this inbound email (spec "Phase 4 — Send the reply"). */
+  @Property({ name: 'reply_sent_at', type: Date, nullable: true })
+  replySentAt?: Date | null
+
+  @Property({ name: 'reply_sent_by_user_id', type: 'uuid', nullable: true })
+  replySentByUserId?: string | null
+
+  /** Set atomically before sending; a claim older than the claim window may mean an email went out unrecorded. */
+  @Property({ name: 'reply_send_claimed_at', type: Date, nullable: true })
+  replySendClaimedAt?: Date | null
+
+  @Property({ name: 'reply_to_address', type: 'text', nullable: true })
+  replyToAddress?: string | null
+
+  @Property({ name: 'reply_subject', type: 'text', nullable: true })
+  replySubject?: string | null
+
+  /** Exactly the text that was sent. */
+  @Property({ name: 'reply_body', type: 'text', nullable: true })
+  replyBody?: string | null
+
+  @Property({ name: 'reply_error', type: 'jsonb', nullable: true })
+  replyError?: { code: string; message: string } | null
+
   @Property({ name: 'processing_error', type: 'jsonb', nullable: true })
   processingError?: { code: string; message: string } | null
 

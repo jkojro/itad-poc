@@ -27,6 +27,7 @@ import {
 } from './inbox-ui'
 import { MatchStatusBadge, MessageStatusBadge } from './InboxTable'
 import { useGrantedFeatures } from './use-granted-features'
+import { InboxReplyDialog } from './InboxReplyDialog'
 
 /**
  * One customer email and its ITAD proposal (spec "UI/UX"): the operator edits the fields
@@ -63,6 +64,12 @@ type MessageDetail = {
   draftReply: string | null
   draftHidden: boolean
   draftGeneratedAt: string | null
+  replyState: 'sent' | 'sending' | 'unconfirmed' | 'none'
+  reply: { sentAt: string; sentBy: { id: string; name: string | null } | null; toAddress: string | null; subject: string | null; body: string | null } | null
+  replyError: { code: string; message: string } | null
+  replyCompose: { to: string; subject: string }
+  canReply: boolean
+  emailDelivery: { available: true } | { available: false; reason: 'email_not_configured' | 'email_delivery_disabled' }
   processingError: { code: string; message: string } | null
   actions: Array<{
     id: string
@@ -588,6 +595,7 @@ export function InboxMessageDetail({ messageId }: { messageId: string }) {
   const [draft, setDraft] = React.useState('')
   const [busy, setBusy] = React.useState<'reprocess' | 'draft' | 'close' | null>(null)
   const [editingMatch, setEditingMatch] = React.useState(false)
+  const [replyOpen, setReplyOpen] = React.useState(false)
   const refresh = React.useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['itad-inbox-message', messageId] })
     void queryClient.invalidateQueries({ queryKey: ['itad-inbox'] })
@@ -768,7 +776,25 @@ export function InboxMessageDetail({ messageId }: { messageId: string }) {
       {data.status !== 'processing' ? (
         <section>
           <SectionHeader title={t('itad.inbox.draft.title', 'Draft reply')} />
-          {data.draftHidden ? (
+          {data.reply ? (
+            <div className="mt-2 space-y-2" data-testid="itad-inbox-reply-sent">
+              <p className="text-sm">
+                <StatusBadge variant="success">{t('itad.inbox.reply.sentBadge', 'Sent')}</StatusBadge>{' '}
+                {t('itad.inbox.reply.sentBy', 'Sent by {name} on {date} to {to}', {
+                  name: data.reply.sentBy?.name ?? t('itad.inbox.reply.unknownUser', 'an operator'),
+                  date: new Date(data.reply.sentAt).toLocaleString(),
+                  to: data.reply.toAddress ?? data.replyCompose.to,
+                })}
+              </p>
+              {data.reply.subject ? <p className="text-sm font-medium">{data.reply.subject}</p> : null}
+              {data.reply.body !== null ? (
+                <pre className="whitespace-pre-wrap break-words rounded-md border bg-muted/30 p-3 font-sans text-sm">{data.reply.body}</pre>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t('itad.inbox.draft.hidden', 'The draft uses job data you cannot view.')}</p>
+              )}
+              <p className="text-xs text-muted-foreground">{t('itad.inbox.reply.oncePerMessage', 'One reply is sent from the app per inbound email; the customer\'s answer arrives as a new message.')}</p>
+            </div>
+          ) : data.draftHidden ? (
             <p className="mt-2 text-sm text-muted-foreground">{t('itad.inbox.draft.hidden', 'The draft uses job data you cannot view.')}</p>
           ) : (
             <>
@@ -798,8 +824,54 @@ export function InboxMessageDetail({ messageId }: { messageId: string }) {
                     {t('itad.inbox.draft.refresh', 'Refresh draft')}
                   </Button>
                 ) : null}
-                <span className="text-xs text-muted-foreground">{t('itad.inbox.draft.neverSent', 'Never sent automatically; copy it into your email.')}</span>
+                {data.canReply ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setReplyOpen(true)}
+                    disabled={busy !== null || !data.emailDelivery.available || data.replyState === 'sending' || !draft.trim()}
+                    data-testid="itad-inbox-send-reply"
+                  >
+                    {t('itad.inbox.reply.open', 'Send…')}
+                  </Button>
+                ) : null}
+                <span className="text-xs text-muted-foreground">
+                  {data.canReply
+                    ? t('itad.inbox.reply.hint', 'Never sent automatically: you review it before it goes out.')
+                    : t('itad.inbox.draft.neverSent', 'Never sent automatically; copy it into your email.')}
+                </span>
               </div>
+              {data.canReply && !data.emailDelivery.available ? (
+                <p className="mt-2 text-xs text-muted-foreground" data-testid="itad-inbox-reply-unavailable">
+                  {data.emailDelivery.reason === 'email_delivery_disabled'
+                    ? t('itad.inbox.reply.disabled', 'Sending email is disabled on this server; copy the draft instead.')
+                    : t('itad.inbox.reply.notConfigured', 'Sending email is not configured (outbound provider and sender address); copy the draft instead.')}
+                </p>
+              ) : null}
+              {data.replyState === 'sending' ? (
+                <Alert status="information" className="mt-2"><AlertDescription>{t('itad.inbox.reply.sending', 'The reply is being sent…')}</AlertDescription></Alert>
+              ) : null}
+              {data.replyState === 'unconfirmed' ? (
+                <Alert status="warning" className="mt-2"><AlertDescription>{t('itad.inbox.reply.unconfirmed', 'A previous send may have succeeded. Sending again could deliver a duplicate.')}</AlertDescription></Alert>
+              ) : null}
+              {data.replyError && data.replyState === 'none' ? (
+                <Alert status="error" className="mt-2"><AlertDescription>{data.replyError.message}</AlertDescription></Alert>
+              ) : null}
+              <InboxReplyDialog
+                open={replyOpen}
+                messageId={data.id}
+                updatedAt={data.updatedAt}
+                to={data.replyCompose.to}
+                defaultSubject={data.replyCompose.subject}
+                draft={draft}
+                unconfirmed={data.replyState === 'unconfirmed'}
+                onClose={() => setReplyOpen(false)}
+                onSent={() => {
+                  setReplyOpen(false)
+                  refresh()
+                }}
+                onFailed={refresh}
+              />
             </>
           )}
         </section>

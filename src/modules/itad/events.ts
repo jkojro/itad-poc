@@ -52,6 +52,7 @@ const events = [
   // itad.certificate.superseded: { certificateId, certificateNumber, supersededByCertificateId }.
   { id: 'itad.certificate.superseded', label: 'ITAD Certificate Superseded', entity: 'certificate', category: 'lifecycle', clientBroadcast: true },
   // itad.certificate.voided: { certificateId, certificateNumber, voidReasonCode }.
+  { id: 'itad.inbox.reply_sent', label: 'ITAD Inbox Reply Sent', entity: 'inbox_message', category: 'lifecycle' },
   { id: 'itad.certificate.voided', label: 'ITAD Certificate Voided', entity: 'certificate', category: 'lifecycle', clientBroadcast: true },
 ] as const
 

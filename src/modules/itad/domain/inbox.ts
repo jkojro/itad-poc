@@ -59,6 +59,25 @@ export const EXECUTED_FIELDS = ['scheduledPickupAt', 'expectedAssetEstimate', 'p
 /** A message `processing` longer than this is shown as stalled and may be reprocessed. */
 export const INBOX_STALL_MS = 10 * 60 * 1000
 
+/** Phase 4: how long a send claim blocks another Send; after it, an unrecorded earlier send is possible. */
+export const REPLY_CLAIM_WINDOW_MS = 5 * 60_000
+
+/** The default subject of a reply: `Re: <subject>`, without stacking prefixes. */
+export function replySubjectFor(subject: string): string {
+  const trimmed = subject.trim()
+  if (!trimmed) return 'Re:'
+  return /^(re|aw|odp|sv|antw)\s*:/i.test(trimmed) ? trimmed : `Re: ${trimmed}`
+}
+
+export type ReplySendState = 'sent' | 'sending' | 'unconfirmed' | 'none'
+
+/** Where the one reply of a message stands; `unconfirmed` = an earlier send never finished recording. */
+export function replySendState(sentAt: Date | null, claimedAt: Date | null, now: Date): ReplySendState {
+  if (sentAt) return 'sent'
+  if (!claimedAt) return 'none'
+  return now.getTime() - claimedAt.getTime() < REPLY_CLAIM_WINDOW_MS ? 'sending' : 'unconfirmed'
+}
+
 export function isStalled(status: InboxMessageStatus, processingStartedAt: Date | null, now: Date): boolean {
   return status === 'processing' && processingStartedAt !== null && now.getTime() - processingStartedAt.getTime() > INBOX_STALL_MS
 }

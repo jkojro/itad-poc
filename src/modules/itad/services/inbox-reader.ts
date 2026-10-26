@@ -5,11 +5,13 @@ import { resolveTranslations } from '@open-mercato/shared/lib/i18n/server'
 import type { QueryEngine } from '@open-mercato/shared/lib/query/types'
 import type { RbacService } from '@open-mercato/core/modules/auth/services/rbacService'
 import { ItadException, ItadInboxAction, ItadInboxMessage, ItadJob } from '../data/entities'
-import { isStalled, worstMatchStatus, type InboxIntent, type MatchStatus } from '../domain/inbox'
+import { isStalled, replySendState, replySubjectFor, worstMatchStatus, type InboxIntent, type MatchStatus } from '../domain/inbox'
 import { messageMatchStatus } from '../domain/inbox-proposals'
 import { manualOutcomes } from '../domain/exceptions'
 import type { ItadRouteContext } from '../lib/route-context'
 import { loadCompanyNames } from '../module-integrations/customers'
+import { loadUserDisplayNames } from '../module-integrations/users'
+import { emailDelivery, REPLY_FEATURES } from './inbox-reply'
 
 /**
  * Read side of ITAD Inbox Ops with the spec's "Read access" rule: `itad.inbox.view` grants
@@ -129,6 +131,10 @@ export async function readInboxMessage(route: ItadRouteContext, id: string) {
   }
   const grants = await grantsFor(route, message.organizationId, new Map())
   const scope = { tenantId: message.tenantId, organizationId: message.organizationId }
+  const canReply = await route.container.resolve<RbacService>('rbacService').userHasAllFeatures(route.userId, [...REPLY_FEATURES], scope)
+  const replySender = message.replySentByUserId
+    ? (await loadUserDisplayNames(route.container.resolve<QueryEngine>('queryEngine'), message.tenantId, [message.replySentByUserId])).get(message.replySentByUserId) ?? null
+    : null
   const actions = await findWithDecryption(
     em,
     ItadInboxAction,
@@ -208,6 +214,21 @@ export async function readInboxMessage(route: ItadRouteContext, id: string) {
     draftReply: grants.jobs ? message.draftReply ?? null : null,
     draftHidden: !grants.jobs && Boolean(message.draftReply),
     draftGeneratedAt: message.draftGeneratedAt ? message.draftGeneratedAt.toISOString() : null,
+    // Phase 4: the one reply sent from the app. Its text was the draft, so it follows the job grant too.
+    replyState: replySendState(message.replySentAt ?? null, message.replySendClaimedAt ?? null, new Date()),
+    reply: message.replySentAt
+      ? {
+          sentAt: message.replySentAt.toISOString(),
+          sentBy: message.replySentByUserId ? { id: message.replySentByUserId, name: replySender } : null,
+          toAddress: message.replyToAddress ?? null,
+          subject: message.replySubject ?? null,
+          body: grants.jobs ? message.replyBody ?? null : null,
+        }
+      : null,
+    replyError: message.replySentAt ? null : message.replyError ?? null,
+    replyCompose: { to: message.customerAddress, subject: replySubjectFor(message.subject) },
+    canReply,
+    emailDelivery: emailDelivery(),
     processingError: message.processingError ?? null,
     actions: actions.map((action) => {
       const job = jobView(action.target.jobId)

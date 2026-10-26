@@ -20,6 +20,9 @@ export const defaultEncryptionMaps: ModuleEncryptionMap[] = [
       { field: 'extraction' },
       { field: 'summary' },
       { field: 'draft_reply' },
+      { field: 'reply_to_address' },
+      { field: 'reply_subject' },
+      { field: 'reply_body' },
     ],
   },
   {
