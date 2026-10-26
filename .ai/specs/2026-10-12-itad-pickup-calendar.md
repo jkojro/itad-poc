@@ -108,6 +108,8 @@ Duplicate and retried runs converge: create reuses the stored `interaction_id`, 
 
 **Protection** (since TODO-501, 2026-10-14). The `itad` command interceptors (`src/modules/itad/commands/interceptors.ts`, ids `itad.pickup-task-guard.<command>`) run inside the command bus before the `customers` command. Whichever route, page, AI tool or module the call comes from, it passes through them.
 
+The trusted marker (`lib/pickup-sync-scope.ts`) is one `AsyncLocalStorage` shared through `globalThis` (registry symbol `open-mercato.itad.pickup-sync-scope`). The app bundles API routes separately, so the module can load more than once per process; a module-local store left the sync and the guard on different stores and the guard rejected the sync's own create (`itad_pickup_type_reserved`, found 2026-10-26 in dev after scheduling a job).
+
 | Command | User or any other caller | ITAD sync (trusted marker) |
 |---|---|---|
 | `create` with `interactionType: 'itad-pickup'` | blocked, `itad_pickup_type_reserved` | allowed |
