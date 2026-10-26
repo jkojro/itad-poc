@@ -357,6 +357,7 @@
   "itad.inbox.errors.customer_not_found": "Nie znaleziono klienta",
   "itad.inbox.errors.email_delivery_disabled": "Wysyłka e-maili jest wyłączona na tym serwerze",
   "itad.inbox.errors.email_not_configured": "Wysyłka e-maili nie jest skonfigurowana",
+  "itad.inbox.errors.email_sender_invalid": "Adres nadawcy (EMAIL_FROM) musi być samym adresem e-mail, np. operations@example.com",
   "itad.inbox.errors.forbidden": "Nie masz uprawnień do tej zmiany",
   "itad.inbox.errors.generic": "Nie udało się wykonać akcji",
   "itad.inbox.errors.load": "Nie udało się wczytać skrzynki",

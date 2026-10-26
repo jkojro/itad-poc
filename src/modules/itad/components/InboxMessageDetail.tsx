@@ -870,6 +870,7 @@ export function InboxMessageDetail({ messageId }: { messageId: string }) {
                   setReplyOpen(false)
                   refresh()
                 }}
+                onFailed={refresh}
               />
             </>
           )}

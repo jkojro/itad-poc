@@ -357,6 +357,7 @@
   "itad.inbox.errors.customer_not_found": "Kunde nicht gefunden",
   "itad.inbox.errors.email_delivery_disabled": "Der E-Mail-Versand ist auf diesem Server deaktiviert",
   "itad.inbox.errors.email_not_configured": "Der E-Mail-Versand ist nicht konfiguriert",
+  "itad.inbox.errors.email_sender_invalid": "Die Absenderadresse (EMAIL_FROM) muss eine reine E-Mail-Adresse sein, z. B. operations@example.com",
   "itad.inbox.errors.forbidden": "Sie dürfen diese Änderung nicht vornehmen",
   "itad.inbox.errors.generic": "Die Aktion konnte nicht ausgeführt werden",
   "itad.inbox.errors.load": "Posteingang konnte nicht geladen werden",

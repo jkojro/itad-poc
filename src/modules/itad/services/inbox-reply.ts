@@ -114,10 +114,17 @@ export async function sendInboxReply(
     })
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err)
-    const code = /NOT_CONFIGURED/.test(raw) ? 'email_not_configured' : 'send_failed'
+    // Configuration problems are not worth a retry: name them. The Resend adapter validates
+    // the sender as a bare address, so `Name <email>` in EMAIL_FROM fails on `fromAddress`.
+    const code = /fromAddress/.test(raw) ? 'email_sender_invalid' : /NOT_CONFIGURED/.test(raw) ? 'email_not_configured' : 'send_failed'
     logger.warn('Inbox reply not sent', { messageId: message.id, code, err })
     const { translate } = await resolveTranslations()
-    const safe = translate(`itad.inbox.errors.${code}`, code === 'send_failed' ? 'The email could not be sent; try again' : 'Sending email is not configured')
+    const fallback: Record<string, string> = {
+      email_sender_invalid: 'The sender address (EMAIL_FROM) must be a plain email address, e.g. operations@example.com',
+      email_not_configured: 'Sending email is not configured',
+      send_failed: 'The email could not be sent; try again',
+    }
+    const safe = translate(`itad.inbox.errors.${code}`, fallback[code])
     await route.container
       .resolve<EntityManager>('em')
       .fork()

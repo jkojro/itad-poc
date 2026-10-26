@@ -26,6 +26,8 @@ type Props = {
   unconfirmed: boolean
   onClose: () => void
   onSent: () => void
+  /** A failed send released its claim and changed the message: reload its version so a retry is not stale. */
+  onFailed: () => void
 }
 
 /**
@@ -33,7 +35,7 @@ type Props = {
  * subject and body are the operator's last edit; sending cannot be undone, so it is always
  * confirmed here, and a retry after an unfinished send needs an explicit acknowledgement.
  */
-export function InboxReplyDialog({ open, messageId, updatedAt, to, defaultSubject, draft, unconfirmed, onClose, onSent }: Props) {
+export function InboxReplyDialog({ open, messageId, updatedAt, to, defaultSubject, draft, unconfirmed, onClose, onSent, onFailed }: Props) {
   const t = useT()
   const [subject, setSubject] = React.useState(defaultSubject)
   const [body, setBody] = React.useState(draft)
@@ -67,10 +69,14 @@ export function InboxReplyDialog({ open, messageId, updatedAt, to, defaultSubjec
         return
       }
       setError(typeof call.result?.error === 'string' ? call.result.error : t('itad.inbox.errors.send_failed', 'The email could not be sent; try again'))
+      onFailed()
     } catch (err) {
       setSending(false)
       if (surfaceRecordConflict(err, t)) onSent()
-      else setError(t('itad.inbox.errors.send_failed', 'The email could not be sent; try again'))
+      else {
+        setError(t('itad.inbox.errors.send_failed', 'The email could not be sent; try again'))
+        onFailed()
+      }
     }
   }
 

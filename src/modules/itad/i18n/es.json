@@ -357,6 +357,7 @@
   "itad.inbox.errors.customer_not_found": "Cliente no encontrado",
   "itad.inbox.errors.email_delivery_disabled": "El envío de correo está desactivado en este servidor",
   "itad.inbox.errors.email_not_configured": "El envío de correo no está configurado",
+  "itad.inbox.errors.email_sender_invalid": "La dirección del remitente (EMAIL_FROM) debe ser solo una dirección de correo, p. ej. operations@example.com",
   "itad.inbox.errors.forbidden": "No tiene permiso para este cambio",
   "itad.inbox.errors.generic": "No se pudo completar la acción",
   "itad.inbox.errors.load": "No se pudo cargar la bandeja de entrada",

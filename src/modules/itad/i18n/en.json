@@ -357,6 +357,7 @@
   "itad.inbox.errors.customer_not_found": "Customer not found",
   "itad.inbox.errors.email_delivery_disabled": "Sending email is disabled on this server",
   "itad.inbox.errors.email_not_configured": "Sending email is not configured",
+  "itad.inbox.errors.email_sender_invalid": "The sender address (EMAIL_FROM) must be a plain email address, e.g. operations@example.com",
   "itad.inbox.errors.forbidden": "You are not allowed to make this change",
   "itad.inbox.errors.generic": "Could not complete the action",
   "itad.inbox.errors.load": "Could not load the Inbox",

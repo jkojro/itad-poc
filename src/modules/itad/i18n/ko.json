@@ -357,6 +357,7 @@
   "itad.inbox.errors.customer_not_found": "고객을 찾을 수 없습니다",
   "itad.inbox.errors.email_delivery_disabled": "이 서버에서는 이메일 발송이 비활성화되어 있습니다",
   "itad.inbox.errors.email_not_configured": "이메일 발송이 구성되지 않았습니다",
+  "itad.inbox.errors.email_sender_invalid": "발신자 주소(EMAIL_FROM)는 operations@example.com 같은 이메일 주소만 입력해야 합니다",
   "itad.inbox.errors.forbidden": "이 변경 권한이 없습니다",
   "itad.inbox.errors.generic": "작업을 완료할 수 없습니다",
   "itad.inbox.errors.load": "받은편지함을 불러올 수 없습니다",
