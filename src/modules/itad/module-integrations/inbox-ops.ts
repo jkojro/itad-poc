@@ -96,3 +96,24 @@ export async function readInboxEmail(
     receivedAt: row.received_at ? new Date(row.received_at) : new Date(),
   }
 }
+
+export const INBOX_SETTINGS_ENTITY_ID = 'inbox_ops:inbox_settings'
+
+/**
+ * The organization's active inbound address (phase 4 Reply-To), so a customer's answer to a
+ * sent reply comes back into the Inbox. Null when `inbox_ops` has none for the organization.
+ */
+export async function readOrganizationInboxAddress(
+  queryEngine: QueryEngine,
+  scope: { tenantId: string; organizationId: string },
+): Promise<string | null> {
+  const result = await queryEngine.query<{ inbox_address?: string | null; is_active?: boolean | null }>(INBOX_SETTINGS_ENTITY_ID, {
+    tenantId: scope.tenantId,
+    organizationId: scope.organizationId,
+    fields: ['inbox_address', 'is_active'],
+    filters: { is_active: true },
+    page: { page: 1, pageSize: 1 },
+  })
+  const address = result.items[0]?.inbox_address
+  return typeof address === 'string' && address.trim() ? address.trim() : null
+}

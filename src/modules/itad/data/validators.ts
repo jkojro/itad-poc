@@ -403,6 +403,25 @@ export type ItadInboxImportInput = z.infer<typeof itadInboxImportSchema>
 export const itadInboxMessageRefSchema = z.object({ messageId: z.string().uuid() })
 export type ItadInboxMessageRefInput = z.infer<typeof itadInboxMessageRefSchema>
 
+/** Phase 4 Send: the operator's subject and body; the recipient is never part of the input. */
+export const itadInboxSendReplySchema = z.object({
+  subject: z.string().trim().min(1).max(300),
+  body: z.string().trim().min(1).max(20_000),
+  /** Required to retry after an unfinished earlier send, which may have delivered the email already. */
+  confirmPossibleDuplicate: z.boolean().optional(),
+})
+export type ItadInboxSendReplyInput = z.infer<typeof itadInboxSendReplySchema>
+
+/** Durable input of `itad.inbox.record_reply` (after the email was handed to the transport). */
+export const itadInboxRecordReplySchema = z.object({
+  messageId: z.string().uuid(),
+  toAddress: z.string().min(3).max(320),
+  replyTo: z.string().max(320).nullable(),
+  subject: z.string().min(1).max(300),
+  body: z.string().min(1).max(20_000),
+})
+export type ItadInboxRecordReplyInput = z.infer<typeof itadInboxRecordReplySchema>
+
 export const itadInboxListSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),

@@ -43,11 +43,14 @@ export async function aiToolOk<T = any>(
 export type Cleanup = { roleIds: string[]; userIds: string[] }
 
 /** A user of `organizationId` whose only role grants `features` (plus the AI assistant feature). */
-export async function tokenWithFeatures(
+type FeatureUserInput = { label: string; suffix: string; tenantId: string; organizationId: string; features: string[]; cleanup: Cleanup }
+
+/** A user whose only role grants `features`; returns the credentials too, for UI logins. */
+export async function userWithFeatures(
   request: APIRequestContext,
   adminToken: string,
-  input: { label: string; suffix: string; tenantId: string; organizationId: string; features: string[]; cleanup: Cleanup },
-): Promise<string> {
+  input: FeatureUserInput,
+): Promise<{ email: string; password: string; token: string }> {
   const safe = input.suffix.replace(/[^a-z0-9]/gi, '_')
   const roleName = `qa_itad_ai_${input.label}_${safe}`
   const roleId = await createRoleFixture(request, adminToken, { name: roleName, tenantId: input.tenantId })
@@ -56,7 +59,11 @@ export async function tokenWithFeatures(
   const email = `qa-itad-ai-${input.label}-${input.suffix}@example.test`
   const password = `Qa-${input.suffix}-Secret!`
   input.cleanup.userIds.push(await createUserFixture(request, adminToken, { email, password, organizationId: input.organizationId, roles: [roleName] }))
-  return getAuthToken(request, email, password)
+  return { email, password, token: await getAuthToken(request, email, password) }
+}
+
+export async function tokenWithFeatures(request: APIRequestContext, adminToken: string, input: FeatureUserInput): Promise<string> {
+  return (await userWithFeatures(request, adminToken, input)).token
 }
 
 // ─── Pending actions (phase 2) ────────────────────────────────────────────────

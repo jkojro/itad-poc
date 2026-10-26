@@ -14,12 +14,14 @@ import {
   itadInboxImportSchema,
   itadInboxMessageRefSchema,
   itadInboxRecordDecisionSchema,
+  itadInboxRecordReplySchema,
   itadInboxRejectActionSchema,
   itadInboxSelectMatchSchema,
   type ItadInboxEditActionInput,
   type ItadInboxImportInput,
   type ItadInboxMessageRefInput,
   type ItadInboxRecordDecisionInput,
+  type ItadInboxRecordReplyInput,
   type ItadInboxRejectActionInput,
   type ItadInboxSelectMatchInput,
 } from '../data/validators'
@@ -31,6 +33,7 @@ import { jobContext } from '../services/inbox-matcher'
 import { createMessageEntity, enqueueProcessing } from '../services/inbox-intake'
 import { buildRefreshedDraft } from '../services/inbox-processor'
 import { ensureScope, type JobScope } from './jobs'
+import { emitItadEvent } from '../events'
 
 /**
  * User-initiated writes on ITAD's own Inbox records (spec 2026-10-24-itad-inbox-ops):
@@ -441,6 +444,38 @@ const closeMessageCommand: CommandHandler<ItadInboxMessageRefInput, MessageResul
   buildLog: messageLog('itad.audit.inbox.close', 'Close ITAD Inbox email'),
 }
 
+/**
+ * Phase 4: after the transport accepted the reply — what was sent, by whom, to whom. Not
+ * undoable (an email cannot be recalled). Closes the message when nothing is left to decide.
+ */
+const recordReplyCommand: CommandHandler<ItadInboxRecordReplyInput, MessageResult> = {
+  id: 'itad.inbox.record_reply',
+  isUndoable: false,
+  async execute(rawInput, ctx) {
+    const input = itadInboxRecordReplySchema.parse(rawInput)
+    const { scope, actorUserId, em } = await resolveActor(ctx)
+    const message = await loadMessage(em, scope, input.messageId)
+    message.replySentAt = new Date()
+    message.replySentByUserId = actorUserId
+    message.replySendClaimedAt = null
+    message.replyToAddress = input.toAddress
+    message.replySubject = input.subject
+    message.replyBody = input.body
+    message.replyError = null
+    const pending = await em.count(ItadInboxAction, { message: message.id, status: 'pending' } as never)
+    if (message.status === 'proposed' && pending === 0) message.status = 'closed'
+    await em.flush()
+    // Post-commit effect: the reply is recorded even when the event cannot be emitted.
+    try {
+      await emitItadEvent('itad.inbox.reply_sent', { messageId: message.id, actorUserId, tenantId: message.tenantId, organizationId: message.organizationId })
+    } catch {
+      // the event is informational; the send and its record already happened
+    }
+    return result(message)
+  },
+  buildLog: messageLog('itad.audit.inbox.sendReply', 'Send reply to customer email'),
+}
+
 registerCommand(importCommand)
 registerCommand(reprocessCommand)
 registerCommand(refreshDraftCommand)
@@ -449,3 +484,4 @@ registerCommand(rejectActionCommand)
 registerCommand(recordDecisionCommand)
 registerCommand(selectMatchCommand)
 registerCommand(closeMessageCommand)
+registerCommand(recordReplyCommand)

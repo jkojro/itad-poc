@@ -163,3 +163,42 @@ export const newPickup = (input: {
   summary: 'New pickup request',
   language: 'en',
 })
+
+// ─── Phase 4: send the reply ──────────────────────────────────────────────────
+
+export async function sendReply(
+  request: APIRequestContext,
+  token: string,
+  message: { id: string; updatedAt: string },
+  body: { subject: string; body: string; confirmPossibleDuplicate?: boolean },
+) {
+  const response = await apiRequest(request, 'POST', `/api/itad/inbox/messages/${message.id}/reply`, { token, data: body, headers: { [LOCK]: message.updatedAt } })
+  return { status: response.status(), body: await readJsonSafe<Record<string, any>>(response) }
+}
+
+export type CapturedEmail = { to: string; subject: string; from: string | null; replyTo: string | null; text: string; capturedAt: string }
+
+/**
+ * Emails the app handed to `sendEmail` in test mode: the framework appends each one to the
+ * capture file the ephemeral environment points `OM_TEST_EMAIL_CAPTURE_PATH` at.
+ */
+export function capturedEmails(filter: { to: string; subject?: string }): CapturedEmail[] {
+  const file = process.env.OM_TEST_EMAIL_CAPTURE_PATH || path.resolve(process.cwd(), '.ai/qa/email-capture.jsonl')
+  let content = ''
+  try {
+    content = readFileSync(file, 'utf8')
+  } catch {
+    return []
+  }
+  return content
+    .split('\n')
+    .filter(Boolean)
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line) as CapturedEmail]
+      } catch {
+        return []
+      }
+    })
+    .filter((email) => email.to === filter.to && (filter.subject === undefined || email.subject === filter.subject))
+}

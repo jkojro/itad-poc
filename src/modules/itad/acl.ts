@@ -107,6 +107,13 @@ export const features = [
     module: 'itad',
     dependsOn: ['itad.inbox.view'],
   },
+  {
+    // Sending is an external effect that cannot be undone, so it is granted separately from manage.
+    id: 'itad.inbox.reply',
+    title: 'Send replies to customer emails from the ITAD Inbox',
+    module: 'itad',
+    dependsOn: ['itad.inbox.view', 'itad.jobs.view'],
+  },
 ]
 
 export default features

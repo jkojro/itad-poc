@@ -1,7 +1,7 @@
 # ITAD Inbox Ops
 
 **Date**: 2026-10-24
-**Status**: Phases 1–3 implemented (2026-10-25); phase 4 (send the reply) in design — open questions Q6–Q8
+**Status**: Phases 1–4 implemented (phase 4: 2026-10-26)
 **Epic**: 9 (ITAD Inbox Ops)
 
 > Spec 9 of the app-owned `itad` module. Source of requirements: "OpenMercato ITAD PoC — Product Requirements — AI Assistant & Inbox Ops", v1.0 (`ITAD_AI_InboxOps_requirements.pdf`): shared principles (§2), **Epic 9 (§4)**, the shared AI-facing layer (§5), rollout P4–P5 (§6), Definition of Done (§7, Inbox Ops items) and demo steps 5–8 (§8). It builds on `2026-10-16-itad-ai-assistant.md` (Epic 8), whose eligibility rules, audit context and customer-status facts it reuses.
@@ -10,7 +10,7 @@
 
 A customer email about an ITAD job becomes a reviewable proposal. The installed `inbox_ops` module receives the email at the organization's inbound address (webhook, signatures, routing, deduplication, threading). ITAD then matches the customer and, where it applies, the job / device / exception, and a model recognizes one or more of four intents (one email may carry several): **I1 new pickup request** (create a job), **I2 pickup date change** (update the job), **I3 missing / unexpected clarification** (resolve the exception) and **I4 status inquiry** (draft reply only). The operator sees a summary, a match status (high / needs review / ambiguous), the proposed actions and a draft reply on a new ITAD **Inbox** page, and accepts, edits or rejects each action. An accepted action runs the same domain command as the UI, re-checked for permissions and state, and audited with the source email (`channel: 'email'`). Nothing is written and nothing is sent without the operator.
 
-## Decisions (answers 2026-10-24)
+## Decisions (answers 2026-10-24; Q6–Q8 2026-10-26)
 
 | # | Question | Decision |
 |---|---|---|
@@ -19,12 +19,9 @@ A customer email about an ITAD job becomes a reviewable proposal. The installed 
 | Q3 | Pickup location for I1 | **(a)** A new optional `pickupLocation` text field on the job (migration, validators, job form and detail), editable while the pickup is (same statuses as `scheduledPickupAt`). |
 | Q4 | Where proposals are reviewed | **(a)** A new ITAD page **Inbox** (list + detail) and, on the job page, a link to the proposals that concern the job. |
 | Q5 | Draft reply | **(a)** The operator edits and copies the draft; nothing is sent (PDF §4.1 I4, §4.5). **Revised 2026-10-25:** the product owner asked for sending from the app as phase 4 (see "Phase 4 — Send the reply"); phases 1–3 keep copy-only. |
-
-## Open Questions (phase 4)
-
-- **Q6 — Transport.** (a) **Recommended:** the framework `sendEmail` through `communication_channels` + `@open-mercato/channel-resend` (already installed). No threading headers: the reply carries `Re: <subject>` and the quoted original, but no `In-Reply-To` / `References`, so some clients show it as a new conversation; an upstream issue adds the headers to `SendEmailOptions` and the adapters, and ITAD passes them once released. (b) A Resend client inside ITAD, as `inbox_ops` does — threading works, but it is an ad hoc provider call that the module rules forbid, with its own credentials. (c) (a), and wait for the upstream headers before shipping phase 4.
-- **Q7 — Who may send.** (a) **Recommended:** a new feature `itad.inbox.reply` (admin by default): an email to a customer cannot be undone, unlike an accepted change. (b) Reuse `itad.inbox.manage`.
-- **Q8 — Sender and reply path.** (a) **Recommended:** From = the tenant's configured sender (the email channel's `fromAddress`, else `EMAIL_FROM`); Reply-To = the organization's Inbox address, so the customer's answer comes back to the Inbox as a new message. (b) Reply-To = the operator's own email.
+| Q6 | Phase 4 transport | **(a)** The framework `sendEmail` through `communication_channels` + `channel_resend`; ITAD never calls a provider. Threading headers wait for the framework (upstream follow-up); a reply without them still works. |
+| Q7 | Who may send | **(a)** A separate feature `itad.inbox.reply` (an external, irreversible effect); admin by default, granted to the demo operator's role as needed. |
+| Q8 | Sender and reply path | **(a)** From = the tenant's / instance's sender; Reply-To = the organization's Inbox address, so the customer's answer comes back to the Inbox — the closed demo loop. |
 
 ## Problem Statement
 
@@ -258,7 +255,9 @@ Events (`events.ts`): `itad.inbox.message_proposed`, `itad.inbox.action_executed
 
 ## Known limitations
 
-- Phases 1–3: replies are never sent from the app (Q5); the operator copies them into their mail client. Phase 4 sends one reply per message through the system email transport, without threading headers until the framework supports them.
+- Replies: one reply is sent from the app per inbound email (phase 4); sending needs an outbound provider (`SYSTEM_EMAIL_PROVIDER` + `RESEND_API_KEY`) and a verified sender address (`EMAIL_FROM` / `NOTIFICATIONS_EMAIL_FROM`), otherwise the operator copies the draft.
+- **No RFC threading headers yet:** the framework's `sendEmail` and the Resend adapter pass no `In-Reply-To` / `References`, so a client may show the reply as a new conversation (`Re: <subject>`). To be solved centrally in the framework (upstream follow-up), never by a provider SDK inside ITAD.
+- A send interrupted after the provider accepted it is an unknown delivery state, not exactly-once: the operator is warned before sending again.
 - No attachment processing (PDF §4.5).
 - One inbound address per organization (from `inbox_ops`); no per-customer addresses.
 - **Sender matching scans customers:** `customers` encrypts `primary_email` without a lookup hash, so the sender is matched by a bounded scan of the organization's customers (up to 2 000) compared after decryption — the same approach `inbox_ops` takes. Larger customer bases need an upstream email hash or the search index.
@@ -275,7 +274,7 @@ PDF §5 asks to see what the Inbox proposed and how operators decided. Everythin
 
 `GET /api/itad/inbox/stats` returns these counts for the last 30 days (messages, failed processing, actions proposed / executed / rejected / failed / pending, `editedBeforeDecision`); the Inbox page shows them in one line under the inbound address.
 
-## Phase 4 — Send the reply (design draft, assumes the recommended Q6–Q8 answers)
+## Phase 4 — Send the reply
 
 **Why:** the operator should not have to copy the draft into another mail client. This changes Q5 and PDF §4.5 ("no sending") by the product owner's decision; everything else in §4.5 stays out of scope (no OAuth mailboxes, no attachments, no autonomous sending).
 
@@ -286,17 +285,18 @@ PDF §5 asks to see what the Inbox proposed and how operators decided. Everythin
 - `communication_channels.sendAsUser` threads properly, but needs the operator's own connected mailbox (Gmail / IMAP OAuth) and the `messages` module, both out of scope (PDF §4.5).
 
 **Design:**
-- **One reply per message:** further correspondence happens in the mail client. The recipient is fixed to the customer sender (the forwarded sender when an operator forwarded the email), never editable, so the app cannot be used as a mail relay. The subject defaults to `Re: <subject>` and is editable. The body is the operator's edited draft, sent as plain text.
+- **One reply sent from the app per inbound email:** the conversation continues naturally — the customer's answer (Reply-To = the Inbox address) arrives as a new inbound message with its own reply. The recipient is fixed to the customer sender (the forwarded sender when an operator forwarded the email), never editable, so the app cannot be used as a mail relay. The subject defaults to `Re: <subject>` and is editable. The body is the operator's edited draft, sent as plain text.
 - **Data (`ItadInboxMessage`, additive, nullable):**
   - `reply_sent_at`, `reply_sent_by_user_id`, `reply_send_claimed_at`;
   - encrypted: `reply_to_address`, `reply_subject`, `reply_body` (exactly what was sent);
   - `reply_error` (code + safe message).
 - **Command `itad.inbox.send_reply`** (`POST /api/itad/inbox/messages/:id/reply`, `{ subject, body }`, lock header = the message version, not undoable):
-  1. Requires `itad.inbox.reply`, plus `itad.jobs.view` when the draft was hidden from the operator. Refused when already sent (`409 reply_already_sent`).
-  2. Claims the reply atomically: not sent, and not claimed in the last 5 minutes.
-  3. Calls `sendEmail` outside any transaction.
-  4. On success, stores the sent fields, writes the action log (`channel: 'email'`), emits `itad.inbox.reply_sent` and closes the message when no action is pending. On failure, clears the claim, stores `reply_error` and answers `503 email_not_configured` / `502 send_failed`; the operator can retry.
-- **Detail API** adds `reply: { sentAt, sentBy, subject, body } | null` and `replyAvailable` (the feature is held and a transport is registered and configured).
+  1. Requires `itad.inbox.reply` and `itad.jobs.view` (the draft is built from job data and hidden without it), in the message's organization. Refused while processing, when already sent (`409 reply_already_sent`) or being sent (`409 reply_in_progress`).
+  2. **Unknown delivery state, not exactly-once:** a claim older than 5 minutes without a recorded send means an earlier send may have gone out. Send then answers `409 reply_may_have_been_sent` unless the operator confirms `confirmPossibleDuplicate` ("A previous send may have succeeded. Sending again could deliver a duplicate.").
+  3. Claims the reply atomically: unsent and unchanged since the operator saw it (`updatedAt`).
+  4. Calls `sendEmail` outside any transaction (text body plus a minimal React body, so test capture records the text).
+  5. On success, stores the sent fields, writes the action log (`channel: 'email'`), emits `itad.inbox.reply_sent` and closes the message when no action is pending. On failure, clears the claim, stores `reply_error` and answers `503 email_not_configured` / `502 send_failed`; the operator can retry.
+- **Detail API** adds `replyState` (`none` / `sending` / `unconfirmed` / `sent`), `reply: { sentAt, sentBy, toAddress, subject, body } | null` (body follows the job grant, like the draft), `replyError`, `replyCompose: { to, subject }`, `canReply`, and `emailDelivery` (`available`, or `email_not_configured` / `email_delivery_disabled`). In `OM_TEST_MODE` Send is available and the framework captures the email instead of delivering it; `OM_DISABLE_EMAIL_DELIVERY` makes Send unavailable rather than silently dropping the email.
 - **UI:** a **Send** button next to Copy. It opens a confirmation dialog with To (read only), Subject and the body, plus the warning "This email cannot be recalled." After sending, the section shows "Sent by X on Y" and the sent text read only. States: not configured (disabled, with a hint), sending, failed (error + retry), conflict (409 → reload), keyboard and screen reader labels.
 - **Modules:** enable `communication_channels`, `integrations` and `channel_resend` in `modules.ts` (their migrations reviewed and applied after asking). `.env.example` gets `SYSTEM_EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM`. ITAD reaches sending only through `sendEmail`, never through a provider client.
 - **Edge cases:**
@@ -361,7 +361,7 @@ Each phase leaves the app working; phase 1 alone shows the operator what each em
 - **TC-ITAD-910:** `inbox_ops` contract test — event id, payload and the `InboxEmail` fields ITAD reads.
 - **TC-ITAD-912 (read access):** a user with `itad.inbox.view` but without `itad.exceptions.view` sees that a proposal resolves an exception, but gets no exception details or serial; without `itad.jobs.view` the job reference, the I2 *before* value and the draft reply are hidden; the Match search returns only readable records.
 - **TC-ITAD-911 (UI):** Inbox list and detail states (processing, ambiguous selector, action card result, Copy draft).
-- **TC-ITAD-913 (phase 4):** with `OM_TEST_MODE=1` Send writes one record to the capture file: To = the customer sender, the edited subject and body, Reply-To = the organization's Inbox address. A second Send → `409 reply_already_sent`; a stale version → `409`; without `itad.inbox.reply` → `403`. The detail shows the sent state and the action log has the entry.
+- **TC-ITAD-913 (phase 4):** with `OM_TEST_MODE=1` Send writes one record to the capture file: To = the customer sender, the edited subject and body, Reply-To = the organization's Inbox address. Two concurrent Sends → one `200`, one `409`, one email; a second Send → `409 reply_already_sent`; a stale version → `409`; without `itad.inbox.reply`, or without `itad.jobs.view` → `403`. The detail shows the sent state, the message closes, and the action log has the entry with the email context.
 - **TC-ITAD-914 (phase 4, UI):** Send dialog (To read only, edit subject and body, confirm), sent state read only, Send hidden without the feature.
 
 **Model in tests:** the worker resolves the interpreter from DI; in the integration environment (`OM_TEST_MODE=1`) the manual import accepts a fixture `extraction` instead of calling the model, so matching, validation, proposals, review and execution are tested without a provider. The interpreter itself is covered by unit tests with a stubbed model and by a live check on the demo emails.
@@ -379,11 +379,13 @@ Validation per phase: `yarn generate && yarn typecheck && yarn lint && yarn ds:c
 | §4.2 receive → … → audit | Proposed Solution, Architecture | TC-901, 905 |
 | §4.3 explicit reference preferred; ambiguous requires choice; confidence status; no invented values; edit changes payload | Match status, quote check, Edit | TC-902, 903, 906, 908 |
 | US-IN-01 … 04 | Intents, UI | TC-904 … 909 |
-| §4.5 out of scope (no OAuth, no autonomous writes, no sending, no attachments) | Known limitations | — |
+| §4.5 out of scope (no OAuth, no autonomous writes, no sending, no attachments) — sending changed by the product owner (Q5 revised): operator-confirmed Send in phase 4 | Known limitations, Phase 4 | TC-913, 914 |
 | §5 shared layer: same commands, ACL at prepare and execute, approval, audit (channel email), observability | Execute and audit, Read access, API, Phase 3 step 3 | TC-905, 907, 912 |
 | §7 DoD: 4 intents recognized; ≥ 3 lead to domain actions; ambiguity stops execution; same validations and ACL; auditable; end-to-end demo | all phases | TC-901 … 911, demo seed |
 
 ## Changelog
+
+- **2026-10-26, phase 4 implemented (Q6 a, Q7 a, Q8 a):** `modules.ts` enables `integrations`, `communication_channels` (system email transport) and `channel_resend`; their shipped migrations and ITAD `Migration20261026085326` (reply columns on `itad_inbox_messages`, encrypted address / subject / body) applied. Feature `itad.inbox.reply` (admin via `itad.*`). `POST /api/itad/inbox/messages/:id/reply` (`services/inbox-reply.ts`): lock, features in the message organization, reply state, delivery availability, atomic claim, `sendEmail` (To = customer sender, Reply-To = Inbox address from `inbox_ops:inbox_settings`), release of the claim with `reply_error` on failure (`502 send_failed` / `503 email_not_configured`), then command `itad.inbox.record_reply` (email audit context `toolName: 'inbox.send_reply'`, event `itad.inbox.reply_sent`, closes the message when nothing is pending). UI: Send… next to Copy (only with the feature; disabled with a hint when delivery is not configured), confirmation dialog (To read only, subject `Re: …` and body editable, "cannot be recalled", acknowledgement after an unfinished send), sent state read only. Tests: unit `inbox-reply.test.ts` (subject prefix, reply state); integration TC-ITAD-913, 914. Follow-up: upstream issue for threading headers in `sendEmail` / channel adapters.
 
 - **2026-10-25, phase 4 drafted:** the product owner asked whether the reply can be sent from the app. Investigated `inbox_ops` sending (bound to its own proposals; pattern only), the framework `sendEmail` (no custom headers, test capture), `communication_channels` (registers the transport, Resend adapter without threading headers) and `sendAsUser` (needs a personal OAuth mailbox, out of scope). Design draft with open questions Q6 (transport), Q7 (who may send), Q8 (sender / Reply-To).
 
